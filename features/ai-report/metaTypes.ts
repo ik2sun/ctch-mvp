@@ -9,6 +9,14 @@ export type DailyPoint = {
   revenue: number;
 };
 
+export type Totals = {
+  impressions: number;
+  clicks: number;
+  cost: number;
+  conversions: number;
+  revenue: number;
+};
+
 export type MetaLevel = "campaign" | "adset" | "ad";
 
 export type MetaRow = {
@@ -36,6 +44,7 @@ export type MetaHierarchy = {
   daily: DailyPoint[];
   clientName?: string;
   period?: { since: string; until: string };
+  compare?: { previous: Totals; lastMonth: Totals };
 };
 
 // ── AI 스마트 진단 ──────────────────────────────

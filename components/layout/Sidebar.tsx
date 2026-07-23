@@ -27,7 +27,7 @@ export function Sidebar({ email }: { email: string }) {
     setOpen((p) => ({ ...p, [label]: !p[label] }));
   }
 
-  function renderLeaf(item: NavItem, depth = 0) {
+  function renderLeaf(item: NavItem, depth = 0, accent?: string) {
     const active = pathname === item.href;
     return (
       <Link
@@ -39,8 +39,9 @@ export function Sidebar({ email }: { email: string }) {
       >
         <i
           className={`ti ti-${item.icon} ${depth > 0 ? "text-[16px]" : "text-[18px]"} ${
-            active ? "text-signal" : "text-ink-muted group-hover:text-ink-soft"
+            active ? "text-signal" : ""
           }`}
+          style={!active && accent ? { color: accent, opacity: 0.75 } : undefined}
           aria-hidden
         />
         <span className="flex-1">{item.label}</span>
@@ -94,7 +95,7 @@ export function Sidebar({ email }: { email: string }) {
         <p className="px-2 pb-1.5 pt-1 text-[10px] font-medium tracking-wide text-ink-faint">기능</p>
         <div className="space-y-0.5">
           {NAV.map((item) => {
-            if (!item.children) return renderLeaf(item);
+            if (!item.children) return renderLeaf(item, 0, item.accent);
 
             const expanded = open[item.label] ?? false;
             const hasActiveChild = isInCategory(item, pathname);
@@ -107,9 +108,8 @@ export function Sidebar({ email }: { email: string }) {
                   }`}
                 >
                   <i
-                    className={`ti ti-${item.icon} text-[18px] ${
-                      hasActiveChild ? "text-signal" : "text-ink-muted"
-                    }`}
+                    className={`ti ti-${item.icon} text-[18px] ${hasActiveChild ? "text-signal" : ""}`}
+                    style={!hasActiveChild && item.accent ? { color: item.accent, opacity: 0.75 } : undefined}
                     aria-hidden
                   />
                   <span className="flex-1 text-left">{item.label}</span>
@@ -122,7 +122,7 @@ export function Sidebar({ email }: { email: string }) {
                 </button>
                 {expanded && (
                   <div className="mt-0.5 space-y-0.5">
-                    {item.children.map((c) => renderLeaf(c, 1))}
+                    {item.children.map((c) => renderLeaf(c, 1, item.accent))}
                   </div>
                 )}
               </div>

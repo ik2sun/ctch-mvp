@@ -51,9 +51,10 @@ export function TrendChart({ daily }: { daily: DailyPoint[] }) {
               fontSize: 12,
               fontFamily: "Pretendard, sans-serif",
             }}
-            formatter={(value: number, name: string) =>
-              name === "ROAS" ? [`${value}%`, name] : [`₩${value.toLocaleString("ko-KR")}`, name]
-            }
+            formatter={(value, name) => {
+              const v = Number(value);
+              return name === "ROAS" ? [`${v}%`, name] : [`₩${v.toLocaleString("ko-KR")}`, name];
+            }}
           />
           <Legend wrapperStyle={{ fontSize: 12 }} />
           <Bar yAxisId="left" dataKey="광고비" fill="#C7CBF5" radius={[3, 3, 0, 0]} />

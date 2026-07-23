@@ -21,6 +21,20 @@ function n(v: unknown): number {
   return isNaN(x) ? 0 : x;
 }
 
+function iso(d: Date) {
+  return d.toISOString().slice(0, 10);
+}
+function shift(dateStr: string, days: number) {
+  const d = new Date(dateStr);
+  d.setDate(d.getDate() + days);
+  return iso(d);
+}
+function shiftMonth(dateStr: string, months: number) {
+  const d = new Date(dateStr);
+  d.setMonth(d.getMonth() + months);
+  return iso(d);
+}
+
 type Level = "account" | "campaign" | "adset" | "ad";
 
 const LEVEL_FIELDS: Record<Level, string[]> = {
@@ -65,6 +79,24 @@ function baseMetrics(r: Record<string, unknown>) {
     conversions: pickAction(r.actions as ActionItem[] | undefined, PURCHASE_TYPES),
     revenue: pickAction(r.action_values as ActionItem[] | undefined, PURCHASE_TYPES),
   };
+}
+
+type Totals = { impressions: number; clicks: number; cost: number; conversions: number; revenue: number };
+
+function agg(rows: Record<string, unknown>[]): Totals {
+  return rows.reduce(
+    (a: Totals, r) => {
+      const m = baseMetrics(r);
+      return {
+        impressions: a.impressions + m.impressions,
+        clicks: a.clicks + m.clicks,
+        cost: a.cost + m.cost,
+        conversions: a.conversions + m.conversions,
+        revenue: a.revenue + m.revenue,
+      };
+    },
+    { impressions: 0, clicks: 0, cost: 0, conversions: 0, revenue: 0 },
+  );
 }
 
 function toRow(r: Record<string, unknown>, level: "campaign" | "adset" | "ad") {
@@ -129,13 +161,25 @@ export async function POST(req: Request) {
   const accountId = client.meta_account_id as string;
   const act = accountId.startsWith("act_") ? accountId : `act_${accountId}`;
 
+  // 기간 길이만큼 앞선 직전 기간 / 한 달 전 동일 기간 (요약 카드 비교용)
+  const days = Math.max(
+    1,
+    Math.round((new Date(until).getTime() - new Date(since).getTime()) / 86400000) + 1,
+  );
+  const prevSince = shift(since, -days);
+  const prevUntil = shift(until, -days);
+  const monthSince = shiftMonth(since, -1);
+  const monthUntil = shiftMonth(until, -1);
+
   try {
-    const [campRaw, adsetRaw, adRaw, accDailyRaw, campDailyRaw] = await Promise.all([
+    const [campRaw, adsetRaw, adRaw, accDailyRaw, campDailyRaw, prevRaw, monthRaw] = await Promise.all([
       callInsights(act, token, "campaign", since, until, false),
       callInsights(act, token, "adset", since, until, false),
       callInsights(act, token, "ad", since, until, false),
       callInsights(act, token, "account", since, until, true),
       callInsights(act, token, "campaign", since, until, true),
+      callInsights(act, token, "account", prevSince, prevUntil, false),
+      callInsights(act, token, "account", monthSince, monthUntil, false),
     ]);
 
     const campaigns = campRaw.map((r) => toRow(r, "campaign"));
@@ -183,6 +227,7 @@ export async function POST(req: Request) {
       daily,
       clientName: client.name,
       period: { since, until },
+      compare: { previous: agg(prevRaw), lastMonth: agg(monthRaw) },
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "메타 데이터를 불러오지 못했어요.";

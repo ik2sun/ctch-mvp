@@ -5,16 +5,10 @@ import Link from "next/link";
 import { useClients } from "@/features/clients/ClientContext";
 import { listReports } from "@/features/ai-report/reportData";
 import { TrendChart } from "@/features/ai-report/TrendChart";
+import { MetricTrendGrid } from "@/features/ai-report/MetricTrendGrid";
+import { ComparisonRows } from "@/features/ai-report/DeltaBadge";
 import { fmt } from "@/features/ai-report/calcMetrics";
-import type { DailyPoint, SmartInsights } from "@/features/ai-report/metaTypes";
-
-type Totals = {
-  impressions: number;
-  clicks: number;
-  cost: number;
-  conversions: number;
-  revenue: number;
-};
+import type { DailyPoint, SmartInsights, Totals } from "@/features/ai-report/metaTypes";
 
 type SummaryRes = {
   current: Totals;
@@ -47,22 +41,6 @@ const PERIODS = [
   { key: "7d", label: "최근 7일", since: () => daysAgo(7), until: () => daysAgo(1) },
   { key: "30d", label: "최근 30일", since: () => daysAgo(30), until: () => daysAgo(1) },
 ];
-
-function delta(cur: number, prev: number) {
-  if (!prev) return null;
-  return ((cur - prev) / prev) * 100;
-}
-
-function DeltaBadge({ value, inverse }: { value: number | null; inverse?: boolean }) {
-  if (value === null || !isFinite(value)) return <span className="text-[11px] text-ink-faint">—</span>;
-  const up = value >= 0;
-  const good = inverse ? !up : up;
-  return (
-    <span className={`text-[11px] font-medium ${good ? "text-good" : "text-bad"}`}>
-      {up ? "▲" : "▼"} {Math.abs(value).toFixed(1)}%
-    </span>
-  );
-}
 
 export default function DashboardHome() {
   const { clients, selected } = useClients();
@@ -332,28 +310,25 @@ export default function DashboardHome() {
                 <div key={m.label} className="rounded-lg bg-canvas p-3.5">
                   <p className="text-[12px] text-ink-muted">{m.label}</p>
                   <p className="mt-0.5 font-display text-[20px] font-semibold text-ink">{m.value}</p>
-                  <div className="mt-1.5 space-y-0.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] text-ink-faint">직전 기간</span>
-                      <DeltaBadge value={delta(m.cur, m.prev)} inverse={m.inverse} />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] text-ink-faint">전월 동기</span>
-                      <DeltaBadge value={delta(m.cur, m.mon)} inverse={m.inverse} />
-                    </div>
-                  </div>
+                  <ComparisonRows cur={m.cur} prev={m.prev} mon={m.mon} inverse={m.inverse} />
                 </div>
               ))}
             </div>
 
             {/* 그래프 */}
             {summary.daily.length > 1 ? (
-              <>
-                <p className="mb-1 text-[12px] text-ink-muted">
-                  광고비 대비 ROAS 추이 · {summary.period.since} ~ {summary.period.until}
-                </p>
-                <TrendChart daily={summary.daily} />
-              </>
+              <div className="space-y-4">
+                <div>
+                  <p className="mb-1 text-[12px] text-ink-muted">
+                    광고비 대비 ROAS 추이 · {summary.period.since} ~ {summary.period.until}
+                  </p>
+                  <TrendChart daily={summary.daily} />
+                </div>
+                <div>
+                  <p className="mb-1 text-[12px] text-ink-muted">지표별 추이</p>
+                  <MetricTrendGrid daily={summary.daily} />
+                </div>
+              </div>
             ) : (
               <p className="py-6 text-center text-[13px] text-ink-muted">
                 선택한 기간이 짧아 그래프를 그릴 수 없어요. 최근 7일 이상을 선택해 보세요.

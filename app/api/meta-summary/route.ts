@@ -59,9 +59,11 @@ async function fetchAccount(
   return (json.data ?? []) as Record<string, unknown>[];
 }
 
-function agg(rows: Record<string, unknown>[]) {
+type Totals = { impressions: number; clicks: number; cost: number; conversions: number; revenue: number };
+
+function agg(rows: Record<string, unknown>[]): Totals {
   return rows.reduce(
-    (a, r) => ({
+    (a: Totals, r) => ({
       impressions: a.impressions + n(r.impressions),
       clicks: a.clicks + n(r.clicks),
       cost: a.cost + n(r.spend),
