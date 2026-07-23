@@ -1,0 +1,39 @@
+@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css");
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body {
+  background: #f6f6f4;
+  color: #15181e;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+@layer components {
+  .field {
+    @apply w-full h-11 rounded-lg border border-line bg-surface px-3.5 text-[15px] text-ink
+    placeholder:text-ink-faint outline-none transition
+    focus:border-signal focus:ring-4 focus:ring-signal/10;
+  }
+  .btn-signal {
+    @apply inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-signal px-5
+    text-[15px] font-medium text-white transition hover:bg-signal-strong
+    active:scale-[0.99] disabled:opacity-50;
+  }
+  .btn-ghost {
+    @apply inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-line
+    bg-surface px-5 text-[15px] font-medium text-ink-soft transition hover:border-ink-faint;
+  }
+  /* 시그널 닷 — CTCH 브랜드 장치 */
+  .signal-dot {
+    @apply inline-block h-[7px] w-[7px] rounded-full bg-signal;
+  }
+}
