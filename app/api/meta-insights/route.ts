@@ -81,7 +81,15 @@ function baseMetrics(r: Record<string, unknown>) {
   };
 }
 
-type Totals = { impressions: number; clicks: number; cost: number; conversions: number; revenue: number };
+type Totals = {
+  impressions: number;
+  clicks: number;
+  cost: number;
+  conversions: number;
+  revenue: number;
+  reach: number;
+  frequency: number;
+};
 
 function agg(rows: Record<string, unknown>[]): Totals {
   return rows.reduce(
@@ -93,9 +101,11 @@ function agg(rows: Record<string, unknown>[]): Totals {
         cost: a.cost + m.cost,
         conversions: a.conversions + m.conversions,
         revenue: a.revenue + m.revenue,
+        reach: a.reach + m.reach,
+        frequency: a.frequency + m.frequency,
       };
     },
-    { impressions: 0, clicks: 0, cost: 0, conversions: 0, revenue: 0 },
+    { impressions: 0, clicks: 0, cost: 0, conversions: 0, revenue: 0, reach: 0, frequency: 0 },
   );
 }
 

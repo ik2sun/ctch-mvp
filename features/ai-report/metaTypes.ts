@@ -15,6 +15,8 @@ export type Totals = {
   cost: number;
   conversions: number;
   revenue: number;
+  reach: number;
+  frequency: number;
 };
 
 export type MetaLevel = "campaign" | "adset" | "ad";

@@ -200,13 +200,14 @@ export function extractLabels(grid: unknown[][]): string[] {
   return out.slice(0, 300);
 }
 
-export function fmt(n: number | null, kind: "int" | "won" | "pct" | "x"): string {
+export function fmt(n: number | null, kind: "int" | "won" | "pct" | "x" | "dec"): string {
   if (n == null) return "—";
   switch (kind) {
     case "int": return Math.round(n).toLocaleString("ko-KR");
     case "won": return "₩" + Math.round(n).toLocaleString("ko-KR");
     case "pct": return (n * 100).toFixed(2) + "%";
     case "x": return (n * 100).toFixed(0) + "%";
+    case "dec": return n.toFixed(2);
   }
 }
 

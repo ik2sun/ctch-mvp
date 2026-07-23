@@ -52,12 +52,16 @@ export function Sidebar({ email }: { email: string }) {
 
   return (
     <aside className="flex w-[236px] flex-shrink-0 flex-col border-r border-line bg-surface">
-      {/* 로고: NMG + CTCH */}
-      <div className="flex h-16 items-center gap-2.5 border-b border-line px-5">
+      {/* 로고: NMG + CTCH — 클릭 시 광고주 홈으로 이동 */}
+      <Link
+        href="/home"
+        className="flex h-16 items-center gap-2.5 border-b border-line px-5 transition hover:bg-canvas"
+        title="광고주 목록 보기"
+      >
         <img src="/nmg-logo.png" alt="NMG" className="h-6 w-auto object-contain" />
         <span className="h-4 w-px bg-line" aria-hidden />
         <Wordmark />
-      </div>
+      </Link>
 
       {/* 현재 광고주 컨텍스트 카드 */}
       <div className="p-3">

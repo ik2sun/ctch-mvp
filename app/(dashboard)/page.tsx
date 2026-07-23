@@ -6,16 +6,20 @@ import { useClients } from "@/features/clients/ClientContext";
 import { listReports } from "@/features/ai-report/reportData";
 import { TrendChart } from "@/features/ai-report/TrendChart";
 import { MetricTrendGrid } from "@/features/ai-report/MetricTrendGrid";
-import { ComparisonRows } from "@/features/ai-report/DeltaBadge";
+import { PeriodComparison, type Compare } from "@/features/ai-report/PeriodComparison";
+import { KeyMetricsBarChart } from "@/features/ai-report/KeyMetricsBarChart";
 import { fmt } from "@/features/ai-report/calcMetrics";
 import type { DailyPoint, SmartInsights, Totals } from "@/features/ai-report/metaTypes";
+
+type Period = { since: string; until: string };
 
 type SummaryRes = {
   current: Totals;
   previous: Totals;
   lastMonth: Totals;
   daily: DailyPoint[];
-  period: { since: string; until: string };
+  period: Period;
+  prevPeriod?: Period;
   error?: string;
 };
 
@@ -27,6 +31,13 @@ type MediaStatus = {
   detail: string;
 };
 
+const MEDIA_LIST = [
+  { key: "meta", label: "메타", connected: true },
+  { key: "naver", label: "네이버 SA", connected: false },
+  { key: "gfa", label: "GFA", connected: false },
+] as const;
+type MediaKey = (typeof MEDIA_LIST)[number]["key"];
+
 function iso(d: Date) {
   return d.toISOString().slice(0, 10);
 }
@@ -36,6 +47,25 @@ function daysAgo(n: number) {
   return iso(d);
 }
 
+// 주 단위 비교(7/14일)는 달력상 완료된 주(월~일) 기준으로 정렬
+function weekAlignedRange(days: number): { since: string; until: string } {
+  const today = new Date();
+  const dow = today.getDay(); // 0=일 ... 6=토
+  const diffToMonday = (dow + 6) % 7;
+  const thisMonday = new Date(today);
+  thisMonday.setDate(today.getDate() - diffToMonday);
+  const until = new Date(thisMonday);
+  until.setDate(thisMonday.getDate() - 1); // 가장 최근에 완료된 일요일
+  const since = new Date(until);
+  since.setDate(until.getDate() - (days - 1));
+  return { since: iso(since), until: iso(until) };
+}
+
+function compareRange(days: number): { since: string; until: string } {
+  if (days === 7 || days === 14) return weekAlignedRange(days);
+  return { since: daysAgo(days), until: daysAgo(1) };
+}
+
 const PERIODS = [
   { key: "1d", label: "전일", since: () => daysAgo(1), until: () => daysAgo(1) },
   { key: "7d", label: "최근 7일", since: () => daysAgo(7), until: () => daysAgo(1) },
@@ -43,7 +73,7 @@ const PERIODS = [
 ];
 
 export default function DashboardHome() {
-  const { clients, selected } = useClients();
+  const { selected } = useClients();
 
   const [periodKey, setPeriodKey] = useState("7d");
   const [summary, setSummary] = useState<SummaryRes | null>(null);
@@ -54,8 +84,18 @@ export default function DashboardHome() {
   const [mediaOpen, setMediaOpen] = useState(false);
   const [mediaLoading, setMediaLoading] = useState(false);
 
+  const [mediaFilter, setMediaFilter] = useState<Record<MediaKey, boolean>>({
+    meta: true,
+    naver: false,
+    gfa: false,
+  });
+
   const [reportCount, setReportCount] = useState(0);
   const [actionCount, setActionCount] = useState(0);
+
+  const [compareWindow, setCompareWindow] = useState(7);
+  const [compareData, setCompareData] = useState<Compare | null>(null);
+  const [compareLoading, setCompareLoading] = useState(false);
 
   const period = PERIODS.find((p) => p.key === periodKey) ?? PERIODS[1];
 
@@ -115,6 +155,67 @@ export default function DashboardHome() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected?.id]);
 
+  // 기간 비교 (전주 대비 / 전월 대비) — 롤링 윈도우: 최근 N일 vs 그 직전 N일
+  const loadCompare = useCallback(
+    async (
+      days: number,
+      setData: (d: Compare | null) => void,
+      setBusy: (b: boolean) => void,
+    ) => {
+      if (!selected?.id || !selected.meta_account_id) {
+        setData(null);
+        return;
+      }
+      const { since, until } = compareRange(days);
+      const key = `ctch_cmp3_${selected.id}_${days}_${since}_${until}`;
+
+      if (typeof window !== "undefined") {
+        const cached = sessionStorage.getItem(key);
+        if (cached) {
+          try {
+            setData(JSON.parse(cached));
+            return;
+          } catch {
+            sessionStorage.removeItem(key);
+          }
+        }
+      }
+
+      setBusy(true);
+      try {
+        const res = await fetch("/api/meta-summary", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ clientId: selected.id, since, until }),
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || "불러오기 실패");
+        const compare: Compare = {
+          current: json.current,
+          previous: json.previous,
+          period: json.period,
+          prevPeriod: json.prevPeriod,
+        };
+        setData(compare);
+        try {
+          sessionStorage.setItem(key, JSON.stringify(compare));
+        } catch {
+          /* ignore */
+        }
+      } catch {
+        setData(null);
+      } finally {
+        setBusy(false);
+      }
+    },
+    [selected],
+  );
+
+  useEffect(() => {
+    loadCompare(compareWindow, setCompareData, setCompareLoading);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.id, compareWindow]);
+
   // 저장 리포트 수 + AI 액션 플랜 수
   useEffect(() => {
     (async () => {
@@ -161,21 +262,13 @@ export default function DashboardHome() {
       : 0;
 
   const cur = summary?.current;
-  const prev = summary?.previous;
-  const mon = summary?.lastMonth;
 
   const metrics = cur
     ? [
-        { label: "광고비", value: fmt(cur.cost, "won"), cur: cur.cost, prev: prev?.cost ?? 0, mon: mon?.cost ?? 0, inverse: true },
-        { label: "전환수", value: fmt(cur.conversions, "int"), cur: cur.conversions, prev: prev?.conversions ?? 0, mon: mon?.conversions ?? 0 },
-        { label: "전환매출", value: fmt(cur.revenue, "won"), cur: cur.revenue, prev: prev?.revenue ?? 0, mon: mon?.revenue ?? 0 },
-        {
-          label: "ROAS",
-          value: fmt(cur.cost ? cur.revenue / cur.cost : null, "x"),
-          cur: cur.cost ? cur.revenue / cur.cost : 0,
-          prev: prev?.cost ? prev.revenue / prev.cost : 0,
-          mon: mon?.cost ? mon.revenue / mon.cost : 0,
-        },
+        { label: "광고비", value: fmt(cur.cost, "won") },
+        { label: "전환수", value: fmt(cur.conversions, "int") },
+        { label: "전환매출", value: fmt(cur.revenue, "won") },
+        { label: "ROAS", value: fmt(cur.cost ? cur.revenue / cur.cost : null, "x") },
       ]
     : [];
 
@@ -191,13 +284,24 @@ export default function DashboardHome() {
         </h2>
       </div>
 
-      {/* 상단 카드 */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <div className="rounded-card border border-line bg-surface p-4">
-          <p className="text-[12px] text-ink-muted">관리 광고주</p>
-          <p className="mt-0.5 font-display text-[24px] font-semibold text-ink">{clients.length}</p>
-        </div>
+      {/* 매체 필터 */}
+      <div className="flex flex-wrap items-center gap-4 rounded-card border border-line bg-surface p-3.5">
+        <span className="text-[12px] font-medium text-ink-muted">매체 필터</span>
+        {MEDIA_LIST.map((m) => (
+          <label key={m.key} className="flex cursor-pointer items-center gap-1.5 text-[13px] text-ink-soft">
+            <input
+              type="checkbox"
+              checked={mediaFilter[m.key]}
+              onChange={(e) => setMediaFilter((f) => ({ ...f, [m.key]: e.target.checked }))}
+              className="h-4 w-4 accent-signal"
+            />
+            {m.label}
+          </label>
+        ))}
+      </div>
 
+      {/* 상단 카드 */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <button
           onClick={checkMedia}
           className={`rounded-card border bg-surface p-4 text-left transition ${
@@ -260,6 +364,28 @@ export default function DashboardHome() {
         </div>
       )}
 
+      {!mediaFilter.meta && !mediaFilter.naver && !mediaFilter.gfa && (
+        <p className="rounded-card border border-dashed border-line bg-surface py-8 text-center text-[13px] text-ink-muted">
+          매체 필터에서 하나 이상 선택하면 데이터가 표시돼요.
+        </p>
+      )}
+
+      {mediaFilter.naver && (
+        <div className="rounded-card border border-dashed border-line bg-surface p-5 text-center">
+          <p className="text-[13px] font-medium text-ink">네이버 SA</p>
+          <p className="mt-1 text-[12px] text-ink-muted">연동 준비 중이에요. 곧 만나보실 수 있어요.</p>
+        </div>
+      )}
+
+      {mediaFilter.gfa && (
+        <div className="rounded-card border border-dashed border-line bg-surface p-5 text-center">
+          <p className="text-[13px] font-medium text-ink">GFA</p>
+          <p className="mt-1 text-[12px] text-ink-muted">연동 준비 중이에요. 곧 만나보실 수 있어요.</p>
+        </div>
+      )}
+
+      {mediaFilter.meta && (
+      <>
       {/* 전체 리포트 현황 */}
       <div className="rounded-card border border-line bg-surface p-5">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
@@ -310,9 +436,14 @@ export default function DashboardHome() {
                 <div key={m.label} className="rounded-lg bg-canvas p-3.5">
                   <p className="text-[12px] text-ink-muted">{m.label}</p>
                   <p className="mt-0.5 font-display text-[20px] font-semibold text-ink">{m.value}</p>
-                  <ComparisonRows cur={m.cur} prev={m.prev} mon={m.mon} inverse={m.inverse} />
                 </div>
               ))}
+            </div>
+
+            {/* 주요 지표 막대그래프 */}
+            <div className="mb-5">
+              <p className="mb-1 text-[12px] text-ink-muted">주요 지표 — 노출 · 클릭 · 전환 · 비용</p>
+              <KeyMetricsBarChart totals={cur} />
             </div>
 
             {/* 그래프 */}
@@ -339,6 +470,28 @@ export default function DashboardHome() {
           <p className="py-8 text-center text-[13px] text-ink-muted">데이터가 없어요.</p>
         )}
       </div>
+
+      {/* 기간 비교 */}
+      <div className="rounded-card border border-line bg-surface p-5">
+        <span className="mb-4 block text-[14px] font-semibold text-ink">기간 비교</span>
+        {!selected ? (
+          <p className="py-8 text-center text-[13px] text-ink-muted">광고주를 선택하면 비교가 표시돼요.</p>
+        ) : !selected.meta_account_id ? (
+          <p className="rounded-lg bg-warn/10 px-3.5 py-2.5 text-[13px] text-warn">
+            {selected.name}에 메타 광고계정 ID가 없어요.{" "}
+            <Link href="/clients" className="underline">광고주 관리에서 등록</Link>
+          </p>
+        ) : (
+          <PeriodComparison
+            window={compareWindow}
+            onWindowChange={setCompareWindow}
+            data={compareData}
+            loading={compareLoading}
+          />
+        )}
+      </div>
+      </>
+      )}
     </div>
   );
 }

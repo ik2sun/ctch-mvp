@@ -44,7 +44,7 @@ async function fetchAccount(
     access_token: token,
     level: "account",
     time_range: JSON.stringify({ since, until }),
-    fields: ["impressions", "clicks", "spend", "actions", "action_values"].join(","),
+    fields: ["impressions", "clicks", "spend", "reach", "frequency", "actions", "action_values"].join(","),
     limit: "200",
   });
   if (daily) params.set("time_increment", "1");
@@ -59,7 +59,15 @@ async function fetchAccount(
   return (json.data ?? []) as Record<string, unknown>[];
 }
 
-type Totals = { impressions: number; clicks: number; cost: number; conversions: number; revenue: number };
+type Totals = {
+  impressions: number;
+  clicks: number;
+  cost: number;
+  conversions: number;
+  revenue: number;
+  reach: number;
+  frequency: number;
+};
 
 function agg(rows: Record<string, unknown>[]): Totals {
   return rows.reduce(
@@ -69,8 +77,10 @@ function agg(rows: Record<string, unknown>[]): Totals {
       cost: a.cost + n(r.spend),
       conversions: a.conversions + pickAction(r.actions as ActionItem[] | undefined, PURCHASE_TYPES),
       revenue: a.revenue + pickAction(r.action_values as ActionItem[] | undefined, PURCHASE_TYPES),
+      reach: a.reach + n(r.reach),
+      frequency: a.frequency + n(r.frequency),
     }),
-    { impressions: 0, clicks: 0, cost: 0, conversions: 0, revenue: 0 },
+    { impressions: 0, clicks: 0, cost: 0, conversions: 0, revenue: 0, reach: 0, frequency: 0 },
   );
 }
 

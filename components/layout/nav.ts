@@ -25,7 +25,16 @@ export const NAV: NavItem[] = [
   },
   { href: "/media-mix", label: "미디어믹스 최적화", icon: "chart-pie", desc: "캠페인 목적별 매체 배분 제안", accent: "#eda100" },
   { href: "/correlation", label: "상관관계 분석", icon: "chart-dots", desc: "SOV·GRP·ROAS 지표 상관관계", accent: "#e87ba4" },
-  { href: "/ai-agent", label: "AI 마케팅 에이전트", icon: "message-chatbot", desc: "크리에이티브·미디어 방향성 챗봇", accent: "#008300" },
+  {
+    label: "AI 마케팅 에이전트",
+    icon: "message-chatbot",
+    desc: "크리에이티브·미디어 방향성과 브랜드 분석",
+    accent: "#008300",
+    children: [
+      { href: "/ai-agent", label: "AI 챗봇", icon: "message-chatbot", desc: "크리에이티브·미디어 방향성 챗봇" },
+      { href: "/ai-agent/brand-analysis", label: "브랜드 분석", icon: "brand-instagram", desc: "인스타그램 계정 분석 및 AI 진단" },
+    ],
+  },
   { href: "/sa-simulator", label: "SA 입찰 시뮬레이터", icon: "adjustments", desc: "검색광고 키워드·입찰가 최적화", accent: "#4a3aa7" },
   { href: "/competitor", label: "경쟁사 모니터링", icon: "radar", desc: "추정 트래픽·키워드 현황", accent: "#e34948" },
 ];
@@ -37,6 +46,14 @@ export const CLIENTS_NAV: NavItem = {
   desc: "광고주 등록·정보 관리",
 };
 
+// 로고 클릭 시 이동하는 광고주 홈 (사이드바 메뉴에는 노출하지 않음)
+export const HOME_NAV: NavItem = {
+  href: "/home",
+  label: "광고주 홈",
+  icon: "building-store",
+  desc: "전체 광고주 목록에서 선택",
+};
+
 // 상위·하위를 모두 펼친 목록
 export function flatNav(items: NavItem[] = NAV): NavItem[] {
   return items.flatMap((n) => (n.children ? [n, ...n.children] : [n]));
@@ -44,6 +61,7 @@ export function flatNav(items: NavItem[] = NAV): NavItem[] {
 
 export function navByPath(path: string): NavItem {
   if (path === CLIENTS_NAV.href) return CLIENTS_NAV;
+  if (path === HOME_NAV.href) return HOME_NAV;
   return flatNav().find((n) => n.href === path) ?? NAV[0];
 }
 
