@@ -28,11 +28,11 @@ export const NAV: NavItem[] = [
   {
     label: "AI 마케팅 에이전트",
     icon: "message-chatbot",
-    desc: "크리에이티브·미디어 방향성과 브랜드 분석",
+    desc: "크리에이티브·미디어 방향성과 인스타 분석",
     accent: "#008300",
     children: [
       { href: "/ai-agent", label: "AI 챗봇", icon: "message-chatbot", desc: "크리에이티브·미디어 방향성 챗봇" },
-      { href: "/ai-agent/brand-analysis", label: "브랜드 분석", icon: "brand-instagram", desc: "인스타그램 계정 분석 및 AI 진단" },
+      { href: "/ai-agent/insta-analysis", label: "인스타 분석", icon: "brand-instagram", desc: "인스타그램 계정 분석 및 AI 진단" },
     ],
   },
   { href: "/sa-simulator", label: "SA 입찰 시뮬레이터", icon: "adjustments", desc: "검색광고 키워드·입찰가 최적화", accent: "#4a3aa7" },
