@@ -3,12 +3,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { NAV, CLIENTS_NAV, isInCategory, type NavItem } from "./nav";
+import { NAV, CLIENTS_NAV, ADMIN_NAV, isInCategory, type NavItem } from "./nav";
 import { Wordmark } from "@/components/ui/Wordmark";
 import { useClients } from "@/features/clients/ClientContext";
 import { fmtBudget } from "@/features/clients/clientData";
+import type { Role } from "@/lib/supabase/profile";
 
-export function Sidebar({ email }: { email: string }) {
+export function Sidebar({ email, role }: { email: string; role: Role }) {
   const pathname = usePathname();
   const { selected } = useClients();
   const onClientsPage = pathname === CLIENTS_NAV.href;
@@ -134,6 +135,13 @@ export function Sidebar({ email }: { email: string }) {
           })}
         </div>
       </nav>
+
+      {/* 관리자 전용 */}
+      {role === "superadmin" && (
+        <div className="border-t border-line px-3 py-2">
+          {renderLeaf(ADMIN_NAV, 0)}
+        </div>
+      )}
 
       {/* 유저 */}
       <div className="flex items-center gap-2.5 border-t border-line p-4">

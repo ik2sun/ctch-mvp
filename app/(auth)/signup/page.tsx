@@ -37,6 +37,17 @@ export default function SignupPage() {
     setLoading(false);
   }
 
+  async function handleGoogleSignup() {
+    setError(null);
+    const supabase = createClient();
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? window.location.origin;
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: `${siteUrl}/auth/callback` },
+    });
+    if (error) setError("구글 가입에 실패했어요. 잠시 후 다시 시도해 주세요.");
+  }
+
   return (
     <main className="grid min-h-screen lg:grid-cols-2">
       <section className="relative hidden overflow-hidden bg-ink lg:block">
@@ -75,11 +86,12 @@ export default function SignupPage() {
                 <span className="signal-dot" />
               </div>
               <p className="text-[15px] font-medium text-ink">
-                인증 메일을 보냈어요
+                가입이 완료되었습니다
               </p>
               <p className="mt-1.5 text-[14px] leading-relaxed text-ink-muted">
                 <span className="font-mono text-ink-soft">{email}</span> 받은편지함의
-                링크를 눌러 가입을 완료해 주세요.
+                링크를 눌러 이메일 인증을 완료해 주세요. 인증 후 관리자 승인이
+                완료되면 이용하실 수 있어요.
               </p>
               <Link href="/login" className="btn-ghost mt-5 w-full">
                 로그인으로 돌아가기
@@ -125,6 +137,17 @@ export default function SignupPage() {
                   {loading ? "생성 중…" : "계정 만들기"}
                 </button>
               </form>
+
+              <div className="my-4 flex items-center gap-3">
+                <span className="h-px flex-1 bg-line" aria-hidden />
+                <span className="text-[12px] text-ink-faint">또는</span>
+                <span className="h-px flex-1 bg-line" aria-hidden />
+              </div>
+
+              <button onClick={handleGoogleSignup} type="button" className="btn-ghost w-full">
+                <i className="ti ti-brand-google text-[16px]" aria-hidden />
+                구글로 가입하기
+              </button>
 
               <p className="mt-6 text-center text-[14px] text-ink-muted">
                 이미 계정이 있으신가요?{" "}

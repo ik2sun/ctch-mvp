@@ -54,6 +54,14 @@ export const HOME_NAV: NavItem = {
   desc: "전체 광고주 목록에서 선택",
 };
 
+// superadmin 전용 회원 관리 (메인 NAV에는 안 넣고 Sidebar에서 role 체크 후 별도 노출)
+export const ADMIN_NAV: NavItem = {
+  href: "/admin/members",
+  label: "회원 관리",
+  icon: "users-group",
+  desc: "가입 승인·역할 관리",
+};
+
 // 상위·하위를 모두 펼친 목록
 export function flatNav(items: NavItem[] = NAV): NavItem[] {
   return items.flatMap((n) => (n.children ? [n, ...n.children] : [n]));
@@ -62,6 +70,7 @@ export function flatNav(items: NavItem[] = NAV): NavItem[] {
 export function navByPath(path: string): NavItem {
   if (path === CLIENTS_NAV.href) return CLIENTS_NAV;
   if (path === HOME_NAV.href) return HOME_NAV;
+  if (path === ADMIN_NAV.href) return ADMIN_NAV;
   return flatNav().find((n) => n.href === path) ?? NAV[0];
 }
 

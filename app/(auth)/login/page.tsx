@@ -28,6 +28,17 @@ export default function LoginPage() {
     router.refresh();
   }
 
+  async function handleGoogleLogin() {
+    setError(null);
+    const supabase = createClient();
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? window.location.origin;
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: `${siteUrl}/auth/callback` },
+    });
+    if (error) setError("구글 로그인에 실패했어요. 잠시 후 다시 시도해 주세요.");
+  }
+
   return (
     <main className="grid min-h-screen lg:grid-cols-2">
       {/* 좌측 — 시그니처: 신호를 캐치하는 레이더 펄스 */}
@@ -101,6 +112,17 @@ export default function LoginPage() {
               {loading ? "확인 중…" : "로그인"}
             </button>
           </form>
+
+          <div className="my-4 flex items-center gap-3">
+            <span className="h-px flex-1 bg-line" aria-hidden />
+            <span className="text-[12px] text-ink-faint">또는</span>
+            <span className="h-px flex-1 bg-line" aria-hidden />
+          </div>
+
+          <button onClick={handleGoogleLogin} type="button" className="btn-ghost w-full">
+            <i className="ti ti-brand-google text-[16px]" aria-hidden />
+            구글로 로그인
+          </button>
 
           <p className="mt-6 text-center text-[14px] text-ink-muted">
             아직 계정이 없으신가요?{" "}
