@@ -33,6 +33,7 @@ export const NAV: NavItem[] = [
     children: [
       { href: "/ai-agent", label: "AI 챗봇", icon: "message-chatbot", desc: "크리에이티브·미디어 방향성 챗봇" },
       { href: "/ai-agent/insta-analysis", label: "인스타 분석", icon: "brand-instagram", desc: "인스타그램 계정 분석 및 AI 진단" },
+      { href: "/ai-agent/proposal", label: "제안서", icon: "file-text", desc: "AI 리서치·자료 분석 기반 제안서 자동 생성" },
     ],
   },
   { href: "/sa-simulator", label: "SA 입찰 시뮬레이터", icon: "adjustments", desc: "검색광고 키워드·입찰가 최적화", accent: "#4a3aa7" },
