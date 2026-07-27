@@ -40,7 +40,8 @@ function condense(rows: Row[], limit: number) {
     }));
 }
 
-const SYSTEM = `당신은 메타(Meta) 광고 최적화 전문 AI 어시스턴트입니다.
+function buildSystemPrompt(channel: string): string {
+  return `당신은 ${channel} 광고 최적화 전문 AI 어시스턴트입니다.
 캠페인/광고세트/소재 계층형 데이터를 분석해 대시보드 UI에 즉시 시각화할 인사이트를 도출합니다.
 
 반드시 아래 스키마의 JSON만 출력하세요. 마크다운 코드펜스나 인사말, 설명 문장을 절대 붙이지 마세요.
@@ -63,6 +64,7 @@ const SYSTEM = `당신은 메타(Meta) 광고 최적화 전문 AI 어시스턴�
 - bottleneck: 예산 낭비가 가장 심한 캠페인→세트→소재 경로 1개
 - mermaid: flowchart LR 로 시작. 노드 텍스트에 괄호·따옴표·특수문자 금지, 한글과 쉼표만. 노드 5~8개
 - 데이터로 확인 불가한 원인은 추측하지 말 것`;
+}
 
 export async function POST(req: Request) {
   const supabase = await createClient();
@@ -74,7 +76,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "서버에 ANTHROPIC_API_KEY가 없어요." }, { status: 500 });
   }
 
-  const { campaigns, adsets, ads, daily, period, clientName, context } = await req.json();
+  const { campaigns, adsets, ads, daily, period, clientName, context, channel } = await req.json();
 
   const payload = {
     광고주: clientName ?? "",
@@ -100,7 +102,7 @@ ${hasContext ? `[마케터 추가 컨텍스트]\n${context.trim()}\n이 컨텍�
 위 스키마의 JSON만 출력하세요.`;
 
   try {
-    const msg = await anthropicCall(userMsg);
+    const msg = await anthropicCall(userMsg, typeof channel === "string" && channel ? channel : "메타(Meta)");
     return NextResponse.json(msg);
   } catch (e) {
     const message = e instanceof Error ? e.message : "AI 분석 중 오류가 발생했어요.";
@@ -108,12 +110,12 @@ ${hasContext ? `[마케터 추가 컨텍스트]\n${context.trim()}\n이 컨텍�
   }
 }
 
-async function anthropicCall(userMsg: string) {
+async function anthropicCall(userMsg: string, channel: string) {
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
   const msg = await anthropic.messages.create({
     model: "claude-sonnet-4-5",
     max_tokens: 2500,
-    system: SYSTEM,
+    system: buildSystemPrompt(channel),
     messages: [{ role: "user", content: userMsg }],
   });
 

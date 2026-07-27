@@ -23,6 +23,8 @@ type SummaryRes = {
   error?: string;
 };
 
+type NaverSummaryRes = SummaryRes & { campaignCount?: number; dailyApprox?: boolean };
+
 type MediaStatus = {
   key: string;
   label: string;
@@ -92,6 +94,10 @@ export default function DashboardHome() {
 
   const [reportCount, setReportCount] = useState(0);
   const [actionCount, setActionCount] = useState(0);
+
+  const [naverSummary, setNaverSummary] = useState<NaverSummaryRes | null>(null);
+  const [naverLoading, setNaverLoading] = useState(false);
+  const [naverError, setNaverError] = useState<string | null>(null);
 
   const [compareWindow, setCompareWindow] = useState(7);
   const [compareData, setCompareData] = useState<Compare | null>(null);
@@ -216,6 +222,40 @@ export default function DashboardHome() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected?.id, compareWindow]);
 
+  // 네이버 SA — 선택된 광고주에 등록된 키로 조회
+  const loadNaver = useCallback(
+    async (pk: string) => {
+      if (!selected?.id) {
+        setNaverSummary(null);
+        return;
+      }
+      const p = PERIODS.find((x) => x.key === pk) ?? PERIODS[1];
+      const since = p.since();
+      const until = p.until();
+      setNaverLoading(true);
+      setNaverError(null);
+      try {
+        const res = await fetch(`/api/naver-ad/summary?clientId=${selected.id}&since=${since}&until=${until}`);
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || "불러오기 실패");
+        setNaverSummary(json);
+      } catch (e) {
+        setNaverError(e instanceof Error ? e.message : "오류가 발생했어요.");
+        setNaverSummary(null);
+      } finally {
+        setNaverLoading(false);
+      }
+    },
+    [selected],
+  );
+
+  useEffect(() => {
+    setNaverSummary(null);
+    setNaverError(null);
+    if (mediaFilter.naver && selected?.id) loadNaver(periodKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mediaFilter.naver, selected?.id]);
+
   // 저장 리포트 수 + AI 액션 플랜 수
   useEffect(() => {
     (async () => {
@@ -238,22 +278,44 @@ export default function DashboardHome() {
     })();
   }, [selected?.id]);
 
-  async function checkMedia() {
-    setMediaOpen((v) => !v);
-    if (media || !selected?.id) return;
+  // 매체 필터 체크박스를 연동 상태로 게이팅하려면 패널을 열기 전에도 상태를 알아야 해서
+  // selected가 바뀔 때마다 미리 조회한다 (연동 매체 카드는 이 결과를 펼쳐 보여주기만 함).
+  const loadMediaStatus = useCallback(async () => {
+    if (!selected?.id) {
+      setMedia(null);
+      return;
+    }
     setMediaLoading(true);
     try {
-      const res = await fetch("/api/meta-status", {
+      const res = await fetch("/api/media-status", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ clientId: selected.id }),
       });
       const json = await res.json();
-      if (res.ok) setMedia(json.media as MediaStatus[]);
+      setMedia(res.ok ? (json.media as MediaStatus[]) : null);
     } finally {
       setMediaLoading(false);
     }
-  }
+  }, [selected]);
+
+  useEffect(() => {
+    loadMediaStatus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.id]);
+
+  // 연동 안 된 매체가 켜져 있으면 자동으로 꺼서 빈 데이터 조회 시도를 막는다.
+  useEffect(() => {
+    if (!media) return;
+    setMediaFilter((f) => {
+      const next = { ...f };
+      for (const m of MEDIA_LIST) {
+        if (m.key === "meta") continue;
+        if (!media.find((s) => s.key === m.key)?.connected) next[m.key] = false;
+      }
+      return next;
+    });
+  }, [media]);
 
   const connectedCount = media
     ? media.filter((m) => m.status === "ok").length
@@ -287,23 +349,31 @@ export default function DashboardHome() {
       {/* 매체 필터 */}
       <div className="flex flex-wrap items-center gap-4 rounded-card border border-line bg-surface p-3.5">
         <span className="text-[12px] font-medium text-ink-muted">매체 필터</span>
-        {MEDIA_LIST.map((m) => (
-          <label key={m.key} className="flex cursor-pointer items-center gap-1.5 text-[13px] text-ink-soft">
-            <input
-              type="checkbox"
-              checked={mediaFilter[m.key]}
-              onChange={(e) => setMediaFilter((f) => ({ ...f, [m.key]: e.target.checked }))}
-              className="h-4 w-4 accent-signal"
-            />
-            {m.label}
-          </label>
-        ))}
+        {MEDIA_LIST.map((m) => {
+          const needsSetup = m.key !== "meta" && !!selected && !!media && !media.find((s) => s.key === m.key)?.connected;
+          return (
+            <label
+              key={m.key}
+              className={`flex items-center gap-1.5 text-[13px] ${needsSetup ? "text-ink-faint" : "cursor-pointer text-ink-soft"}`}
+            >
+              <input
+                type="checkbox"
+                checked={mediaFilter[m.key]}
+                disabled={needsSetup}
+                onChange={(e) => setMediaFilter((f) => ({ ...f, [m.key]: e.target.checked }))}
+                className="h-4 w-4 accent-signal disabled:opacity-40"
+              />
+              {m.label}
+              {needsSetup && <span className="text-[11px] text-warn">연동 필요</span>}
+            </label>
+          );
+        })}
       </div>
 
       {/* 상단 카드 */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <button
-          onClick={checkMedia}
+          onClick={() => setMediaOpen((v) => !v)}
           className={`rounded-card border bg-surface p-4 text-left transition ${
             mediaOpen ? "border-signal" : "border-line hover:border-ink-faint"
           }`}
@@ -371,9 +441,97 @@ export default function DashboardHome() {
       )}
 
       {mediaFilter.naver && (
-        <div className="rounded-card border border-dashed border-line bg-surface p-5 text-center">
-          <p className="text-[13px] font-medium text-ink">네이버 SA</p>
-          <p className="mt-1 text-[12px] text-ink-muted">연동 준비 중이에요. 곧 만나보실 수 있어요.</p>
+        <div className="rounded-card border border-line bg-surface p-5">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+            <span className="text-[14px] font-semibold text-ink">
+              네이버 SA{" "}
+              {naverSummary?.campaignCount != null && (
+                <span className="font-normal text-ink-muted">
+                  · 캠페인 {naverSummary.campaignCount.toLocaleString("ko-KR")}개
+                </span>
+              )}
+            </span>
+            <div className="flex items-center gap-1.5">
+              {PERIODS.map((p) => (
+                <button
+                  key={p.key}
+                  onClick={() => {
+                    setPeriodKey(p.key);
+                    loadNaver(p.key);
+                  }}
+                  className={`rounded-lg border px-2.5 py-1.5 text-[12px] transition ${
+                    periodKey === p.key
+                      ? "border-signal bg-signal-soft font-medium text-signal"
+                      : "border-line text-ink-soft hover:border-ink-faint"
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
+              <button
+                onClick={() => loadNaver(periodKey)}
+                disabled={naverLoading}
+                className="rounded-lg border border-line px-2.5 py-1.5 text-[12px] text-ink-soft transition hover:border-signal hover:text-signal"
+              >
+                <i className={`ti ${naverLoading ? "ti-loader-2 animate-spin" : "ti-refresh"} text-[13px]`} aria-hidden />
+              </button>
+            </div>
+          </div>
+
+          {!selected ? (
+            <p className="py-8 text-center text-[13px] text-ink-muted">광고주를 선택하면 표시돼요.</p>
+          ) : naverError ? (
+            <p className="rounded-lg border border-bad/20 bg-bad/5 px-3.5 py-2.5 text-[13px] text-bad">{naverError}</p>
+          ) : naverLoading && !naverSummary ? (
+            <p className="py-8 text-center text-[13px] text-ink-muted">불러오는 중…</p>
+          ) : naverSummary ? (
+            <>
+              <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+                {[
+                  { label: "광고비", value: fmt(naverSummary.current.cost, "won") },
+                  { label: "전환수", value: fmt(naverSummary.current.conversions, "int") },
+                  { label: "전환매출", value: fmt(naverSummary.current.revenue, "won") },
+                  {
+                    label: "ROAS",
+                    value: fmt(naverSummary.current.cost ? naverSummary.current.revenue / naverSummary.current.cost : null, "x"),
+                  },
+                ].map((m) => (
+                  <div key={m.label} className="rounded-lg bg-canvas p-3.5">
+                    <p className="text-[12px] text-ink-muted">{m.label}</p>
+                    <p className="mt-0.5 font-display text-[20px] font-semibold text-ink">{m.value}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mb-5">
+                <p className="mb-1 text-[12px] text-ink-muted">주요 지표 — 노출 · 클릭 · 전환 · 비용</p>
+                <KeyMetricsBarChart totals={naverSummary.current} />
+              </div>
+
+              {naverSummary.daily.length > 1 ? (
+                <div className="space-y-4">
+                  <div>
+                    <p className="mb-1 text-[12px] text-ink-muted">
+                      광고비 대비 ROAS 추이 · {naverSummary.period.since} ~ {naverSummary.period.until}
+                      {naverSummary.dailyApprox && " (지출 상위 캠페인 기준 근사치)"}
+                    </p>
+                    <TrendChart daily={naverSummary.daily} />
+                  </div>
+                  <div>
+                    <p className="mb-1 text-[12px] text-ink-muted">지표별 추이</p>
+                    <MetricTrendGrid daily={naverSummary.daily} />
+                  </div>
+                </div>
+              ) : (
+                <p className="py-6 text-center text-[13px] text-ink-muted">
+                  선택한 기간이 짧아 그래프를 그릴 수 없어요. 최근 7일 이상을 선택해 보세요.
+                </p>
+              )}
+
+            </>
+          ) : (
+            <p className="py-8 text-center text-[13px] text-ink-muted">데이터가 없어요.</p>
+          )}
         </div>
       )}
 

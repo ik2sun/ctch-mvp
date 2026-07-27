@@ -141,21 +141,13 @@ export async function POST(req: Request) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
 
-  const token = process.env.META_ACCESS_TOKEN;
-  if (!token) {
-    return NextResponse.json(
-      { error: "서버에 META_ACCESS_TOKEN이 설정되지 않았어요." },
-      { status: 500 },
-    );
-  }
-
   const { since, until, clientId } = await req.json();
   if (!since || !until) return NextResponse.json({ error: "조회 기간을 지정해 주세요." }, { status: 400 });
   if (!clientId) return NextResponse.json({ error: "광고주를 먼저 선택해 주세요." }, { status: 400 });
 
   const { data: client } = await supabase
     .from("clients")
-    .select("name, meta_account_id")
+    .select("name, meta_account_id, meta_access_token")
     .eq("id", clientId)
     .eq("user_id", user.id)
     .maybeSingle();
@@ -164,6 +156,15 @@ export async function POST(req: Request) {
   if (!client.meta_account_id) {
     return NextResponse.json(
       { error: `'${client.name}'에 메타 광고계정 ID가 등록되지 않았어요.` },
+      { status: 400 },
+    );
+  }
+
+  // 광고주별 토큰이 없으면 .env.local 고정 토큰을 폴백으로 사용
+  const token = client.meta_access_token?.trim() || process.env.META_ACCESS_TOKEN;
+  if (!token) {
+    return NextResponse.json(
+      { error: `'${client.name}'에 메타 액세스 토큰이 없어요. 광고주 관리에서 등록해 주세요.` },
       { status: 400 },
     );
   }

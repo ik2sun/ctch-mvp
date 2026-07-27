@@ -47,6 +47,8 @@ export type MetaHierarchy = {
   clientName?: string;
   period?: { since: string; until: string };
   compare?: { previous: Totals; lastMonth: Totals };
+  // 네이버 SA처럼 API 제약으로 일부만 조회한 경우 UI에 표시할 안내 문구
+  scopeNote?: string;
 };
 
 // ── AI 스마트 진단 ──────────────────────────────

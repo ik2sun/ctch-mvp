@@ -2,9 +2,13 @@
 
 import { useMemo, useRef, useState } from "react";
 import { buildPresentationHtml } from "@/features/proposal/buildPresentationHtml";
+import { PROPOSALS_TABLE_SQL } from "@/features/proposal/proposalsTableSql";
 import { THEMES } from "@/features/proposal/themes";
 import type { BasicInfo, BrandColors, Slide, ThemeId } from "@/features/proposal/types";
 import { THEME_IDS } from "@/features/proposal/types";
+
+const SLIDE_WIDTH = 1280;
+const SLIDE_HEIGHT = 720;
 
 export default function Step5Present({
   basicInfo,
@@ -25,6 +29,9 @@ export default function Step5Present({
   const [saving, setSaving] = useState(false);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [missingTableSql, setMissingTableSql] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   const brandColors: BrandColors = useCustomColors
@@ -41,20 +48,57 @@ export default function Step5Present({
     iframeRef.current?.contentWindow?.postMessage({ type: "goto-slide", index: index - 1 }, "*");
   }
 
-  function printPdf() {
-    const blob = new Blob([html], { type: "text/html" });
-    const url = URL.createObjectURL(blob);
-    const printWin = window.open(url + "?print-pdf", "_blank");
-    if (printWin) {
-      setTimeout(() => {
-        printWin.print();
-      }, 2500);
+  async function downloadPdf() {
+    const iframe = iframeRef.current;
+    if (!iframe) return;
+
+    setDownloading(true);
+    setDownloadError(null);
+    try {
+      const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([
+        import("jspdf"),
+        import("html2canvas"),
+      ]);
+
+      const pdf = new jsPDF({
+        orientation: "landscape",
+        unit: "px",
+        format: [SLIDE_WIDTH, SLIDE_HEIGHT],
+      });
+
+      for (let i = 0; i < slides.length; i++) {
+        gotoSlide(slides[i].index);
+        // reveal.js 슬라이드 전환/애니메이션이 끝날 때까지 대기
+        await new Promise((resolve) => setTimeout(resolve, 700));
+
+        const target = iframe.contentDocument?.querySelector(".reveal") as HTMLElement | null;
+        if (!target) continue;
+
+        const canvas = await html2canvas(target, {
+          backgroundColor: null,
+          useCORS: true,
+          scale: 2,
+          width: SLIDE_WIDTH,
+          height: SLIDE_HEIGHT,
+        });
+        const imgData = canvas.toDataURL("image/jpeg", 0.92);
+
+        if (i > 0) pdf.addPage([SLIDE_WIDTH, SLIDE_HEIGHT], "landscape");
+        pdf.addImage(imgData, "JPEG", 0, 0, SLIDE_WIDTH, SLIDE_HEIGHT);
+      }
+
+      pdf.save(`제안서_${basicInfo.clientName || "proposal"}.pdf`);
+    } catch (e) {
+      setDownloadError(e instanceof Error ? e.message : "PDF 생성 중 오류가 발생했어요.");
+    } finally {
+      setDownloading(false);
     }
   }
 
   async function saveAndShare() {
     setSaving(true);
     setSaveError(null);
+    setMissingTableSql(null);
     try {
       const res = await fetch("/api/proposal/save", {
         method: "POST",
@@ -69,7 +113,10 @@ export default function Step5Present({
         }),
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "저장에 실패했어요.");
+      if (!res.ok) {
+        if (json.missingTable) setMissingTableSql(PROPOSALS_TABLE_SQL);
+        throw new Error(json.error ?? "저장에 실패했어요.");
+      }
       const url = `${window.location.origin}/proposal/share/${json.shareToken}`;
       setShareUrl(url);
       await navigator.clipboard.writeText(url).catch(() => {});
@@ -171,10 +218,11 @@ export default function Step5Present({
         <div className="flex items-center gap-3">
           <button
             type="button"
-            onClick={printPdf}
-            className="rounded-card border border-line px-5 py-2.5 text-[14px] text-ink-soft hover:bg-canvas"
+            onClick={downloadPdf}
+            disabled={downloading}
+            className="rounded-card border border-line px-5 py-2.5 text-[14px] text-ink-soft hover:bg-canvas disabled:opacity-50"
           >
-            PDF 다운로드
+            {downloading ? "PDF 생성 중..." : "PDF 다운로드"}
           </button>
           <button
             type="button"
@@ -187,7 +235,25 @@ export default function Step5Present({
         </div>
       </div>
 
+      {downloadError && <p className="text-[13px] text-bad">{downloadError}</p>}
       {saveError && <p className="text-[13px] text-bad">{saveError}</p>}
+      {missingTableSql && (
+        <div className="space-y-2 rounded-card border border-bad/40 bg-bad/5 p-3 text-[13px]">
+          <p className="text-ink">
+            Supabase 프로젝트의 SQL Editor에서 아래 SQL을 1회 실행한 뒤 다시 시도해주세요.
+          </p>
+          <pre className="max-h-52 overflow-auto rounded bg-canvas p-2 text-[11px] leading-relaxed text-ink-soft">
+            {missingTableSql}
+          </pre>
+          <button
+            type="button"
+            onClick={() => navigator.clipboard.writeText(missingTableSql).catch(() => {})}
+            className="rounded-card border border-line px-3 py-1.5 text-[12px] text-ink-soft hover:bg-canvas"
+          >
+            SQL 복사
+          </button>
+        </div>
+      )}
       {shareUrl && (
         <div className="rounded-card border border-line bg-canvas p-3 text-[13px]">
           공유 링크가 클립보드에 복사되었어요: <span className="font-mono text-signal">{shareUrl}</span>

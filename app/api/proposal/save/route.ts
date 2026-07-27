@@ -39,8 +39,15 @@ export async function POST(req: Request) {
     .single();
 
   if (error || !data) {
+    const missingTable =
+      error?.code === "PGRST205" || Boolean(error?.message?.includes("Could not find the table"));
     return NextResponse.json(
-      { error: error?.message ?? "제안서 저장 중 오류가 발생했어요." },
+      {
+        error: missingTable
+          ? "Supabase에 proposals 테이블이 아직 없어요. 안내에 따라 테이블을 먼저 생성해주세요."
+          : (error?.message ?? "제안서 저장 중 오류가 발생했어요."),
+        missingTable,
+      },
       { status: 500 },
     );
   }

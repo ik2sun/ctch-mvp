@@ -91,9 +91,6 @@ export async function POST(req: Request) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
 
-  const token = process.env.META_ACCESS_TOKEN;
-  if (!token) return NextResponse.json({ error: "META_ACCESS_TOKEN이 없어요." }, { status: 500 });
-
   const { clientId, since, until } = await req.json();
   if (!clientId || !since || !until) {
     return NextResponse.json({ error: "필수 값이 없어요." }, { status: 400 });
@@ -101,13 +98,16 @@ export async function POST(req: Request) {
 
   const { data: client } = await supabase
     .from("clients")
-    .select("name, meta_account_id")
+    .select("name, meta_account_id, meta_access_token")
     .eq("id", clientId)
     .eq("user_id", user.id)
     .maybeSingle();
   if (!client?.meta_account_id) {
     return NextResponse.json({ error: "메타 계정이 연결되지 않았어요." }, { status: 400 });
   }
+  const token = client.meta_access_token?.trim() || process.env.META_ACCESS_TOKEN;
+  if (!token) return NextResponse.json({ error: "메타 액세스 토큰이 없어요. 광고주 관리에서 등록해 주세요." }, { status: 400 });
+
   const accountId = client.meta_account_id as string;
   const act = accountId.startsWith("act_") ? accountId : `act_${accountId}`;
 

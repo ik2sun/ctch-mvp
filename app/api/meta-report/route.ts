@@ -39,9 +39,10 @@ function condense(rows: Row[], limit: number) {
     }));
 }
 
-const SYSTEM_PROMPT = `당신은 10년 이상의 경험을 가진 '수석 퍼포먼스 마케터'이자 '데이터 시각화 전문가'입니다.
+function buildSystemPrompt(channel: string): string {
+  return `당신은 10년 이상의 경험을 가진 '수석 퍼포먼스 마케터'이자 '데이터 시각화 전문가'입니다.
 
-제공된 메타(Meta) 광고 데이터(캠페인 > 광고 세트 > 광고 소재의 계층 구조)를 심층 분석하여, 광고 효율(ROAS, CPA 등)을 극대화하기 위한 '효율 개선 최적화 리포트'를 작성합니다. 단순 수치 나열은 금지하며, 데이터 간 상관관계를 분석해 즉각적인 액션(ON/OFF, 예산 증감, 소재 교체)을 도출해야 합니다.
+제공된 ${channel} 광고 데이터(캠페인 > 광고 세트 > 광고 소재의 계층 구조)를 심층 분석하여, 광고 효율(ROAS, CPA 등)을 극대화하기 위한 '효율 개선 최적화 리포트'를 작성합니다. 단순 수치 나열은 금지하며, 데이터 간 상관관계를 분석해 즉각적인 액션(ON/OFF, 예산 증감, 소재 교체)을 도출해야 합니다.
 
 [출력 구조]
 반드시 아래 섹션 순서와 마크다운 포맷을 지키세요.
@@ -70,6 +71,7 @@ const SYSTEM_PROMPT = `당신은 10년 이상의 경험을 가진 '수석 퍼포
 - 불확실한 원인을 추측하지 말 것. 주어진 지표 안에서 논리적으로 도출 가능한 결론만 작성
 - 퍼널, 피로도, A/B 테스트, 스케일업 등 전문 용어로 실무자 톤앤매너 유지
 - 금액은 원화, 비율은 %로 표기`;
+}
 
 const CONTEXT_GUIDE = `
 
@@ -100,8 +102,9 @@ export async function POST(req: Request) {
     );
   }
 
-  const { campaigns, adsets, ads, context, period, clientName, goal } =
+  const { campaigns, adsets, ads, context, period, clientName, goal, channel } =
     await req.json();
+  const channelLabel = typeof channel === "string" && channel ? channel : "메타(Meta)";
 
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -116,9 +119,9 @@ export async function POST(req: Request) {
     소재: condense(ads ?? [], 30),
   };
 
-  const userMsg = `아래는 메타 광고 성과 데이터입니다.
+  const userMsg = `아래는 ${channelLabel} 광고 성과 데이터입니다.
 
-[Meta API 데이터]
+[${channelLabel} API 데이터]
 ${JSON.stringify(payload, null, 1)}
 
 ${hasContext ? `[마케터의 추가 컨텍스트]\n${context.trim()}` : "[마케터의 추가 컨텍스트]\n(없음 — 5번 섹션은 생략하세요)"}
@@ -129,7 +132,7 @@ ${hasContext ? `[마케터의 추가 컨텍스트]\n${context.trim()}` : "[마�
     const msg = await anthropic.messages.create({
       model: "claude-sonnet-4-5",
       max_tokens: 4000,
-      system: SYSTEM_PROMPT + (hasContext ? CONTEXT_GUIDE : ""),
+      system: buildSystemPrompt(channelLabel) + (hasContext ? CONTEXT_GUIDE : ""),
       messages: [{ role: "user", content: userMsg }],
     });
 

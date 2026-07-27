@@ -29,20 +29,29 @@ const SYSTEM_PROMPT = `너는 10년 경력의 디지털 마케팅 전략 컨설�
 7. 기대 효과 - 구체적 수치 목표
 8. NMG 소개 - 실적 위주 3줄
 
-반드시 JSON으로만 반환:
+각 슬라이드는 반드시 아래 JSON 형식으로만 반환 (설명 텍스트 없이 JSON만):
 {
-  slides: [
+  "slides": [
     {
-      index: 1,
-      title: string,
-      subtitle: string,
-      content: string,
-      data: object (차트/인포그래픽용 데이터),
-      layout: 'cover'|'data'|'strategy'|'timeline'|'impact'|'profile',
-      notes: string
+      "index": 1,
+      "title": string,
+      "subtitle": string,
+      "content": string,
+      "data": object (차트/인포그래픽용 데이터),
+      "layout": "cover"|"data"|"strategy"|"timeline"|"impact"|"profile",
+      "notes": string
     }
   ]
 }`;
+
+// 한 번에 8장을 요청하면 응답이 길어져 max_tokens에 걸려 JSON이 잘리는 경우가 있어
+// 2장씩 4번 나눠 요청한 뒤 합친다.
+const SLIDE_GROUPS: { indices: number[]; label: string }[] = [
+  { indices: [1, 2], label: "1. 표지 / 2. 현황 진단" },
+  { indices: [3, 4], label: "3. 시장 기회 / 4. 전략 방향" },
+  { indices: [5, 6], label: "5. 매체 전략 / 6. 실행 타임라인" },
+  { indices: [7, 8], label: "7. 기대 효과 / 8. NMG 소개" },
+];
 
 export async function POST(req: Request) {
   const supabase = await createClient();
@@ -93,21 +102,49 @@ ${fileBlock}`;
 
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
+  const allSlides: Slide[] = [];
+
   try {
-    const msg = await anthropic.messages.create({
-      model: "claude-sonnet-4-5",
-      max_tokens: 8000,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: "user", content: userMessage }],
-    });
+    for (const group of SLIDE_GROUPS) {
+      const priorBlock = allSlides.length
+        ? allSlides
+            .map((s) => `- (${s.index}) ${s.title}: ${s.subtitle}`)
+            .join("\n")
+        : "(아직 작성된 슬라이드 없음)";
 
-    const text = msg.content
-      .filter((b) => b.type === "text")
-      .map((b) => (b as { text: string }).text)
-      .join("\n");
+      const groupMessage = `${userMessage}
 
-    const parsed = parseJsonResponse<{ slides: Slide[] }>(text);
-    return NextResponse.json({ slides: parsed.slides });
+[지금까지 작성된 슬라이드 요약 - 스토리 흐름을 이어갈 것]
+${priorBlock}
+
+이번 요청에서는 아래 슬라이드만 작성해서 JSON으로 반환해줘. 다른 인덱스는 절대 포함하지 마.
+- ${group.label}`;
+
+      const msg = await anthropic.messages.create({
+        model: "claude-sonnet-4-5",
+        max_tokens: 8192,
+        system: SYSTEM_PROMPT,
+        messages: [{ role: "user", content: groupMessage }],
+      });
+
+      const text = msg.content
+        .filter((b) => b.type === "text")
+        .map((b) => (b as { text: string }).text)
+        .join("\n");
+
+      let parsed: { slides: Slide[] };
+      try {
+        parsed = parseJsonResponse<{ slides: Slide[] }>(text);
+      } catch (parseError) {
+        const detail = parseError instanceof Error ? parseError.message : String(parseError);
+        throw new Error(`슬라이드(${group.label}) 생성 응답을 JSON으로 해석하지 못했어요: ${detail}`);
+      }
+
+      allSlides.push(...parsed.slides);
+    }
+
+    allSlides.sort((a, b) => a.index - b.index);
+    return NextResponse.json({ slides: allSlides });
   } catch (e) {
     const message = e instanceof Error ? e.message : "제안서 생성 중 오류가 발생했어요.";
     return NextResponse.json({ error: message }, { status: 500 });

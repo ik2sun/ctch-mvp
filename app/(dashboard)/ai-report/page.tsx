@@ -32,6 +32,13 @@ const TABS: { key: TabKey; label: string; icon: string; color: string }[] = [
   { key: "ai", label: "AI 분석", icon: "ti-sparkles", color: "#4a3aa7" },
 ];
 
+type Channel = "meta" | "naver";
+
+const CHANNELS: { key: Channel; label: string; icon: string; sheetName: string; channelLabel: string }[] = [
+  { key: "meta", label: "메타", icon: "ti-brand-meta", sheetName: "메타 API", channelLabel: "메타(Meta)" },
+  { key: "naver", label: "네이버 SA", icon: "ti-search", sheetName: "네이버 SA API", channelLabel: "네이버 SA" },
+];
+
 export default function AiReportPage() {
   const { selected } = useClients();
 
@@ -56,26 +63,36 @@ export default function AiReportPage() {
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
 
   const [activeTab, setActiveTab] = useState<TabKey>("campaign");
+  const [channel, setChannel] = useState<Channel>("meta");
+  const channelDef = CHANNELS.find((c) => c.key === channel) ?? CHANNELS[0];
 
-  const canFetch = !!selected?.meta_account_id;
+  const canFetch = channel === "meta" ? !!selected?.meta_account_id : !!selected?.id;
 
   const fetchData = useCallback(
-    async (s: string, u: string) => {
+    async (s: string, u: string, ch: Channel) => {
       if (!selected?.id) return;
       setLoading(true);
       setLoadError(null);
       setSmart(null);
       setReport("");
       try {
-        const res = await fetch("/api/meta-insights", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ since: s, until: u, clientId: selected.id }),
-        });
-        const json = await res.json();
-        if (!res.ok) throw new Error(json.error || "불러오기 실패");
-        setData(json as MetaHierarchy);
-        setTitle(`${selected.name} 메타 ${s}~${u}`);
+        let json: MetaHierarchy;
+        if (ch === "meta") {
+          const res = await fetch("/api/meta-insights", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ since: s, until: u, clientId: selected.id }),
+          });
+          json = await res.json();
+          if (!res.ok) throw new Error((json as unknown as { error?: string }).error || "불러오기 실패");
+          setTitle(`${selected.name} 메타 ${s}~${u}`);
+        } else {
+          const res = await fetch(`/api/naver-ad/insights?clientId=${selected.id}&since=${s}&until=${u}`);
+          json = await res.json();
+          if (!res.ok) throw new Error((json as unknown as { error?: string }).error || "불러오기 실패");
+          setTitle(`${selected.name} 네이버 SA ${s}~${u}`);
+        }
+        setData(json);
       } catch (e) {
         setLoadError(e instanceof Error ? e.message : "오류가 발생했어요.");
         setData(null);
@@ -86,12 +103,12 @@ export default function AiReportPage() {
     [selected],
   );
 
-  // 진입 시 최근 7일 자동 로드
+  // 진입/채널 전환 시 최근 7일 자동 로드
   useEffect(() => {
-    if (canFetch) fetchData(since, until);
+    if (canFetch) fetchData(since, until, channel);
     else setData(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected?.id, canFetch]);
+  }, [selected?.id, canFetch, channel]);
 
   async function runSmart() {
     if (!data) return;
@@ -109,6 +126,7 @@ export default function AiReportPage() {
           period: data.period,
           clientName: data.clientName,
           context,
+          channel: channelDef.channelLabel,
         }),
       });
       const json = await res.json();
@@ -137,6 +155,7 @@ export default function AiReportPage() {
           clientName: data.clientName,
           goal,
           context,
+          channel: channelDef.channelLabel,
         }),
       });
       const json = await res.json();
@@ -165,9 +184,9 @@ export default function AiReportPage() {
       .join("\n\n");
     const { error } = await saveReport({
       clientId: selected.id,
-      title: title.trim() || "메타 최적화 리포트",
+      title: title.trim() || `${channelDef.label} 최적화 리포트`,
       reportDate: data.period?.until ?? null,
-      sheetName: "메타 API",
+      sheetName: channelDef.sheetName,
       summary,
       aiComment: body || null,
     });
@@ -196,17 +215,35 @@ export default function AiReportPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-5">
+      {/* 매체 채널 전환 */}
+      <div className="flex items-center gap-1.5">
+        {CHANNELS.map((c) => (
+          <button
+            key={c.key}
+            onClick={() => setChannel(c.key)}
+            className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[13px] transition ${
+              channel === c.key
+                ? "border-signal bg-signal-soft font-medium text-signal"
+                : "border-line text-ink-soft hover:border-ink-faint"
+            }`}
+          >
+            <i className={`ti ${c.icon} text-[15px]`} aria-hidden />
+            {c.label}
+          </button>
+        ))}
+      </div>
+
       {/* 조회 컨트롤 */}
       <div className="rounded-card border border-line bg-surface p-4">
         {!selected ? (
           <p className="text-[13px] text-ink-muted">먼저 상단에서 광고주를 선택해 주세요.</p>
-        ) : !selected.meta_account_id ? (
+        ) : channel === "meta" && !selected.meta_account_id ? (
           <p className="rounded-lg bg-warn/10 px-3.5 py-2.5 text-[13px] text-warn">
             {selected.name}에 메타 광고계정 ID가 없어요. 광고주 관리에서 등록해 주세요.
           </p>
         ) : (
           <div className="flex flex-wrap items-center gap-2">
-            <i className="ti ti-brand-meta text-[18px] text-signal" aria-hidden />
+            <i className={`ti ${channelDef.icon} text-[18px] text-signal`} aria-hidden />
             <span className="mr-1 text-[13px] font-medium text-ink-soft">{selected.name}</span>
             <input type="date" value={since} onChange={(e) => setSince(e.target.value)} className="field h-9 w-auto text-[13px]" />
             <span className="text-ink-faint">~</span>
@@ -221,14 +258,14 @@ export default function AiReportPage() {
                 onClick={() => {
                   setSince(p.s);
                   setUntil(daysAgo(1));
-                  fetchData(p.s, daysAgo(1));
+                  fetchData(p.s, daysAgo(1), channel);
                 }}
                 className="rounded-lg border border-line px-2.5 py-1.5 text-[12px] text-ink-soft transition hover:border-signal hover:text-signal"
               >
                 {p.label}
               </button>
             ))}
-            <button onClick={() => fetchData(since, until)} disabled={loading} className="btn-signal h-9 px-3 text-[13px]">
+            <button onClick={() => fetchData(since, until, channel)} disabled={loading} className="btn-signal h-9 px-3 text-[13px]">
               <i className={`ti ${loading ? "ti-loader-2 animate-spin" : "ti-refresh"} text-[15px]`} aria-hidden />
               {loading ? "불러오는 중…" : "새로고침"}
             </button>
@@ -312,10 +349,14 @@ export default function AiReportPage() {
                 )}
               </div>
               <TreeTable data={data} statuses={smart?.statuses ?? []} view={activeTab} />
-              <p className="mt-2 text-[11px] text-ink-muted">
-                빈도 3회 이상 + CTR 1% 미만은 <span className="text-warn">주황색</span>으로 표시돼요 (피로도 신호).
-                {activeTab === "campaign" && " 캠페인 행의 미니 그래프는 일별 추세입니다."}
-              </p>
+              {channel === "meta" ? (
+                <p className="mt-2 text-[11px] text-ink-muted">
+                  빈도 3회 이상 + CTR 1% 미만은 <span className="text-warn">주황색</span>으로 표시돼요 (피로도 신호).
+                  {activeTab === "campaign" && " 캠페인 행의 미니 그래프는 일별 추세입니다."}
+                </p>
+              ) : (
+                data.scopeNote && <p className="mt-2 text-[11px] text-ink-muted">{data.scopeNote}</p>
+              )}
             </div>
           ) : (
             <>

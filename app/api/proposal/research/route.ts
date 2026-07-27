@@ -60,7 +60,7 @@ ${competitorBlock}
   try {
     const msg = await anthropic.messages.create({
       model: "claude-sonnet-4-5",
-      max_tokens: 2000,
+      max_tokens: 8192,
       messages: [{ role: "user", content: prompt }],
     });
 
@@ -69,11 +69,16 @@ ${competitorBlock}
       .map((b) => (b as { text: string }).text)
       .join("\n");
 
-    const parsed = parseJsonResponse<{ insights: Omit<Insight, "id">[] }>(text);
-    const insights: Insight[] = parsed.insights.map((i, idx) => ({
-      id: `insight-${idx}-${Date.now()}`,
-      ...i,
-    }));
+    let insights: Insight[] = [];
+    try {
+      const parsed = parseJsonResponse<{ insights: Omit<Insight, "id">[] }>(text);
+      insights = parsed.insights.map((i, idx) => ({
+        id: `insight-${idx}-${Date.now()}`,
+        ...i,
+      }));
+    } catch (parseError) {
+      console.error("[proposal/research] AI 응답 JSON 파싱 실패, 빈 인사이트로 대체:", parseError, text);
+    }
 
     return NextResponse.json({ insights });
   } catch (e) {
