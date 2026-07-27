@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllCampaigns } from "@/lib/naver-ad/aggregate";
 import { resolveNaverAdCredentials } from "@/lib/naver-ad/auth";
-import { NaverAdApiError } from "@/lib/naver-ad/client";
+import { naverErrorResponse } from "@/lib/naver-ad/client";
 
 // 네이버 검색광고 캠페인 목록 (읽기 전용). ?clientId= 로 해당 광고주의 키를 사용한다.
 export async function GET(req: Request) {
@@ -29,7 +29,6 @@ export async function GET(req: Request) {
     const campaigns = await fetchAllCampaigns(credentials);
     return NextResponse.json({ campaigns });
   } catch (e) {
-    const message = e instanceof Error ? e.message : "네이버 캠페인 조회 중 오류가 발생했어요.";
-    return NextResponse.json({ error: message }, { status: e instanceof NaverAdApiError ? 502 : 400 });
+    return naverErrorResponse(e, "네이버 캠페인 조회 중 오류가 발생했어요.");
   }
 }

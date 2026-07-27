@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useClients } from "@/features/clients/ClientContext";
 import { listReports } from "@/features/ai-report/reportData";
@@ -8,8 +8,10 @@ import { TrendChart } from "@/features/ai-report/TrendChart";
 import { MetricTrendGrid } from "@/features/ai-report/MetricTrendGrid";
 import { PeriodComparison, type Compare } from "@/features/ai-report/PeriodComparison";
 import { KeyMetricsBarChart } from "@/features/ai-report/KeyMetricsBarChart";
+import { MediaBreakdownTable, type MediaRow } from "@/features/ai-report/MediaBreakdownTable";
 import { fmt } from "@/features/ai-report/calcMetrics";
-import type { DailyPoint, SmartInsights, Totals } from "@/features/ai-report/metaTypes";
+import { getSessionCache, setSessionCache } from "@/features/dashboard/sessionCache";
+import type { DailyPoint, Totals } from "@/features/ai-report/metaTypes";
 
 type Period = { since: string; until: string };
 
@@ -32,6 +34,8 @@ type MediaStatus = {
   status: "ok" | "expired" | "error" | "none";
   detail: string;
 };
+
+type AiPlan = { issues: string[]; urgentActions: string[]; nextWeekActions: string[] };
 
 const MEDIA_LIST = [
   { key: "meta", label: "메타", connected: true },
@@ -83,7 +87,6 @@ export default function DashboardHome() {
   const [error, setError] = useState<string | null>(null);
 
   const [media, setMedia] = useState<MediaStatus[] | null>(null);
-  const [mediaOpen, setMediaOpen] = useState(false);
   const [mediaLoading, setMediaLoading] = useState(false);
 
   const [mediaFilter, setMediaFilter] = useState<Record<MediaKey, boolean>>({
@@ -93,7 +96,6 @@ export default function DashboardHome() {
   });
 
   const [reportCount, setReportCount] = useState(0);
-  const [actionCount, setActionCount] = useState(0);
 
   const [naverSummary, setNaverSummary] = useState<NaverSummaryRes | null>(null);
   const [naverLoading, setNaverLoading] = useState(false);
@@ -103,7 +105,10 @@ export default function DashboardHome() {
   const [compareData, setCompareData] = useState<Compare | null>(null);
   const [compareLoading, setCompareLoading] = useState(false);
 
-  const period = PERIODS.find((p) => p.key === periodKey) ?? PERIODS[1];
+  const [aiPlan, setAiPlan] = useState<AiPlan | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const aiInFlight = useRef(false);
 
   // 성과 요약 (세션 캐시 — 메타 호출 한도 절약)
   const load = useCallback(
@@ -117,16 +122,12 @@ export default function DashboardHome() {
       const until = p.until();
       const key = `ctch_dash_${selected.id}_${since}_${until}`;
 
-      if (!force && typeof window !== "undefined") {
-        const cached = sessionStorage.getItem(key);
+      if (!force) {
+        const cached = getSessionCache<SummaryRes>(key);
         if (cached) {
-          try {
-            setSummary(JSON.parse(cached));
-            setError(null);
-            return;
-          } catch {
-            sessionStorage.removeItem(key);
-          }
+          setSummary(cached);
+          setError(null);
+          return;
         }
       }
 
@@ -141,11 +142,7 @@ export default function DashboardHome() {
         const json = await res.json();
         if (!res.ok) throw new Error(json.error || "불러오기 실패");
         setSummary(json);
-        try {
-          sessionStorage.setItem(key, JSON.stringify(json));
-        } catch {
-          /* ignore */
-        }
+        setSessionCache(key, json);
       } catch (e) {
         setError(e instanceof Error ? e.message : "오류가 발생했어요.");
         setSummary(null);
@@ -175,16 +172,10 @@ export default function DashboardHome() {
       const { since, until } = compareRange(days);
       const key = `ctch_cmp3_${selected.id}_${days}_${since}_${until}`;
 
-      if (typeof window !== "undefined") {
-        const cached = sessionStorage.getItem(key);
-        if (cached) {
-          try {
-            setData(JSON.parse(cached));
-            return;
-          } catch {
-            sessionStorage.removeItem(key);
-          }
-        }
+      const cached = getSessionCache<Compare>(key);
+      if (cached) {
+        setData(cached);
+        return;
       }
 
       setBusy(true);
@@ -203,11 +194,7 @@ export default function DashboardHome() {
           prevPeriod: json.prevPeriod,
         };
         setData(compare);
-        try {
-          sessionStorage.setItem(key, JSON.stringify(compare));
-        } catch {
-          /* ignore */
-        }
+        setSessionCache(key, compare);
       } catch {
         setData(null);
       } finally {
@@ -222,9 +209,12 @@ export default function DashboardHome() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected?.id, compareWindow]);
 
-  // 네이버 SA — 선택된 광고주에 등록된 키로 조회
+  // 네이버 SA — 체크박스가 아니라 실제 연동 여부를 기준으로 로드한다.
+  // (표에서 "체크 해제된 연동 매체"도 흐리게나마 실데이터를 보여줘야 하므로)
+  // 같은 기간+광고주는 5분간 캐시하고, "새로고침" 클릭(force)일 때만 강제로 다시 불러온다.
+  // 429(요청 과다)를 만나면 5초 뒤 자동으로 한 번 더 시도한다.
   const loadNaver = useCallback(
-    async (pk: string) => {
+    async (pk: string, force = false, isAutoRetry = false) => {
       if (!selected?.id) {
         setNaverSummary(null);
         return;
@@ -232,13 +222,33 @@ export default function DashboardHome() {
       const p = PERIODS.find((x) => x.key === pk) ?? PERIODS[1];
       const since = p.since();
       const until = p.until();
+      const cacheKey = `ctch_naver_summary_${selected.id}_${since}_${until}`;
+
+      if (!force) {
+        const cached = getSessionCache<NaverSummaryRes>(cacheKey);
+        if (cached) {
+          setNaverSummary(cached);
+          setNaverError(null);
+          return;
+        }
+      }
+
       setNaverLoading(true);
-      setNaverError(null);
+      if (!isAutoRetry) setNaverError(null);
       try {
         const res = await fetch(`/api/naver-ad/summary?clientId=${selected.id}&since=${since}&until=${until}`);
         const json = await res.json();
-        if (!res.ok) throw new Error(json.error || "불러오기 실패");
+        if (!res.ok) {
+          if (json.code === "RATE_LIMITED" && !isAutoRetry) {
+            setNaverError(json.error || "잠시 후 다시 시도해주세요.");
+            setTimeout(() => loadNaver(pk, force, true), 5000);
+            return;
+          }
+          throw new Error(json.error || "불러오기 실패");
+        }
         setNaverSummary(json);
+        setNaverError(null);
+        setSessionCache(cacheKey, json);
       } catch (e) {
         setNaverError(e instanceof Error ? e.message : "오류가 발생했어요.");
         setNaverSummary(null);
@@ -249,37 +259,29 @@ export default function DashboardHome() {
     [selected],
   );
 
+  const naverConnected = media?.find((m) => m.key === "naver")?.connected ?? false;
+
   useEffect(() => {
     setNaverSummary(null);
     setNaverError(null);
-    if (mediaFilter.naver && selected?.id) loadNaver(periodKey);
+    if (naverConnected && selected?.id) loadNaver(periodKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mediaFilter.naver, selected?.id]);
+  }, [naverConnected, selected?.id]);
 
-  // 저장 리포트 수 + AI 액션 플랜 수
+  // 저장된 리포트 수
   useEffect(() => {
     (async () => {
       if (!selected?.id) {
         setReportCount(0);
-        setActionCount(0);
         return;
       }
       const rows = await listReports(selected.id);
       setReportCount(rows.length);
-      try {
-        const raw = sessionStorage.getItem(`ctch_smart_${selected.id}`);
-        if (raw) {
-          const s = JSON.parse(raw) as SmartInsights;
-          setActionCount((s.statuses?.length ?? 0) + (s.bottleneck ? 1 : 0));
-        } else setActionCount(0);
-      } catch {
-        setActionCount(0);
-      }
     })();
   }, [selected?.id]);
 
-  // 매체 필터 체크박스를 연동 상태로 게이팅하려면 패널을 열기 전에도 상태를 알아야 해서
-  // selected가 바뀔 때마다 미리 조회한다 (연동 매체 카드는 이 결과를 펼쳐 보여주기만 함).
+  // 매체 필터 체크박스를 연동 상태로 게이팅하려면 표를 그리기 전에도 상태를 알아야 해서
+  // selected가 바뀔 때마다 미리 조회한다.
   const loadMediaStatus = useCallback(async () => {
     if (!selected?.id) {
       setMedia(null);
@@ -325,14 +327,128 @@ export default function DashboardHome() {
 
   const cur = summary?.current;
 
-  const metrics = cur
-    ? [
-        { label: "광고비", value: fmt(cur.cost, "won") },
-        { label: "전환수", value: fmt(cur.conversions, "int") },
-        { label: "전환매출", value: fmt(cur.revenue, "won") },
-        { label: "ROAS", value: fmt(cur.cost ? cur.revenue / cur.cost : null, "x") },
-      ]
-    : [];
+  // 매체별 상세 표 행 — GFA/카카오는 실제 조회 API가 없어 항상 미연동으로 고정한다
+  // (GFA는 키가 저장돼 있어도 "기타 사항" 패널에서만 그 사실을 보여주고, 이 표에서는
+  // 실데이터를 보여줄 수 없다는 뜻에서 항상 미연동 취급한다). 카카오는 체크박스가
+  // 없으므로 checked를 항상 false로 고정해 행이 늘 흐리게 표시된다.
+  const mediaRows: MediaRow[] = [
+    { key: "meta", label: "메타", checked: mediaFilter.meta, connected: !!cur, totals: cur ?? null },
+    {
+      key: "naver",
+      label: "네이버 SA",
+      checked: mediaFilter.naver,
+      connected: naverConnected && !!naverSummary,
+      totals: naverSummary?.current ?? null,
+    },
+    { key: "gfa", label: "GFA", checked: mediaFilter.gfa, connected: false, totals: null },
+    { key: "kakao", label: "카카오모먼트", checked: false, connected: false, totals: null },
+  ];
+
+  const contributingRows = mediaRows.filter((r) => r.checked && r.connected && r.totals);
+  const combinedTotals = contributingRows.reduce(
+    (a, r) => ({
+      impressions: a.impressions + r.totals!.impressions,
+      clicks: a.clicks + r.totals!.clicks,
+      cost: a.cost + r.totals!.cost,
+      conversions: a.conversions + r.totals!.conversions,
+      revenue: a.revenue + r.totals!.revenue,
+      reach: 0,
+      frequency: 0,
+    }),
+    { impressions: 0, clicks: 0, cost: 0, conversions: 0, revenue: 0, reach: 0, frequency: 0 } as Totals,
+  );
+
+  // 선택(체크)되고 실제 연동된 매체만 합산 — 없으면 카드에 "—"를 보여준다.
+  const metrics = [
+    { label: "광고비", value: fmt(contributingRows.length ? combinedTotals.cost : null, "won") },
+    { label: "전환수", value: fmt(contributingRows.length ? combinedTotals.conversions : null, "int") },
+    { label: "전환매출", value: fmt(contributingRows.length ? combinedTotals.revenue : null, "won") },
+    {
+      label: "ROAS",
+      value: fmt(contributingRows.length && combinedTotals.cost ? combinedTotals.revenue / combinedTotals.cost : null, "x"),
+    },
+  ];
+
+  // 그래프/기간비교 섹션은 지금처럼 메타 데이터 기준을 유지 — 안내 문구도 그대로 재사용
+  const metaNotice = !selected
+    ? "광고주를 선택하면 실제 수치가 표시돼요."
+    : !selected.meta_account_id
+      ? `${selected.name}에 메타 광고계정 ID가 없어요. 광고주 관리에서 등록해 주세요.`
+      : error
+        ? error
+        : null;
+
+  // AI 액션 플랜 — 같은 광고주+기간+매체 조합은 30분 캐시, "새로고침" 성 데이터 재조회
+  // 완료(loading/naverLoading이 모두 끝난 시점) 후 자동으로 호출한다.
+  const loadAiPlan = useCallback(
+    async (force = false) => {
+      if (!selected?.id) {
+        setAiPlan(null);
+        return;
+      }
+      if (contributingRows.length === 0) {
+        setAiPlan(null);
+        setAiError(null);
+        return;
+      }
+      if (aiInFlight.current) return;
+
+      const p = PERIODS.find((x) => x.key === periodKey) ?? PERIODS[1];
+      const since = p.since();
+      const until = p.until();
+      const mediaKeys = contributingRows.map((r) => r.key).sort().join(",");
+      const cacheKey = `ctch_dash_ai_${selected.id}_${since}_${until}_${mediaKeys}`;
+
+      if (!force) {
+        const cached = getSessionCache<AiPlan>(cacheKey, 30 * 60 * 1000);
+        if (cached) {
+          setAiPlan(cached);
+          setAiError(null);
+          return;
+        }
+      }
+
+      aiInFlight.current = true;
+      setAiLoading(true);
+      setAiError(null);
+      try {
+        const res = await fetch("/api/dashboard-smart", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            clientName: selected.name,
+            period: { since, until },
+            channels: contributingRows.map((r) => ({ label: r.label, ...r.totals! })),
+            combined: combinedTotals,
+            compare: summary ? { previous: summary.previous, lastMonth: summary.lastMonth } : null,
+          }),
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || "AI 분석 실패");
+        setAiPlan(json);
+        setSessionCache(cacheKey, json);
+      } catch (e) {
+        setAiError(e instanceof Error ? e.message : "AI 분석 중 오류가 발생했어요.");
+      } finally {
+        setAiLoading(false);
+        aiInFlight.current = false;
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [selected, periodKey, contributingRows.map((r) => r.key).join(","), combinedTotals.cost, summary],
+  );
+
+  useEffect(() => {
+    if (!selected?.id) {
+      setAiPlan(null);
+      return;
+    }
+    if (loading || naverLoading) return;
+    loadAiPlan();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.id, periodKey, loading, naverLoading, media]);
+
+  const aiActionCount = aiPlan ? aiPlan.issues.length + aiPlan.urgentActions.length + aiPlan.nextWeekActions.length : 0;
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -370,26 +486,28 @@ export default function DashboardHome() {
         })}
       </div>
 
+      {/* 요약 카드 4개 — 체크 + 연동된 매체만 합산 */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {metrics.map((m) => (
+          <div key={m.label} className="rounded-card border border-line bg-surface p-3.5">
+            <p className="text-[12px] text-ink-muted">{m.label}</p>
+            <p className="mt-0.5 font-display text-[20px] font-semibold text-ink">{m.value}</p>
+          </div>
+        ))}
+      </div>
+
       {/* 상단 카드 */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <button
-          onClick={() => setMediaOpen((v) => !v)}
-          className={`rounded-card border bg-surface p-4 text-left transition ${
-            mediaOpen ? "border-signal" : "border-line hover:border-ink-faint"
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <p className="text-[12px] text-ink-muted">연동 매체</p>
-            <i className={`ti ti-chevron-down text-[13px] text-ink-muted transition-transform ${mediaOpen ? "rotate-180" : ""}`} aria-hidden />
-          </div>
+        <div className="rounded-card border border-line bg-surface p-4">
+          <p className="text-[12px] text-ink-muted">연동 매체</p>
           <p className="mt-0.5 font-display text-[24px] font-semibold text-ink">{connectedCount}</p>
-        </button>
+        </div>
 
         <Link href="/ai-report" className="rounded-card border border-line bg-surface p-4 transition hover:border-ink-faint">
           <p className="text-[12px] text-ink-muted">AI 액션 플랜</p>
           <p className="mt-0.5 font-display text-[24px] font-semibold text-ink">
-            {actionCount}
-            {actionCount === 0 && <span className="ml-1.5 text-[11px] font-normal text-ink-faint">진단 필요</span>}
+            {aiActionCount}
+            {aiActionCount === 0 && <span className="ml-1.5 text-[11px] font-normal text-ink-faint">분석 대기</span>}
           </p>
         </Link>
 
@@ -399,152 +517,7 @@ export default function DashboardHome() {
         </Link>
       </div>
 
-      {/* 매체 연동 상태 */}
-      {mediaOpen && (
-        <div className="rounded-card border border-line bg-surface p-4">
-          {mediaLoading ? (
-            <p className="text-[13px] text-ink-muted">연동 상태 확인 중…</p>
-          ) : !media ? (
-            <p className="text-[13px] text-ink-muted">광고주를 선택하면 상태를 확인할 수 있어요.</p>
-          ) : (
-            <div className="space-y-2">
-              {media.map((m) => (
-                <div key={m.key} className="flex items-center gap-2.5">
-                  <span
-                    className={`h-2.5 w-2.5 flex-shrink-0 rounded-full ${
-                      m.status === "ok"
-                        ? "bg-good"
-                        : m.status === "expired" || m.status === "error"
-                          ? "bg-bad"
-                          : "bg-ink-faint"
-                    }`}
-                    aria-hidden
-                  />
-                  <span className="w-16 text-[13px] font-medium text-ink">{m.label}</span>
-                  <span className="text-[12px] text-ink-muted">{m.detail}</span>
-                  {m.status === "ok" && <span className="text-[11px] text-good">실시간 연동 중</span>}
-                  {m.status === "expired" && <span className="text-[11px] text-bad">토큰 만료</span>}
-                </div>
-              ))}
-              <Link href="/clients" className="mt-1 inline-block text-[12px] text-signal hover:underline">
-                광고주 관리에서 계정 수정 →
-              </Link>
-            </div>
-          )}
-        </div>
-      )}
-
-      {!mediaFilter.meta && !mediaFilter.naver && !mediaFilter.gfa && (
-        <p className="rounded-card border border-dashed border-line bg-surface py-8 text-center text-[13px] text-ink-muted">
-          매체 필터에서 하나 이상 선택하면 데이터가 표시돼요.
-        </p>
-      )}
-
-      {mediaFilter.naver && (
-        <div className="rounded-card border border-line bg-surface p-5">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-            <span className="text-[14px] font-semibold text-ink">
-              네이버 SA{" "}
-              {naverSummary?.campaignCount != null && (
-                <span className="font-normal text-ink-muted">
-                  · 캠페인 {naverSummary.campaignCount.toLocaleString("ko-KR")}개
-                </span>
-              )}
-            </span>
-            <div className="flex items-center gap-1.5">
-              {PERIODS.map((p) => (
-                <button
-                  key={p.key}
-                  onClick={() => {
-                    setPeriodKey(p.key);
-                    loadNaver(p.key);
-                  }}
-                  className={`rounded-lg border px-2.5 py-1.5 text-[12px] transition ${
-                    periodKey === p.key
-                      ? "border-signal bg-signal-soft font-medium text-signal"
-                      : "border-line text-ink-soft hover:border-ink-faint"
-                  }`}
-                >
-                  {p.label}
-                </button>
-              ))}
-              <button
-                onClick={() => loadNaver(periodKey)}
-                disabled={naverLoading}
-                className="rounded-lg border border-line px-2.5 py-1.5 text-[12px] text-ink-soft transition hover:border-signal hover:text-signal"
-              >
-                <i className={`ti ${naverLoading ? "ti-loader-2 animate-spin" : "ti-refresh"} text-[13px]`} aria-hidden />
-              </button>
-            </div>
-          </div>
-
-          {!selected ? (
-            <p className="py-8 text-center text-[13px] text-ink-muted">광고주를 선택하면 표시돼요.</p>
-          ) : naverError ? (
-            <p className="rounded-lg border border-bad/20 bg-bad/5 px-3.5 py-2.5 text-[13px] text-bad">{naverError}</p>
-          ) : naverLoading && !naverSummary ? (
-            <p className="py-8 text-center text-[13px] text-ink-muted">불러오는 중…</p>
-          ) : naverSummary ? (
-            <>
-              <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
-                {[
-                  { label: "광고비", value: fmt(naverSummary.current.cost, "won") },
-                  { label: "전환수", value: fmt(naverSummary.current.conversions, "int") },
-                  { label: "전환매출", value: fmt(naverSummary.current.revenue, "won") },
-                  {
-                    label: "ROAS",
-                    value: fmt(naverSummary.current.cost ? naverSummary.current.revenue / naverSummary.current.cost : null, "x"),
-                  },
-                ].map((m) => (
-                  <div key={m.label} className="rounded-lg bg-canvas p-3.5">
-                    <p className="text-[12px] text-ink-muted">{m.label}</p>
-                    <p className="mt-0.5 font-display text-[20px] font-semibold text-ink">{m.value}</p>
-                  </div>
-                ))}
-              </div>
-
-              <div className="mb-5">
-                <p className="mb-1 text-[12px] text-ink-muted">주요 지표 — 노출 · 클릭 · 전환 · 비용</p>
-                <KeyMetricsBarChart totals={naverSummary.current} />
-              </div>
-
-              {naverSummary.daily.length > 1 ? (
-                <div className="space-y-4">
-                  <div>
-                    <p className="mb-1 text-[12px] text-ink-muted">
-                      광고비 대비 ROAS 추이 · {naverSummary.period.since} ~ {naverSummary.period.until}
-                      {naverSummary.dailyApprox && " (지출 상위 캠페인 기준 근사치)"}
-                    </p>
-                    <TrendChart daily={naverSummary.daily} />
-                  </div>
-                  <div>
-                    <p className="mb-1 text-[12px] text-ink-muted">지표별 추이</p>
-                    <MetricTrendGrid daily={naverSummary.daily} />
-                  </div>
-                </div>
-              ) : (
-                <p className="py-6 text-center text-[13px] text-ink-muted">
-                  선택한 기간이 짧아 그래프를 그릴 수 없어요. 최근 7일 이상을 선택해 보세요.
-                </p>
-              )}
-
-            </>
-          ) : (
-            <p className="py-8 text-center text-[13px] text-ink-muted">데이터가 없어요.</p>
-          )}
-        </div>
-      )}
-
-      {mediaFilter.gfa && (
-        <div className="rounded-card border border-dashed border-line bg-surface p-5 text-center">
-          <p className="text-[13px] font-medium text-ink">GFA</p>
-          <p className="mt-1 text-[12px] text-ink-muted">연동 준비 중이에요. 곧 만나보실 수 있어요.</p>
-        </div>
-      )}
-
-      {mediaFilter.meta && (
-      <>
-      {/* 전체 리포트 현황 */}
+      {/* 전체 리포트 현황 — 매체별 상세 표, 항상 표시 */}
       <div className="rounded-card border border-line bg-surface p-5">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <span className="text-[14px] font-semibold text-ink">전체 리포트 현황</span>
@@ -555,6 +528,7 @@ export default function DashboardHome() {
                 onClick={() => {
                   setPeriodKey(p.key);
                   load(p.key);
+                  loadNaver(p.key);
                 }}
                 className={`rounded-lg border px-2.5 py-1.5 text-[12px] transition ${
                   periodKey === p.key
@@ -566,90 +540,184 @@ export default function DashboardHome() {
               </button>
             ))}
             <button
-              onClick={() => load(periodKey, true)}
-              disabled={loading}
+              onClick={() => {
+                load(periodKey, true);
+                loadNaver(periodKey, true);
+              }}
+              disabled={loading || naverLoading}
               className="rounded-lg border border-line px-2.5 py-1.5 text-[12px] text-ink-soft transition hover:border-signal hover:text-signal"
             >
-              <i className={`ti ${loading ? "ti-loader-2 animate-spin" : "ti-refresh"} text-[13px]`} aria-hidden />
+              <i className={`ti ${loading || naverLoading ? "ti-loader-2 animate-spin" : "ti-refresh"} text-[13px]`} aria-hidden />
             </button>
           </div>
         </div>
 
         {!selected ? (
-          <p className="py-8 text-center text-[13px] text-ink-muted">광고주를 선택하면 현황이 표시돼요.</p>
-        ) : !selected.meta_account_id ? (
-          <p className="rounded-lg bg-warn/10 px-3.5 py-2.5 text-[13px] text-warn">
-            {selected.name}에 메타 광고계정 ID가 없어요.{" "}
-            <Link href="/clients" className="underline">광고주 관리에서 등록</Link>
-          </p>
-        ) : error ? (
-          <p className="rounded-lg border border-bad/20 bg-bad/5 px-3.5 py-2.5 text-[13px] text-bad">{error}</p>
-        ) : loading && !summary ? (
-          <p className="py-8 text-center text-[13px] text-ink-muted">불러오는 중…</p>
-        ) : summary && cur ? (
-          <>
-            {/* 지표 + 비교 */}
-            <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
-              {metrics.map((m) => (
-                <div key={m.label} className="rounded-lg bg-canvas p-3.5">
-                  <p className="text-[12px] text-ink-muted">{m.label}</p>
-                  <p className="mt-0.5 font-display text-[20px] font-semibold text-ink">{m.value}</p>
-                </div>
-              ))}
-            </div>
-
-            {/* 주요 지표 막대그래프 */}
-            <div className="mb-5">
-              <p className="mb-1 text-[12px] text-ink-muted">주요 지표 — 노출 · 클릭 · 전환 · 비용</p>
-              <KeyMetricsBarChart totals={cur} />
-            </div>
-
-            {/* 그래프 */}
-            {summary.daily.length > 1 ? (
-              <div className="space-y-4">
-                <div>
-                  <p className="mb-1 text-[12px] text-ink-muted">
-                    광고비 대비 ROAS 추이 · {summary.period.since} ~ {summary.period.until}
-                  </p>
-                  <TrendChart daily={summary.daily} />
-                </div>
-                <div>
-                  <p className="mb-1 text-[12px] text-ink-muted">지표별 추이</p>
-                  <MetricTrendGrid daily={summary.daily} />
-                </div>
-              </div>
-            ) : (
-              <p className="py-6 text-center text-[13px] text-ink-muted">
-                선택한 기간이 짧아 그래프를 그릴 수 없어요. 최근 7일 이상을 선택해 보세요.
-              </p>
-            )}
-          </>
+          <p className="py-8 text-center text-[13px] text-ink-muted">광고주를 선택하면 매체별 현황이 표시돼요.</p>
         ) : (
-          <p className="py-8 text-center text-[13px] text-ink-muted">데이터가 없어요.</p>
+          <>
+            {naverError && (
+              <p className="mb-3 rounded-lg border border-bad/20 bg-bad/5 px-3.5 py-2.5 text-[13px] text-bad">{naverError}</p>
+            )}
+            <MediaBreakdownTable rows={mediaRows} />
+          </>
         )}
       </div>
 
       {/* 기간 비교 */}
       <div className="rounded-card border border-line bg-surface p-5">
         <span className="mb-4 block text-[14px] font-semibold text-ink">기간 비교</span>
-        {!selected ? (
-          <p className="py-8 text-center text-[13px] text-ink-muted">광고주를 선택하면 비교가 표시돼요.</p>
-        ) : !selected.meta_account_id ? (
-          <p className="rounded-lg bg-warn/10 px-3.5 py-2.5 text-[13px] text-warn">
-            {selected.name}에 메타 광고계정 ID가 없어요.{" "}
-            <Link href="/clients" className="underline">광고주 관리에서 등록</Link>
+        {metaNotice && (
+          <p
+            className={`mb-4 rounded-lg px-3.5 py-2.5 text-[13px] ${
+              error ? "border border-bad/20 bg-bad/5 text-bad" : "bg-warn/10 text-warn"
+            }`}
+          >
+            {metaNotice}
           </p>
+        )}
+        <PeriodComparison
+          window={compareWindow}
+          onWindowChange={setCompareWindow}
+          data={compareData}
+          loading={compareLoading}
+        />
+      </div>
+
+      {/* 그래프 */}
+      <div className="rounded-card border border-line bg-surface p-5">
+        <span className="mb-4 block text-[14px] font-semibold text-ink">그래프</span>
+        {metaNotice && (
+          <p
+            className={`mb-4 rounded-lg px-3.5 py-2.5 text-[13px] ${
+              error ? "border border-bad/20 bg-bad/5 text-bad" : "bg-warn/10 text-warn"
+            }`}
+          >
+            {metaNotice}
+          </p>
+        )}
+
+        <div className="mb-5">
+          <p className="mb-1 text-[12px] text-ink-muted">주요 지표 — 노출 · 클릭 · 전환 · 비용</p>
+          <KeyMetricsBarChart totals={cur ?? null} />
+        </div>
+
+        {(summary?.daily.length ?? 0) > 1 ? (
+          <div className="space-y-4">
+            <div>
+              <p className="mb-1 text-[12px] text-ink-muted">
+                광고비 대비 ROAS 추이 · {summary!.period.since} ~ {summary!.period.until}
+              </p>
+              <TrendChart daily={summary!.daily} />
+            </div>
+            <div>
+              <p className="mb-1 text-[12px] text-ink-muted">지표별 추이</p>
+              <MetricTrendGrid daily={summary!.daily} />
+            </div>
+          </div>
         ) : (
-          <PeriodComparison
-            window={compareWindow}
-            onWindowChange={setCompareWindow}
-            data={compareData}
-            loading={compareLoading}
-          />
+          <p className="py-6 text-center text-[13px] text-ink-muted">
+            {loading ? "불러오는 중…" : "표시할 그래프가 없어요. 최근 7일 이상 데이터가 있는 광고주를 선택해 보세요."}
+          </p>
         )}
       </div>
-      </>
-      )}
+
+      {/* AI 액션 플랜 */}
+      <div className="rounded-card border border-line bg-surface p-5">
+        <div className="mb-4 flex items-center gap-2">
+          <span className="text-[14px] font-semibold text-ink">AI 액션 플랜</span>
+          {aiLoading && <i className="ti ti-loader-2 animate-spin text-[13px] text-ink-muted" aria-hidden />}
+        </div>
+
+        {!selected ? (
+          <p className="py-8 text-center text-[13px] text-ink-muted">광고주를 선택하면 AI가 자동으로 분석해요.</p>
+        ) : contributingRows.length === 0 ? (
+          <p className="py-8 text-center text-[13px] text-ink-muted">
+            체크 + 연동된 매체 데이터가 없어서 분석할 수 없어요.
+          </p>
+        ) : aiError ? (
+          <p className="rounded-lg border border-bad/20 bg-bad/5 px-3.5 py-2.5 text-[13px] text-bad">{aiError}</p>
+        ) : aiLoading && !aiPlan ? (
+          <p className="py-8 text-center text-[13px] text-ink-muted">AI가 분석 중이에요…</p>
+        ) : aiPlan ? (
+          <div className="space-y-4">
+            <div>
+              <p className="mb-2 text-[12px] font-medium text-ink-soft">이번 주 주요 이슈</p>
+              {aiPlan.issues.length ? (
+                <ul className="space-y-1.5">
+                  {aiPlan.issues.map((t, i) => (
+                    <li key={i} className="rounded-lg bg-canvas px-3 py-2 text-[13px] text-ink-soft">{t}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-[13px] text-ink-muted">특이 이슈가 없어요.</p>
+              )}
+            </div>
+            <div>
+              <p className="mb-2 text-[12px] font-medium text-bad">즉시 조치 필요</p>
+              {aiPlan.urgentActions.length ? (
+                <ul className="space-y-1.5">
+                  {aiPlan.urgentActions.map((t, i) => (
+                    <li key={i} className="rounded-lg border border-bad/20 bg-bad/5 px-3 py-2 text-[13px] text-ink-soft">{t}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-[13px] text-ink-muted">즉시 조치가 필요한 항목은 없어요.</p>
+              )}
+            </div>
+            <div>
+              <p className="mb-2 text-[12px] font-medium text-signal">다음 주 추천 액션</p>
+              {aiPlan.nextWeekActions.length ? (
+                <ul className="space-y-1.5">
+                  {aiPlan.nextWeekActions.map((t, i) => (
+                    <li key={i} className="rounded-lg bg-signal-soft px-3 py-2 text-[13px] text-ink-soft">{t}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-[13px] text-ink-muted">추천 액션이 없어요.</p>
+              )}
+            </div>
+          </div>
+        ) : (
+          <p className="py-8 text-center text-[13px] text-ink-muted">데이터가 없어요.</p>
+        )}
+      </div>
+
+      {/* 기타 사항 — 매체별 연동 상태 */}
+      <div className="rounded-card border border-line bg-surface p-5">
+        <span className="mb-4 block text-[14px] font-semibold text-ink">기타 사항</span>
+        {mediaLoading ? (
+          <p className="text-[13px] text-ink-muted">연동 상태 확인 중…</p>
+        ) : !selected ? (
+          <p className="text-[13px] text-ink-muted">광고주를 선택하면 매체별 연동 상태를 확인할 수 있어요.</p>
+        ) : !media ? (
+          <p className="text-[13px] text-ink-muted">연동 상태를 불러오지 못했어요.</p>
+        ) : (
+          <div className="space-y-2">
+            {media.map((m) => (
+              <div key={m.key} className="flex items-center gap-2.5">
+                <span
+                  className={`h-2.5 w-2.5 flex-shrink-0 rounded-full ${
+                    m.status === "ok"
+                      ? "bg-good"
+                      : m.status === "expired" || m.status === "error"
+                        ? "bg-bad"
+                        : "bg-ink-faint"
+                  }`}
+                  aria-hidden
+                />
+                <span className="w-20 text-[13px] font-medium text-ink">{m.label}</span>
+                <span className="text-[12px] text-ink-muted">{m.detail}</span>
+                {m.status === "ok" && <span className="text-[11px] text-good">실시간 연동 중</span>}
+                {m.status === "expired" && <span className="text-[11px] text-bad">토큰 만료</span>}
+              </div>
+            ))}
+            <Link href="/clients" className="mt-1 inline-block text-[12px] text-signal hover:underline">
+              광고주 관리에서 계정 수정 →
+            </Link>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

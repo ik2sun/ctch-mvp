@@ -16,6 +16,7 @@ import {
 } from "@/features/ai-report/metaTypes";
 import { useClients } from "@/features/clients/ClientContext";
 import { saveReport } from "@/features/ai-report/reportData";
+import { getSessionCache, setSessionCache } from "@/features/dashboard/sessionCache";
 
 function daysAgo(n: number): string {
   const d = new Date();
@@ -68,11 +69,27 @@ export default function AiReportPage() {
 
   const canFetch = channel === "meta" ? !!selected?.meta_account_id : !!selected?.id;
 
+  // 네이버 SA는 같은 기간+광고주 조회를 5분간 캐시하고, "새로고침" 클릭(force)일 때만
+  // 강제로 다시 불러온다. 429(요청 과다)를 만나면 5초 뒤 자동으로 한 번 더 시도한다.
   const fetchData = useCallback(
-    async (s: string, u: string, ch: Channel) => {
+    async (s: string, u: string, ch: Channel, force = false, isAutoRetry = false) => {
       if (!selected?.id) return;
+
+      const cacheKey = ch === "naver" ? `ctch_naver_insights_${selected.id}_${s}_${u}` : null;
+      if (cacheKey && !force) {
+        const cached = getSessionCache<MetaHierarchy>(cacheKey);
+        if (cached) {
+          setData(cached);
+          setTitle(`${selected.name} 네이버 SA ${s}~${u}`);
+          setLoadError(null);
+          setSmart(null);
+          setReport("");
+          return;
+        }
+      }
+
       setLoading(true);
-      setLoadError(null);
+      if (!isAutoRetry) setLoadError(null);
       setSmart(null);
       setReport("");
       try {
@@ -89,8 +106,17 @@ export default function AiReportPage() {
         } else {
           const res = await fetch(`/api/naver-ad/insights?clientId=${selected.id}&since=${s}&until=${u}`);
           json = await res.json();
-          if (!res.ok) throw new Error((json as unknown as { error?: string }).error || "불러오기 실패");
+          if (!res.ok) {
+            const errJson = json as unknown as { error?: string; code?: string };
+            if (errJson.code === "RATE_LIMITED" && !isAutoRetry) {
+              setLoadError(errJson.error || "잠시 후 다시 시도해주세요.");
+              setTimeout(() => fetchData(s, u, ch, force, true), 5000);
+              return;
+            }
+            throw new Error(errJson.error || "불러오기 실패");
+          }
           setTitle(`${selected.name} 네이버 SA ${s}~${u}`);
+          if (cacheKey) setSessionCache(cacheKey, json);
         }
         setData(json);
       } catch (e) {
@@ -265,7 +291,7 @@ export default function AiReportPage() {
                 {p.label}
               </button>
             ))}
-            <button onClick={() => fetchData(since, until, channel)} disabled={loading} className="btn-signal h-9 px-3 text-[13px]">
+            <button onClick={() => fetchData(since, until, channel, true)} disabled={loading} className="btn-signal h-9 px-3 text-[13px]">
               <i className={`ti ${loading ? "ti-loader-2 animate-spin" : "ti-refresh"} text-[15px]`} aria-hidden />
               {loading ? "불러오는 중…" : "새로고침"}
             </button>

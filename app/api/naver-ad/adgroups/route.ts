@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllAdGroups } from "@/lib/naver-ad/aggregate";
 import { resolveNaverAdCredentials } from "@/lib/naver-ad/auth";
-import { NaverAdApiError } from "@/lib/naver-ad/client";
+import { naverErrorResponse } from "@/lib/naver-ad/client";
 
 // 네이버 검색광고 광고그룹 목록 (읽기 전용). ?clientId=&campaignId= 로 조회
 export async function GET(req: Request) {
@@ -30,7 +30,6 @@ export async function GET(req: Request) {
     const adGroups = await fetchAllAdGroups(credentials, campaignId);
     return NextResponse.json({ adGroups });
   } catch (e) {
-    const message = e instanceof Error ? e.message : "네이버 광고그룹 조회 중 오류가 발생했어요.";
-    return NextResponse.json({ error: message }, { status: e instanceof NaverAdApiError ? 502 : 400 });
+    return naverErrorResponse(e, "네이버 광고그룹 조회 중 오류가 발생했어요.");
   }
 }

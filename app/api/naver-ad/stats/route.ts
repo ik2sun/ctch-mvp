@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { fetchBulkStats } from "@/lib/naver-ad/aggregate";
 import { resolveNaverAdCredentials } from "@/lib/naver-ad/auth";
-import { NaverAdApiError } from "@/lib/naver-ad/client";
+import { naverErrorResponse } from "@/lib/naver-ad/client";
 import { deriveNaverMetrics } from "@/lib/naver-ad/types";
 
 // 네이버 검색광고 성과 데이터 (읽기 전용).
@@ -41,7 +41,6 @@ export async function GET(req: Request) {
     const stats = ids.map((id) => deriveNaverMetrics(statMap.get(id), id));
     return NextResponse.json({ stats });
   } catch (e) {
-    const message = e instanceof Error ? e.message : "네이버 성과 데이터 조회 중 오류가 발생했어요.";
-    return NextResponse.json({ error: message }, { status: e instanceof NaverAdApiError ? 502 : 400 });
+    return naverErrorResponse(e, "네이버 성과 데이터 조회 중 오류가 발생했어요.");
   }
 }

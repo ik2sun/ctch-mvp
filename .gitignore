@@ -9,3 +9,6 @@ next-env.d.ts
 
 .vercel
 .env*
+
+# 서비스 계정 키 등 로컬 시크릿 파일 — 절대 커밋하지 않음
+/secrets

@@ -11,6 +11,7 @@ export type NavItem = {
 
 export const NAV: NavItem[] = [
   { href: "/", label: "대시보드", icon: "layout-dashboard", desc: "전체 요약", accent: "#2a78d6" },
+  { href: "/nmg-revenue", label: "NMG 매출", icon: "report-money", desc: "부서·팀·광고주별 매출 현황", accent: "#16a34a" },
   { href: "/utm-builder", label: "UTM 자동화", icon: "link", desc: "캠페인 URL을 규칙에 맞게 생성·관리", priority: true, accent: "#eb6834" },
   {
     label: "AI 리포트",

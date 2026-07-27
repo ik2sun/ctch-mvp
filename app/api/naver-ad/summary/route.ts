@@ -8,7 +8,7 @@ import {
   shiftMonths,
 } from "@/lib/naver-ad/aggregate";
 import { resolveNaverAdCredentials } from "@/lib/naver-ad/auth";
-import { NaverAdApiError } from "@/lib/naver-ad/client";
+import { naverErrorResponse } from "@/lib/naver-ad/client";
 import type { NaverStatRaw } from "@/lib/naver-ad/types";
 
 type Totals = {
@@ -97,7 +97,6 @@ export async function GET(req: Request) {
       campaignCount: campaignIds.length,
     });
   } catch (e) {
-    const message = e instanceof Error ? e.message : "네이버 요약 데이터 조회 중 오류가 발생했어요.";
-    return NextResponse.json({ error: message }, { status: e instanceof NaverAdApiError ? 502 : 400 });
+    return naverErrorResponse(e, "네이버 요약 데이터 조회 중 오류가 발생했어요.");
   }
 }

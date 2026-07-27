@@ -10,7 +10,7 @@ import {
   shiftMonths,
 } from "@/lib/naver-ad/aggregate";
 import { resolveNaverAdCredentials } from "@/lib/naver-ad/auth";
-import { NaverAdApiError } from "@/lib/naver-ad/client";
+import { naverErrorResponse } from "@/lib/naver-ad/client";
 import type { NaverAdGroup, NaverCampaign, NaverStatRaw } from "@/lib/naver-ad/types";
 
 // 실시간 리포트(계층형 트리)용 — 메타 /api/meta-insights와 동일한 응답 모양(MetaHierarchy)을
@@ -198,7 +198,6 @@ export async function GET(req: Request) {
       scopeNote: `광고그룹 ${adGroups.length.toLocaleString("ko-KR")}개 중 지출 상위 ${ADS_TOP_N_ADGROUPS}개 그룹의 소재만 표시돼요.`,
     });
   } catch (e) {
-    const message = e instanceof Error ? e.message : "네이버 데이터를 불러오지 못했어요.";
-    return NextResponse.json({ error: `네이버 API 오류: ${message}` }, { status: e instanceof NaverAdApiError ? 502 : 400 });
+    return naverErrorResponse(e, "네이버 데이터를 불러오지 못했어요.");
   }
 }

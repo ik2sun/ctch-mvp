@@ -84,6 +84,9 @@ type Period = { since: string; until: string };
 
 export type Compare = { current: Totals; previous: Totals; period?: Period; prevPeriod?: Period };
 
+// 데이터가 없어도 카드/그래프 골격은 항상 그리고, 값만 "데이터 없음"으로 표시한다.
+const ZERO_TOTALS: Totals = { impressions: 0, clicks: 0, cost: 0, conversions: 0, revenue: 0, reach: 0, frequency: 0 };
+
 const PERIOD_OPTIONS: { value: number; label: string; withWeekday: boolean }[] = [
   { value: 7, label: "전주 비교", withWeekday: true },
   { value: 14, label: "2주 비교", withWeekday: true },
@@ -256,13 +259,15 @@ export function PeriodComparison({
 
       {loading ? (
         <p className="py-6 text-center text-[13px] text-ink-muted">불러오는 중…</p>
-      ) : !data ? (
-        <p className="py-6 text-center text-[13px] text-ink-muted">데이터 없음</p>
       ) : (
         <>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             {metricKeys.map((key) => (
-              <MetricCard key={key} metricKey={key} data={{ current: data.current, previous: data.previous }} />
+              <MetricCard
+                key={key}
+                metricKey={key}
+                data={{ current: data?.current ?? ZERO_TOTALS, previous: data?.previous ?? ZERO_TOTALS }}
+              />
             ))}
           </div>
 
@@ -273,9 +278,9 @@ export function PeriodComparison({
                 <MetricBarBox
                   key={key}
                   metricKey={key}
-                  data={{ current: data.current, previous: data.previous }}
-                  period={data.period}
-                  prevPeriod={data.prevPeriod}
+                  data={{ current: data?.current ?? ZERO_TOTALS, previous: data?.previous ?? ZERO_TOTALS }}
+                  period={data?.period}
+                  prevPeriod={data?.prevPeriod}
                 />
               ))}
             </div>
