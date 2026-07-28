@@ -34,11 +34,9 @@ export async function updateSession(request: NextRequest) {
 
   const path = request.nextUrl.pathname;
   const isAuthPage = path.startsWith("/login") || path.startsWith("/signup");
-  // 제안서 공유 링크는 로그인 없이 열람 가능해야 함
-  const isPublicProposalShare = path.startsWith("/proposal/share") || path.startsWith("/api/proposal/share");
 
   // 로그인 안 했는데 보호 페이지 접근 → /login 으로
-  if (!user && !isAuthPage && !path.startsWith("/auth") && !isPublicProposalShare) {
+  if (!user && !isAuthPage && !path.startsWith("/auth")) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);

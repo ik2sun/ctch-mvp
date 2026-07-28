@@ -28,7 +28,7 @@ export async function POST(req: Request) {
   const { data: client } = await supabase
     .from("clients")
     .select(
-      "name, meta_account_id, meta_access_token, naver_ad_api_key, naver_ad_secret, naver_ad_customer_id, gfa_api_key, gfa_secret, gfa_customer_id, kakao_ad_api_key, kakao_ad_secret",
+      "name, meta_account_id, meta_access_token, naver_ad_api_key, naver_ad_secret, naver_ad_customer_id, gfa_api_key, gfa_secret, gfa_customer_id, kakao_ad_api_key, kakao_ad_secret, google_ads_customer_id, google_ads_developer_token, ga4_property_id, ga4_service_account_json",
     )
     .eq("id", clientId)
     .eq("user_id", user.id)
@@ -112,6 +112,26 @@ export async function POST(req: Request) {
     connected: kakaoKeysPresent,
     status: kakaoKeysPresent ? "ok" : "none",
     detail: kakaoKeysPresent ? "키 저장됨 (연동 API 준비 중)" : "미등록",
+  });
+
+  // 구글 Ads — 아직 실제 조회 API가 없어 키 저장 여부만 확인
+  const googleAdsKeysPresent = !!(client.google_ads_customer_id && client.google_ads_developer_token);
+  media.push({
+    key: "google_ads",
+    label: "구글 Ads",
+    connected: googleAdsKeysPresent,
+    status: googleAdsKeysPresent ? "ok" : "none",
+    detail: googleAdsKeysPresent ? "키 저장됨 (연동 API 준비 중)" : "미등록",
+  });
+
+  // GA (Google Analytics) — 아직 실제 조회 API가 없어 키 저장 여부만 확인
+  const ga4KeysPresent = !!(client.ga4_property_id && client.ga4_service_account_json);
+  media.push({
+    key: "ga4",
+    label: "GA (Google Analytics)",
+    connected: ga4KeysPresent,
+    status: ga4KeysPresent ? "ok" : "none",
+    detail: ga4KeysPresent ? "키 저장됨 (연동 API 준비 중)" : "미등록",
   });
 
   return NextResponse.json({ media, clientName: client.name });

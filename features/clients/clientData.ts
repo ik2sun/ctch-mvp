@@ -1,4 +1,7 @@
 import { createClient } from "@/lib/supabase/client";
+import { parseBudgetInput } from "@/lib/utils/formatNumber";
+
+export { formatBudgetInput } from "@/lib/utils/formatNumber";
 
 export type Client = {
   id: string;
@@ -41,7 +44,7 @@ function toRow(input: ClientInput) {
   return {
     name: input.name.trim(),
     industry: input.industry.trim() || null,
-    monthly_budget: input.monthly_budget ? Number(input.monthly_budget.replace(/,/g, "")) : null,
+    monthly_budget: parseBudgetInput(input.monthly_budget),
     manager: input.manager.trim() || null,
     memo: input.memo.trim() || null,
     // act_ 접두어 자동 보정

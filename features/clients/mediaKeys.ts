@@ -1,6 +1,6 @@
 // 매체별 API 키는 절대 브라우저에서 직접 읽거나 쓰지 않고, 서버 라우트를 통해서만 저장·확인한다.
 
-export type MediaChannel = "meta" | "naver" | "gfa" | "kakao";
+export type MediaChannel = "meta" | "naver" | "gfa" | "kakao" | "google_ads" | "ga4";
 
 export type MediaStatusItem = {
   key: string;

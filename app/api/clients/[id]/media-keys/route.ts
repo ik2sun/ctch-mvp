@@ -8,6 +8,8 @@ const CHANNEL_COLUMNS: Record<MediaChannel, string[]> = {
   naver: ["naver_ad_api_key", "naver_ad_secret", "naver_ad_customer_id"],
   gfa: ["gfa_api_key", "gfa_secret", "gfa_customer_id"],
   kakao: ["kakao_ad_api_key", "kakao_ad_secret"],
+  google_ads: ["google_ads_customer_id", "google_ads_developer_token"],
+  ga4: ["ga4_property_id", "ga4_service_account_json"],
 };
 
 // 매체 API 키 저장 전용 — 응답에 값을 절대 되돌려주지 않는다.

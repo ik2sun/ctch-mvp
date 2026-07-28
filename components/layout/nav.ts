@@ -11,7 +11,6 @@ export type NavItem = {
 
 export const NAV: NavItem[] = [
   { href: "/", label: "대시보드", icon: "layout-dashboard", desc: "전체 요약", accent: "#2a78d6" },
-  { href: "/nmg-revenue", label: "NMG 매출", icon: "report-money", desc: "부서·팀·광고주별 매출 현황", accent: "#16a34a" },
   { href: "/utm-builder", label: "UTM 자동화", icon: "link", desc: "캠페인 URL을 규칙에 맞게 생성·관리", priority: true, accent: "#eb6834" },
   {
     label: "AI 리포트",
@@ -34,7 +33,7 @@ export const NAV: NavItem[] = [
     children: [
       { href: "/ai-agent", label: "AI 챗봇", icon: "message-chatbot", desc: "크리에이티브·미디어 방향성 챗봇" },
       { href: "/ai-agent/insta-analysis", label: "인스타 분석", icon: "brand-instagram", desc: "인스타그램 계정 분석 및 AI 진단" },
-      { href: "/ai-agent/proposal", label: "제안서", icon: "file-text", desc: "AI 리서치·자료 분석 기반 제안서 자동 생성" },
+      { href: "/ai-agent/creative", label: "소재 생성", icon: "photo", desc: "Higgsfield AI로 광고 소재 이미지 생성·관리" },
     ],
   },
   { href: "/sa-simulator", label: "SA 입찰 시뮬레이터", icon: "adjustments", desc: "검색광고 키워드·입찰가 최적화", accent: "#4a3aa7" },

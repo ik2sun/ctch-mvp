@@ -7,6 +7,7 @@ import {
   updateClientRow,
   deleteClientRow,
   fmtBudget,
+  formatBudgetInput,
   type Client,
   type ClientInput,
 } from "@/features/clients/clientData";
@@ -31,6 +32,10 @@ type MediaFormState = {
   gfa_customer_id: string;
   kakao_ad_api_key: string;
   kakao_ad_secret: string;
+  google_ads_customer_id: string;
+  google_ads_developer_token: string;
+  ga4_property_id: string;
+  ga4_service_account_json: string;
 };
 
 const EMPTY_MEDIA_FORM: MediaFormState = {
@@ -43,12 +48,16 @@ const EMPTY_MEDIA_FORM: MediaFormState = {
   gfa_customer_id: "",
   kakao_ad_api_key: "",
   kakao_ad_secret: "",
+  google_ads_customer_id: "",
+  google_ads_developer_token: "",
+  ga4_property_id: "",
+  ga4_service_account_json: "",
 };
 
 const MEDIA_CHANNELS: {
   key: MediaChannel;
   label: string;
-  fields: { key: keyof MediaFormState; label: string }[];
+  fields: { key: keyof MediaFormState; label: string; type?: "secret" | "text" | "digits" | "textarea" }[];
   hint: string;
 }[] = [
   {
@@ -86,6 +95,24 @@ const MEDIA_CHANNELS: {
     ],
     hint: "향후 연동을 대비해 키만 미리 저장해둘 수 있어요. 아직 실시간 데이터 조회는 지원하지 않아요.",
   },
+  {
+    key: "google_ads",
+    label: "구글 Ads",
+    fields: [
+      { key: "google_ads_customer_id", label: "Customer ID" },
+      { key: "google_ads_developer_token", label: "Developer Token" },
+    ],
+    hint: "구글 Ads API 콘솔에서 발급받은 Customer ID와 Developer Token을 입력하세요. 아직 실시간 데이터 조회는 지원하지 않아요.",
+  },
+  {
+    key: "ga4",
+    label: "GA (Google Analytics)",
+    fields: [
+      { key: "ga4_property_id", label: "GA4 Property ID", type: "digits" },
+      { key: "ga4_service_account_json", label: "서비스 계정 JSON", type: "textarea" },
+    ],
+    hint: "GA4 속성 ID와 서비스 계정 JSON 키를 입력하세요. 아직 실시간 데이터 조회는 지원하지 않아요.",
+  },
 ];
 
 export default function ClientsPage() {
@@ -111,7 +138,7 @@ export default function ClientsPage() {
     setForm({
       name: c.name,
       industry: c.industry ?? "",
-      monthly_budget: c.monthly_budget?.toString() ?? "",
+      monthly_budget: c.monthly_budget != null ? formatBudgetInput(c.monthly_budget.toString()) : "",
       manager: c.manager ?? "",
       memo: c.memo ?? "",
       meta_account_id: c.meta_account_id ?? "",
@@ -185,7 +212,7 @@ export default function ClientsPage() {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="광고주명 *" value={form.name} onChange={(v) => set("name", v)} placeholder="르무통" />
             <Field label="업종" value={form.industry} onChange={(v) => set("industry", v)} placeholder="패션/뷰티" />
-            <Field label="월예산 (원)" value={form.monthly_budget} onChange={(v) => set("monthly_budget", v.replace(/[^0-9]/g, ""))} placeholder="50000000" mono />
+            <Field label="월예산 (원)" value={form.monthly_budget} onChange={(v) => set("monthly_budget", formatBudgetInput(v))} placeholder="5,000,000" mono />
             <Field label="담당자" value={form.manager} onChange={(v) => set("manager", v)} placeholder="담당 AE" />
           </div>
 
@@ -245,7 +272,7 @@ export default function ClientsPage() {
                     value={mediaForm[f.key]}
                     onChange={(v) => setMediaForm((m) => ({ ...m, [f.key]: v }))}
                     placeholder={editingId && status?.connected ? "저장됨 — 변경하려면 새로 입력" : undefined}
-                    secret
+                    type={f.type ?? "secret"}
                   />
                 );
               })}
@@ -349,18 +376,41 @@ export default function ClientsPage() {
 }
 
 function Field({
-  label, value, onChange, placeholder, mono, secret,
+  label, value, onChange, placeholder, mono, secret, type,
 }: {
-  label: string; value: string; onChange: (v: string) => void; placeholder?: string; mono?: boolean; secret?: boolean;
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  mono?: boolean;
+  secret?: boolean;
+  type?: "secret" | "text" | "digits" | "textarea";
 }) {
+  if (type === "textarea") {
+    return (
+      <div>
+        <label className="mb-1.5 block text-[13px] font-medium text-ink-soft">{label}</label>
+        <textarea
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          rows={4}
+          className="field w-full resize-y font-mono text-[12px]"
+        />
+      </div>
+    );
+  }
+
+  const isSecret = type === "secret" || secret;
   return (
     <div>
       <label className="mb-1.5 block text-[13px] font-medium text-ink-soft">{label}</label>
       <input
-        type={secret ? "password" : "text"}
-        autoComplete={secret ? "off" : undefined}
+        type={isSecret ? "password" : "text"}
+        autoComplete={isSecret ? "off" : undefined}
+        inputMode={type === "digits" ? "numeric" : undefined}
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(e) => onChange(type === "digits" ? e.target.value.replace(/[^0-9]/g, "") : e.target.value)}
         placeholder={placeholder}
         className={`field h-10 text-[14px] ${mono ? "font-mono" : ""}`}
       />
