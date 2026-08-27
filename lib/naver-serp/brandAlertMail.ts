@@ -37,7 +37,7 @@ export async function sendBrandInfringementAlert(input: {
   <div style="font-family:'Malgun Gothic',sans-serif;max-width:640px;margin:0 auto;">
     <h2 style="color:#c0392b;">브랜드 키워드 타사 노출 감지</h2>
     <p><b>${escapeHtml(clientName)}</b>의 브랜드 키워드 <b>"${escapeHtml(keyword)}"</b>에서
-      우리 도메인(<b>${escapeHtml(ownerDomain)}</b>)이 아닌 타사 파워링크 광고가 <b>${DEVICE_LABEL[device]}</b>에서 발견됐어요.</p>
+      광고주 도메인(<b>${escapeHtml(ownerDomain)}</b>)이 아닌 타사 파워링크 광고가 <b>${DEVICE_LABEL[device]}</b>에서 발견됐어요.</p>
     <p style="color:#888;font-size:13px;">확인 시각: ${escapeHtml(checkedAtLabel)}</p>
     <table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:12px;">
       <thead>

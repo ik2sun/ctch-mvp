@@ -20,6 +20,7 @@ import {
 import type { Device } from "@/lib/naver-serp/rankChecker";
 import type { BrandCheckResult } from "@/lib/naver-serp/runBrandCheck";
 import { parseEmailList } from "@/lib/utils/email";
+import { BulkKeywordUpload } from "@/features/brand-keyword/BulkKeywordUpload";
 
 type LatestMap = Record<string, Partial<Record<Device, BrandKeywordCheck>>>;
 
@@ -43,22 +44,33 @@ function selectValueToInterval(value: string): CheckIntervalHours {
 
 function StatusBadge({ check }: { check?: BrandKeywordCheck }) {
   if (!check) return <span className="text-[13px] text-ink-faint">-</span>;
-  if (check.infringing_ads.length === 0) {
+  if (check.ads_snapshot.length === 0) {
     return (
-      <span className="inline-flex h-6 items-center gap-1 rounded-md bg-good/10 px-1.5 text-[13px] font-semibold text-good">
-        <i className="ti ti-shield-check text-[13px]" aria-hidden />
-        정상
+      <span className="inline-flex h-6 items-center gap-1 rounded-md bg-line/40 px-1.5 text-[13px] font-medium text-ink-faint">
+        미노출
       </span>
     );
   }
+  const infringingCount = check.infringing_ads.length;
+  const ownerCount = check.ads_snapshot.length - infringingCount;
   const domains = Array.from(new Set(check.infringing_ads.map((a) => a.domain)));
   return (
     <div className="flex flex-col items-start gap-0.5">
-      <span className="inline-flex h-6 items-center gap-1 rounded-md bg-bad/10 px-1.5 text-[13px] font-semibold text-bad">
-        <i className="ti ti-alert-triangle text-[13px]" aria-hidden />
-        침해 {check.infringing_ads.length}건
-      </span>
-      <span className="text-[11px] text-ink-faint">{domains.join(", ")}</span>
+      <div className="flex flex-wrap items-center gap-1">
+        {ownerCount > 0 && (
+          <span className="inline-flex h-6 items-center gap-1 rounded-md bg-good/10 px-1.5 text-[13px] font-semibold text-good">
+            <i className="ti ti-shield-check text-[13px]" aria-hidden />
+            {ownerCount} (광고주)
+          </span>
+        )}
+        {infringingCount > 0 && (
+          <span className="inline-flex h-6 items-center gap-1 rounded-md bg-bad/10 px-1.5 text-[13px] font-semibold text-bad">
+            <i className="ti ti-alert-triangle text-[13px]" aria-hidden />
+            {infringingCount}
+          </span>
+        )}
+      </div>
+      {domains.length > 0 && <span className="text-[11px] text-ink-faint">{domains.join(", ")}</span>}
     </div>
   );
 }
@@ -95,6 +107,8 @@ export default function BrandKeywordMonitorPage() {
   const [editEmailValue, setEditEmailValue] = useState("");
   const [savingEmail, setSavingEmail] = useState(false);
 
+  const [showBulk, setShowBulk] = useState(false);
+
   const reload = useCallback(async () => {
     if (!clientId) {
       setKeywords([]);
@@ -121,7 +135,7 @@ export default function BrandKeywordMonitorPage() {
     const keyword = newKeyword.trim();
     const ownerDomain = newDomain.trim();
     if (!keyword || !ownerDomain || !newEmail.trim()) {
-      setAddError("키워드, 우리 도메인, 담당자 메일을 모두 입력해 주세요.");
+      setAddError("키워드, 광고주 도메인, 담당자 메일을 모두 입력해 주세요.");
       return;
     }
     const emails = parseEmailList(newEmail);
@@ -246,7 +260,7 @@ export default function BrandKeywordMonitorPage() {
       const history = await listCheckHistory(keywords.map((k) => k.id));
       const keywordById = new Map(keywords.map((k) => [k.id, k]));
 
-      const header = ["확인일시", "키워드", "우리 도메인", "순위", "업체명", "URL", "광고문구", "침해여부"];
+      const header = ["확인일시", "키워드", "광고주 도메인", "순위", "업체명", "URL", "광고문구", "침해여부"];
       const colWidths = [
         { wch: 16 },
         { wch: 16 },
@@ -312,7 +326,16 @@ export default function BrandKeywordMonitorPage() {
   return (
     <div className="mx-auto max-w-5xl space-y-5">
       <div className="rounded-card border border-line bg-surface p-4">
-        <h3 className="mb-3 text-[15px] font-semibold text-ink">감시 브랜드 키워드 추가</h3>
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="text-[15px] font-semibold text-ink">감시 브랜드 키워드 추가</h3>
+          <button
+            onClick={() => setShowBulk((v) => !v)}
+            className="flex h-8 items-center gap-1.5 rounded-lg border border-line px-3 text-[12px] font-medium text-ink-soft transition hover:bg-canvas"
+          >
+            <i className="ti ti-file-spreadsheet text-[14px]" aria-hidden />
+            엑셀로 일괄 등록
+          </button>
+        </div>
         <div className="flex flex-wrap items-center gap-2">
           <input
             value={newKeyword}
@@ -325,7 +348,7 @@ export default function BrandKeywordMonitorPage() {
             value={newDomain}
             onChange={(e) => setNewDomain(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleAdd()}
-            placeholder="우리 도메인 (예: example.com)"
+            placeholder="광고주 도메인 (예: example.com)"
             className="field h-10 min-w-[180px] flex-1"
           />
           <input
@@ -358,12 +381,21 @@ export default function BrandKeywordMonitorPage() {
           <p className="mt-3 rounded-lg border border-bad/20 bg-bad/5 px-3.5 py-2.5 text-[13px] text-bad">{addError}</p>
         )}
         <p className="mt-2 text-[11px] text-ink-faint">
-          등록한 브랜드 키워드의 네이버 파워링크 상위 10위를 PC·모바일 모두 확인해서, 우리 도메인이 아닌 타사 광고가
+          등록한 브랜드 키워드의 네이버 파워링크 상위 10위를 PC·모바일 모두 확인해서, 광고주 도메인이 아닌 타사 광고가
           노출되면 &quot;침해&quot;로 표시하고 담당자 메일로 알려드려요. 같은 타사가 계속 노출 중이면 재발송하지 않고,
           새로운 타사가 추가로 나타날 때만 다시 알려요. 자동 체크 주기를 설정하면 매시 정각에 서버가 자동으로 다시 확인해요.
           담당자 메일은 여러 명 등록할 수 있고, 등록 후에도 목록의 연필 아이콘으로 언제든 수정할 수 있어요.
         </p>
       </div>
+
+      {showBulk && clientId && (
+        <BulkKeywordUpload
+          clientId={clientId}
+          existingKeywords={keywords}
+          onClose={() => setShowBulk(false)}
+          onAdded={reload}
+        />
+      )}
 
       <div>
         <div className="mb-3 flex items-center justify-between">
@@ -409,7 +441,7 @@ export default function BrandKeywordMonitorPage() {
               <thead>
                 <tr className="border-b border-line bg-canvas text-[11px] text-ink-muted">
                   <th className="px-4 py-2.5 font-medium">키워드</th>
-                  <th className="px-4 py-2.5 font-medium">우리 도메인</th>
+                  <th className="px-4 py-2.5 font-medium">광고주 도메인</th>
                   <th className="px-4 py-2.5 font-medium">담당자 메일</th>
                   <th className="px-4 py-2.5 font-medium">PC</th>
                   <th className="px-4 py-2.5 font-medium">모바일</th>

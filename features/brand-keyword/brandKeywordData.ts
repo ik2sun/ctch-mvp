@@ -75,6 +75,52 @@ export async function addKeyword(input: {
     .single();
 }
 
+// 벌크 등록 — 행별로 순차 삽입해 성공/실패를 개별로 알 수 있게 한다(단일 insert면 중복 1건 때문에 전체가 실패한다).
+export async function addKeywordsBulk(input: {
+  clientId: string;
+  rows: {
+    keyword: string;
+    ownerDomain: string;
+    alertEmail: string;
+    memo?: string | null;
+    checkIntervalHours?: CheckIntervalHours;
+  }[];
+}): Promise<{ succeeded: BrandKeyword[]; failed: { keyword: string; error: string }[] }> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("로그인이 필요합니다.");
+
+  const succeeded: BrandKeyword[] = [];
+  const failed: { keyword: string; error: string }[] = [];
+
+  for (const row of input.rows) {
+    const { data, error } = await supabase
+      .from("brand_keywords")
+      .insert({
+        user_id: user.id,
+        client_id: input.clientId,
+        keyword: row.keyword,
+        owner_domain: row.ownerDomain,
+        alert_email: row.alertEmail,
+        memo: row.memo ?? null,
+        check_interval_hours: row.checkIntervalHours ?? null,
+      })
+      .select("*")
+      .single();
+    if (error) {
+      failed.push({
+        keyword: row.keyword,
+        error: error.message.includes("duplicate") ? "이미 등록된 키워드예요." : error.message,
+      });
+    } else if (data) {
+      succeeded.push(data as BrandKeyword);
+    }
+  }
+
+  return { succeeded, failed };
+}
+
 export async function deleteKeyword(id: string) {
   return supabase.from("brand_keywords").delete().eq("id", id);
 }
