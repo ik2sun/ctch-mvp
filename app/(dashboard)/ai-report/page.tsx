@@ -16,6 +16,8 @@ import {
 } from "@/features/ai-report/metaTypes";
 import { useClients } from "@/features/clients/ClientContext";
 import { saveReport } from "@/features/ai-report/reportData";
+import { ReportConfigPanel } from "@/features/ai-report/components/ReportConfigPanel";
+import type { ReportConfig } from "@/features/ai-report/reportConfig";
 import { getSessionCache, setSessionCache } from "@/features/dashboard/sessionCache";
 
 function daysAgo(n: number): string {
@@ -62,6 +64,10 @@ export default function AiReportPage() {
   const [title, setTitle] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
+
+  // 광고주별 리포트 설정 — AI 진단/리포트 호출 시 system prompt로 주입된다
+  const [reportConfig, setReportConfig] = useState<ReportConfig | null>(null);
+  const handleConfigChange = useCallback((c: ReportConfig) => setReportConfig(c), []);
 
   const [activeTab, setActiveTab] = useState<TabKey>("campaign");
   const [channel, setChannel] = useState<Channel>("meta");
@@ -153,6 +159,7 @@ export default function AiReportPage() {
           clientName: data.clientName,
           context,
           channel: channelDef.channelLabel,
+          reportConfig,
         }),
       });
       const json = await res.json();
@@ -182,6 +189,7 @@ export default function AiReportPage() {
           goal,
           context,
           channel: channelDef.channelLabel,
+          reportConfig,
         }),
       });
       const json = await res.json();
@@ -258,6 +266,16 @@ export default function AiReportPage() {
           </button>
         ))}
       </div>
+
+      {/* 광고주별 리포트 설정 */}
+      {selected && (
+        <ReportConfigPanel
+          key={selected.id}
+          clientId={selected.id}
+          clientName={selected.name}
+          onChange={handleConfigChange}
+        />
+      )}
 
       {/* 조회 컨트롤 */}
       <div className="rounded-card border border-line bg-surface p-4">

@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
+import {
+  buildSystemPrompt as buildConfigPrompt,
+  type ReportConfig,
+} from "@/features/ai-report/reportConfig";
 
 type Row = {
   id: string;
@@ -76,7 +80,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "서버에 ANTHROPIC_API_KEY가 없어요." }, { status: 500 });
   }
 
-  const { campaigns, adsets, ads, daily, period, clientName, context, channel } = await req.json();
+  const { campaigns, adsets, ads, daily, period, clientName, context, channel, reportConfig } =
+    await req.json();
 
   const payload = {
     광고주: clientName ?? "",
@@ -102,7 +107,11 @@ ${hasContext ? `[마케터 추가 컨텍스트]\n${context.trim()}\n이 컨텍�
 위 스키마의 JSON만 출력하세요.`;
 
   try {
-    const msg = await anthropicCall(userMsg, typeof channel === "string" && channel ? channel : "메타(Meta)");
+    const msg = await anthropicCall(
+      userMsg,
+      typeof channel === "string" && channel ? channel : "메타(Meta)",
+      (reportConfig ?? null) as Partial<ReportConfig> | null,
+    );
     return NextResponse.json(msg);
   } catch (e) {
     const message = e instanceof Error ? e.message : "AI 분석 중 오류가 발생했어요.";
@@ -110,12 +119,16 @@ ${hasContext ? `[마케터 추가 컨텍스트]\n${context.trim()}\n이 컨텍�
   }
 }
 
-async function anthropicCall(userMsg: string, channel: string) {
+async function anthropicCall(
+  userMsg: string,
+  channel: string,
+  config: Partial<ReportConfig> | null,
+) {
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
   const msg = await anthropic.messages.create({
     model: "claude-sonnet-4-5",
     max_tokens: 2500,
-    system: buildSystemPrompt(channel),
+    system: buildSystemPrompt(channel) + buildConfigPrompt(config),
     messages: [{ role: "user", content: userMsg }],
   });
 

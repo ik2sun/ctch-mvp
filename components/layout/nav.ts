@@ -36,8 +36,17 @@ export const NAV: NavItem[] = [
       { href: "/ai-agent/creative", label: "소재 생성", icon: "photo", desc: "Higgsfield AI로 광고 소재 이미지 생성·관리" },
     ],
   },
-  { href: "/sa-simulator", label: "SA 입찰 시뮬레이터", icon: "adjustments", desc: "검색광고 키워드·입찰가 최적화", accent: "#4a3aa7" },
-  { href: "/competitor", label: "경쟁사 모니터링", icon: "radar", desc: "추정 트래픽·키워드 현황", accent: "#e34948" },
+  {
+    label: "SA 입찰 시뮬레이터",
+    icon: "adjustments",
+    desc: "검색광고 키워드·입찰가 최적화",
+    accent: "#4a3aa7",
+    children: [
+      { href: "/sa-simulator", label: "입찰 시뮬레이터", icon: "target", desc: "키워드·입찰가 조정 시뮬레이션" },
+      { href: "/sa-simulator/competitor", label: "경쟁사 모니터링", icon: "radar", desc: "네이버 파워링크 순위를 사이트별로 체크" },
+      { href: "/sa-simulator/brand-keyword", label: "브랜드 키워드 모니터링", icon: "shield-exclamation", desc: "브랜드 키워드 타사 노출 감지·담당자 알림" },
+    ],
+  },
 ];
 
 export const CLIENTS_NAV: NavItem = {

@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
+import {
+  buildSystemPrompt as buildConfigPrompt,
+  type ReportConfig,
+} from "@/features/ai-report/reportConfig";
 
 type Row = {
   name: string;
@@ -102,9 +106,10 @@ export async function POST(req: Request) {
     );
   }
 
-  const { campaigns, adsets, ads, context, period, clientName, goal, channel } =
+  const { campaigns, adsets, ads, context, period, clientName, goal, channel, reportConfig } =
     await req.json();
   const channelLabel = typeof channel === "string" && channel ? channel : "메타(Meta)";
+  const config = (reportConfig ?? null) as Partial<ReportConfig> | null;
 
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -132,7 +137,10 @@ ${hasContext ? `[마케터의 추가 컨텍스트]\n${context.trim()}` : "[마�
     const msg = await anthropic.messages.create({
       model: "claude-sonnet-4-5",
       max_tokens: 4000,
-      system: buildSystemPrompt(channelLabel) + (hasContext ? CONTEXT_GUIDE : ""),
+      system:
+        buildSystemPrompt(channelLabel) +
+        (hasContext ? CONTEXT_GUIDE : "") +
+        buildConfigPrompt(config),
       messages: [{ role: "user", content: userMsg }],
     });
 
