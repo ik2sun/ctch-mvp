@@ -1,0 +1,23 @@
+{
+  "name": "nmg-performance-short",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "studio": "remotion studio",
+    "render": "remotion render PerformanceShort out/performance-short.mp4",
+    "still": "remotion still PerformanceShort out/frame.png"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.320",
+    "@remotion/google-fonts": "^4.0.320",
+    "@remotion/media-utils": "4.0.320",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "remotion": "4.0.320"
+  },
+  "devDependencies": {
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "typescript": "^5"
+  }
+}

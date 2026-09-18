@@ -44,7 +44,7 @@ npm install
 npm run dev
 ```
 
-`http://localhost:3000` 접속 → 자동으로 `/login` 으로 이동합니다.
+`http://localhost:3001` 접속 → 자동으로 `/login` 으로 이동합니다.
 `/signup` 에서 계정을 만든 뒤 로그인하면 대시보드가 열립니다.
 
 ## 배포 (Vercel)

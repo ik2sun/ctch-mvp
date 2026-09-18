@@ -35,11 +35,12 @@ const TABS: { key: TabKey; label: string; icon: string; color: string }[] = [
   { key: "ai", label: "AI 분석", icon: "ti-sparkles", color: "#4a3aa7" },
 ];
 
-type Channel = "meta" | "naver";
+type Channel = "meta" | "naver" | "kakao";
 
 const CHANNELS: { key: Channel; label: string; icon: string; sheetName: string; channelLabel: string }[] = [
   { key: "meta", label: "메타", icon: "ti-brand-meta", sheetName: "메타 API", channelLabel: "메타(Meta)" },
   { key: "naver", label: "네이버 SA", icon: "ti-search", sheetName: "네이버 SA API", channelLabel: "네이버 SA" },
+  { key: "kakao", label: "카카오모먼트", icon: "ti-message-circle", sheetName: "카카오모먼트 API", channelLabel: "카카오모먼트" },
 ];
 
 export default function AiReportPage() {
@@ -81,12 +82,13 @@ export default function AiReportPage() {
     async (s: string, u: string, ch: Channel, force = false, isAutoRetry = false) => {
       if (!selected?.id) return;
 
-      const cacheKey = ch === "naver" ? `ctch_naver_insights_${selected.id}_${s}_${u}` : null;
+      const chLabel = CHANNELS.find((c) => c.key === ch)?.label ?? ch;
+      const cacheKey = ch !== "meta" ? `ctch_${ch}_insights_${selected.id}_${s}_${u}` : null;
       if (cacheKey && !force) {
         const cached = getSessionCache<MetaHierarchy>(cacheKey);
         if (cached) {
           setData(cached);
-          setTitle(`${selected.name} 네이버 SA ${s}~${u}`);
+          setTitle(`${selected.name} ${chLabel} ${s}~${u}`);
           setLoadError(null);
           setSmart(null);
           setReport("");
@@ -110,18 +112,19 @@ export default function AiReportPage() {
           if (!res.ok) throw new Error((json as unknown as { error?: string }).error || "불러오기 실패");
           setTitle(`${selected.name} 메타 ${s}~${u}`);
         } else {
-          const res = await fetch(`/api/naver-ad/insights?clientId=${selected.id}&since=${s}&until=${u}`);
+          const endpoint = ch === "naver" ? "/api/naver-ad/insights" : "/api/kakao-moment/insights";
+          const res = await fetch(`${endpoint}?clientId=${selected.id}&since=${s}&until=${u}`);
           json = await res.json();
           if (!res.ok) {
             const errJson = json as unknown as { error?: string; code?: string };
             if (errJson.code === "RATE_LIMITED" && !isAutoRetry) {
               setLoadError(errJson.error || "잠시 후 다시 시도해주세요.");
-              setTimeout(() => fetchData(s, u, ch, force, true), 5000);
+              setTimeout(() => fetchData(s, u, ch, force, true), ch === "kakao" ? 6000 : 5000);
               return;
             }
             throw new Error(errJson.error || "불러오기 실패");
           }
-          setTitle(`${selected.name} 네이버 SA ${s}~${u}`);
+          setTitle(`${selected.name} ${chLabel} ${s}~${u}`);
           if (cacheKey) setSessionCache(cacheKey, json);
         }
         setData(json);

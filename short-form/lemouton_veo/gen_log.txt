@@ -1,0 +1,8 @@
+11:52:04 veo-3.1-fast-generate-preview [hook_feet] ok refs=[] res=1080p 96s
+11:52:36 veo-3.1-fast-generate-preview [cloud_walk] ok refs=['shoe_navy'] res=1080p 128s
+11:52:36 veo-3.1-fast-generate-preview [squeeze_wool] ok refs=['squeeze', 'wool'] res=1080p 67s
+11:52:42 veo-3.1-fast-generate-preview [barefoot_cross] ok refs=['shoe_navy'] res=1080p 66s
+11:53:24 veo-3.1-fast-generate-preview [travel_walk] ok refs=['shoe_pair'] res=1080p 79s
+11:54:16 veo-3.1-fast-generate-preview [parents_hike] ok refs=['shoe_green'] res=1080p 99s
+11:54:16 veo-3.1-fast-generate-preview [product_hero] ok refs=['shoe_pair'] res=1080p 88s
+11:55:02 veo-3.1-fast-generate-preview [cta_hold] ok refs=['shoe_grey'] res=1080p 98s

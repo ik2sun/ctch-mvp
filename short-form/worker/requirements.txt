@@ -1,0 +1,9 @@
+# CTCH 숏폼 렌더 워커 실행에 필요한 패키지 (Python 3.12 기준)
+#   pip install -r requirements.txt
+# 이 외에 ffmpeg/ffprobe 가 PATH 에 있어야 한다 (Windows: winget install Gyan.FFmpeg).
+Pillow>=11
+numpy>=2
+requests>=2.31
+python-dotenv>=1.0
+edge-tts>=7.0
+google-genai>=1.0

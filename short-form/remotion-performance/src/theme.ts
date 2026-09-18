@@ -1,0 +1,16 @@
+export const C = {
+  bg: "#070B14",
+  bg2: "#0D1526",
+  panel: "#101A2E",
+  line: "#1E2A44",
+  blue: "#3B82F6",
+  blueDeep: "#1E3A8A",
+  blueGlow: "#7DB4FF",
+  red: "#EF4444",
+  redGlow: "#FCA5A5",
+  gold: "#F5C242",
+  goldGlow: "#FFE9A6",
+  white: "#F8FAFC",
+  muted: "#94A3B8",
+  grey: "#6B7280",
+};

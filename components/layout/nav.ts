@@ -28,12 +28,13 @@ export const NAV: NavItem[] = [
   {
     label: "AI 마케팅 에이전트",
     icon: "message-chatbot",
-    desc: "크리에이티브·미디어 방향성과 인스타 분석",
+    desc: "크리에이티브·미디어 방향성, 인스타·SEO 분석",
     accent: "#008300",
     children: [
       { href: "/ai-agent", label: "AI 챗봇", icon: "message-chatbot", desc: "크리에이티브·미디어 방향성 챗봇" },
       { href: "/ai-agent/insta-analysis", label: "인스타 분석", icon: "brand-instagram", desc: "인스타그램 계정 분석 및 AI 진단" },
-      { href: "/ai-agent/creative", label: "소재 생성", icon: "photo", desc: "Higgsfield AI로 광고 소재 이미지 생성·관리" },
+      { href: "/ai-agent/seo-analysis", label: "SEO 분석", icon: "seo", desc: "SEO·AEO·GEO 진단 — AI 검색 인용 준비도와 엔진별 처방" },
+      { href: "/ai-agent/creative", label: "소재 생성", icon: "photo", desc: "Higgsfield 이미지 생성 · 숏폼 제작 파이프라인" },
     ],
   },
   {

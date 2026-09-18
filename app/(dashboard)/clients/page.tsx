@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useClients } from "@/features/clients/ClientContext";
 import {
   createClientRow,
@@ -12,6 +12,7 @@ import {
   type ClientInput,
 } from "@/features/clients/clientData";
 import { fetchMediaStatus, saveMediaKeys, type MediaChannel, type MediaStatusItem } from "@/features/clients/mediaKeys";
+import { KakaoConnectPanel } from "@/features/clients/KakaoConnectPanel";
 
 const EMPTY: ClientInput = {
   name: "",
@@ -89,11 +90,8 @@ const MEDIA_CHANNELS: {
   {
     key: "kakao",
     label: "카카오모먼트",
-    fields: [
-      { key: "kakao_ad_api_key", label: "API 키" },
-      { key: "kakao_ad_secret", label: "Secret" },
-    ],
-    hint: "향후 연동을 대비해 키만 미리 저장해둘 수 있어요. 아직 실시간 데이터 조회는 지원하지 않아요.",
+    fields: [],
+    hint: "API 키가 아니라 카카오 계정(광고계정 멤버)으로 연결해요. 연결 후 광고계정을 선택하면 대시보드와 실시간 리포트에서 카카오모먼트 성과를 바로 볼 수 있어요.",
   },
   {
     key: "google_ads",
@@ -152,6 +150,29 @@ export default function ClientsPage() {
     setMediaStatus(await fetchMediaStatus(c.id));
     setMediaStatusLoading(false);
   }
+
+  // 카카오 OAuth 콜백에서 돌아온 경우(?kakao=linked|error&clientId=) — 해당 광고주 수정 화면을 열고 카카오 탭을 보여준다
+  const [kakaoNotice, setKakaoNotice] = useState<{ tone: "good" | "bad"; text: string } | null>(null);
+  useEffect(() => {
+    if (typeof window === "undefined" || clients.length === 0) return;
+    const sp = new URLSearchParams(window.location.search);
+    const k = sp.get("kakao");
+    if (!k) return;
+    const target = clients.find((c) => c.id === sp.get("clientId"));
+    if (k === "linked") {
+      const n = sp.get("accounts") ?? "0";
+      const sel = sp.get("selected");
+      setKakaoNotice({ tone: "good", text: `카카오 계정이 연결됐어요. 접근 가능한 광고계정 ${n}개${sel ? ` · 광고계정 ${sel} 자동 선택됨` : " · 아래 카카오모먼트 탭에서 광고계정을 선택하세요"}` });
+    } else {
+      setKakaoNotice({ tone: "bad", text: sp.get("msg") ?? "카카오 연결에 실패했어요." });
+    }
+    window.history.replaceState(null, "", window.location.pathname);
+    if (target) {
+      startEdit(target);
+      setMediaChannel("kakao");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clients]);
 
   function cancelEdit() {
     setEditingId(null);
@@ -258,6 +279,21 @@ export default function ClientsPage() {
                   onChange={(v) => set("meta_account_id", v)}
                   placeholder="act_123456789012345"
                   mono
+                />
+              </div>
+            )}
+
+            {kakaoNotice && (
+              <p className={`mb-2.5 rounded-lg border px-3.5 py-2.5 text-[12px] ${kakaoNotice.tone === "good" ? "border-good/30 bg-good/5 text-good" : "border-bad/20 bg-bad/5 text-bad"}`}>{kakaoNotice.text}</p>
+            )}
+
+            {activeChannelDef.key === "kakao" && (
+              <div className="mb-2.5">
+                <KakaoConnectPanel
+                  clientId={editingId}
+                  onChanged={async () => {
+                    if (editingId) setMediaStatus(await fetchMediaStatus(editingId));
+                  }}
                 />
               </div>
             )}

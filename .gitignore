@@ -15,3 +15,27 @@ next-env.d.ts
 
 # Supabase CLI 로컬 캐시
 /supabase/.temp
+
+# 숏폼 제작 파이프라인 (short-form/) — 스크립트·설정·이미지 자산만 커밋, 대용량 미디어·바이너리·의존성은 제외
+/short-form/**/node_modules
+/short-form/**/__pycache__
+/short-form/lemouton_veo/frames
+/short-form/tools/ffbin/ffmpeg.exe
+/short-form/**/*.mp4
+/short-form/**/*.wav
+/short-form/**/*.mp3
+/short-form/reference
+/public/short-form/**/*.mp4
+# 원본 사이트에서 긁어온 스크랩 이미지·HTML (정리된 자산은 assets/에 별도 보관)
+/short-form/lemouton/img
+/short-form/lemouton/img2
+/short-form/**/*.html
+# 렌더 워커 작업 폴더 (클립·프레임·결과물 임시)
+/short-form/worker/jobs
+
+# claude-seo skill runtime (large, machine-local)
+.claude/skills/seo/.venv/
+.claude/skills/seo/ms-playwright/
+.claude/skills/seo/runtime-state.json
+
+/short-form/templates/_work

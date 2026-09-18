@@ -41,6 +41,7 @@ const MEDIA_LIST = [
   { key: "meta", label: "메타", connected: true },
   { key: "naver", label: "네이버 SA", connected: false },
   { key: "gfa", label: "GFA", connected: false },
+  { key: "kakao", label: "카카오모먼트", connected: false },
 ] as const;
 type MediaKey = (typeof MEDIA_LIST)[number]["key"];
 
@@ -93,6 +94,7 @@ export default function DashboardHome() {
     meta: true,
     naver: false,
     gfa: false,
+    kakao: false,
   });
 
   const [reportCount, setReportCount] = useState(0);
@@ -100,6 +102,10 @@ export default function DashboardHome() {
   const [naverSummary, setNaverSummary] = useState<NaverSummaryRes | null>(null);
   const [naverLoading, setNaverLoading] = useState(false);
   const [naverError, setNaverError] = useState<string | null>(null);
+
+  const [kakaoSummary, setKakaoSummary] = useState<NaverSummaryRes | null>(null);
+  const [kakaoLoading, setKakaoLoading] = useState(false);
+  const [kakaoError, setKakaoError] = useState<string | null>(null);
 
   const [compareWindow, setCompareWindow] = useState(7);
   const [compareData, setCompareData] = useState<Compare | null>(null);
@@ -261,6 +267,59 @@ export default function DashboardHome() {
 
   const naverConnected = media?.find((m) => m.key === "naver")?.connected ?? false;
 
+  // 카카오모먼트 — 네이버와 같은 방식(연동 여부 기준 로드, 5분 캐시, 요청 제한 시 6초 뒤 1회 재시도).
+  // 카카오 보고서는 광고계정당 5초에 1회만 허용돼 요약 1회에 10~15초 걸린다.
+  const loadKakao = useCallback(
+    async (pk: string, force = false, isAutoRetry = false) => {
+      if (!selected?.id) {
+        setKakaoSummary(null);
+        return;
+      }
+      const p = PERIODS.find((x) => x.key === pk) ?? PERIODS[1];
+      const since = p.since();
+      const until = p.until();
+      const cacheKey = `ctch_kakao_summary_${selected.id}_${since}_${until}`;
+      if (!force) {
+        const cached = getSessionCache<NaverSummaryRes>(cacheKey);
+        if (cached) {
+          setKakaoSummary(cached);
+          setKakaoError(null);
+          return;
+        }
+      }
+      setKakaoLoading(true);
+      if (!isAutoRetry) setKakaoError(null);
+      try {
+        const res = await fetch(`/api/kakao-moment/summary?clientId=${selected.id}&since=${since}&until=${until}`);
+        const json = await res.json();
+        if (!res.ok) {
+          if (json.code === "RATE_LIMITED" && !isAutoRetry) {
+            setKakaoError(json.error || "잠시 후 다시 시도해주세요.");
+            setTimeout(() => loadKakao(pk, force, true), 6000);
+            return;
+          }
+          throw new Error(json.error || "불러오기 실패");
+        }
+        setKakaoSummary(json);
+        setKakaoError(null);
+        setSessionCache(cacheKey, json);
+      } catch (e) {
+        setKakaoError(e instanceof Error ? e.message : "오류가 발생했어요.");
+        setKakaoSummary(null);
+      } finally {
+        setKakaoLoading(false);
+      }
+    },
+    [selected],
+  );
+  const kakaoConnected = media?.find((m) => m.key === "kakao")?.connected ?? false;
+  useEffect(() => {
+    setKakaoSummary(null);
+    setKakaoError(null);
+    if (kakaoConnected && selected?.id) loadKakao(periodKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kakaoConnected, selected?.id]);
+
   useEffect(() => {
     setNaverSummary(null);
     setNaverError(null);
@@ -327,7 +386,7 @@ export default function DashboardHome() {
 
   const cur = summary?.current;
 
-  // 매체별 상세 표 행 — GFA/카카오는 실제 조회 API가 없어 항상 미연동으로 고정한다
+  // 매체별 상세 표 행 — GFA는 실제 조회 API가 없어 항상 미연동으로 고정한다 (카카오모먼트는 OAuth 연동 시 실데이터)
   // (GFA는 키가 저장돼 있어도 "기타 사항" 패널에서만 그 사실을 보여주고, 이 표에서는
   // 실데이터를 보여줄 수 없다는 뜻에서 항상 미연동 취급한다). 카카오는 체크박스가
   // 없으므로 checked를 항상 false로 고정해 행이 늘 흐리게 표시된다.
@@ -341,7 +400,7 @@ export default function DashboardHome() {
       totals: naverSummary?.current ?? null,
     },
     { key: "gfa", label: "GFA", checked: mediaFilter.gfa, connected: false, totals: null },
-    { key: "kakao", label: "카카오모먼트", checked: false, connected: false, totals: null },
+    { key: "kakao", label: "카카오모먼트", checked: mediaFilter.kakao, connected: kakaoConnected && !!kakaoSummary, totals: kakaoSummary?.current ?? null },
   ];
 
   const contributingRows = mediaRows.filter((r) => r.checked && r.connected && r.totals);
@@ -443,10 +502,10 @@ export default function DashboardHome() {
       setAiPlan(null);
       return;
     }
-    if (loading || naverLoading) return;
+    if (loading || naverLoading || kakaoLoading) return;
     loadAiPlan();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected?.id, periodKey, loading, naverLoading, media]);
+  }, [selected?.id, periodKey, loading, naverLoading, kakaoLoading, media]);
 
   const aiActionCount = aiPlan ? aiPlan.issues.length + aiPlan.urgentActions.length + aiPlan.nextWeekActions.length : 0;
 
@@ -529,6 +588,7 @@ export default function DashboardHome() {
                   setPeriodKey(p.key);
                   load(p.key);
                   loadNaver(p.key);
+                  loadKakao(p.key);
                 }}
                 className={`rounded-lg border px-2.5 py-1.5 text-[12px] transition ${
                   periodKey === p.key
@@ -543,11 +603,12 @@ export default function DashboardHome() {
               onClick={() => {
                 load(periodKey, true);
                 loadNaver(periodKey, true);
+                loadKakao(periodKey, true);
               }}
-              disabled={loading || naverLoading}
+              disabled={loading || naverLoading || kakaoLoading}
               className="rounded-lg border border-line px-2.5 py-1.5 text-[12px] text-ink-soft transition hover:border-signal hover:text-signal"
             >
-              <i className={`ti ${loading || naverLoading ? "ti-loader-2 animate-spin" : "ti-refresh"} text-[13px]`} aria-hidden />
+              <i className={`ti ${loading || naverLoading || kakaoLoading ? "ti-loader-2 animate-spin" : "ti-refresh"} text-[13px]`} aria-hidden />
             </button>
           </div>
         </div>
@@ -558,6 +619,12 @@ export default function DashboardHome() {
           <>
             {naverError && (
               <p className="mb-3 rounded-lg border border-bad/20 bg-bad/5 px-3.5 py-2.5 text-[13px] text-bad">{naverError}</p>
+            )}
+            {kakaoError && (
+              <p className="mb-3 rounded-lg border border-bad/20 bg-bad/5 px-3.5 py-2.5 text-[13px] text-bad">카카오모먼트: {kakaoError}</p>
+            )}
+            {kakaoLoading && !kakaoSummary && (
+              <p className="mb-3 text-[12px] text-ink-muted">카카오모먼트 보고서를 불러오는 중… (요청 제한 때문에 10~15초 걸려요)</p>
             )}
             <MediaBreakdownTable rows={mediaRows} />
           </>

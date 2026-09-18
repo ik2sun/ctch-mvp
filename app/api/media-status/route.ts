@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllCampaigns } from "@/lib/naver-ad/aggregate";
 import { resolveNaverAdCredentials } from "@/lib/naver-ad/auth";
+import { ensureKakaoAccessToken, KakaoAuthError } from "@/lib/kakao-moment/auth";
+import { fetchCampaigns as fetchKakaoCampaigns } from "@/lib/kakao-moment/aggregate";
+import { KakaoMomentApiError } from "@/lib/kakao-moment/client";
 
 // 매체 연동 상태 점검 — 광고주별로 저장된 키를 기준으로 가벼운 호출 1회씩 유효성 확인
 // (구 app/api/meta-status를 메타 전용에서 메타/네이버/GFA로 확장)
@@ -28,7 +31,7 @@ export async function POST(req: Request) {
   const { data: client } = await supabase
     .from("clients")
     .select(
-      "name, meta_account_id, meta_access_token, naver_ad_api_key, naver_ad_secret, naver_ad_customer_id, gfa_api_key, gfa_secret, gfa_customer_id, kakao_ad_api_key, kakao_ad_secret, google_ads_customer_id, google_ads_developer_token, ga4_property_id, ga4_service_account_json",
+      "name, meta_account_id, meta_access_token, naver_ad_api_key, naver_ad_secret, naver_ad_customer_id, gfa_api_key, gfa_secret, gfa_customer_id, kakao_ad_account_id, kakao_access_token, kakao_token_expires_at, kakao_refresh_token, kakao_refresh_expires_at, kakao_linked_at, google_ads_customer_id, google_ads_developer_token, ga4_property_id, ga4_service_account_json",
     )
     .eq("id", clientId)
     .eq("user_id", user.id)
@@ -104,15 +107,21 @@ export async function POST(req: Request) {
     detail: gfaKeysPresent ? "키 저장됨 (연동 API 준비 중)" : "미등록",
   });
 
-  // 카카오모먼트 — 향후 연동 대비, 키 저장 여부만 확인
-  const kakaoKeysPresent = !!(client.kakao_ad_api_key && client.kakao_ad_secret);
-  media.push({
-    key: "kakao",
-    label: "카카오모먼트",
-    connected: kakaoKeysPresent,
-    status: kakaoKeysPresent ? "ok" : "none",
-    detail: kakaoKeysPresent ? "키 저장됨 (연동 API 준비 중)" : "미등록",
-  });
+  // 카카오모먼트 — OAuth 연결 + 광고계정 선택이 끝났으면 캠페인 목록 조회로 실검증
+  if (!client.kakao_refresh_token) {
+    media.push({ key: "kakao", label: "카카오모먼트", connected: false, status: "none", detail: "카카오 계정 미연결" });
+  } else if (!client.kakao_ad_account_id) {
+    media.push({ key: "kakao", label: "카카오모먼트", connected: false, status: "error", detail: "광고계정 미선택 — 광고주 관리에서 선택" });
+  } else {
+    try {
+      const creds = await ensureKakaoAccessToken(supabase, clientId, client);
+      const campaigns = await fetchKakaoCampaigns(creds);
+      media.push({ key: "kakao", label: "카카오모먼트", connected: true, status: "ok", detail: `광고계정 ${creds.adAccountId} · 캠페인 ${campaigns.length.toLocaleString("ko-KR")}개 연동됨` });
+    } catch (e) {
+      const expired = (e instanceof KakaoAuthError && e.code === "REFRESH_EXPIRED") || (e instanceof KakaoMomentApiError && e.code === "UNAUTHORIZED");
+      media.push({ key: "kakao", label: "카카오모먼트", connected: false, status: expired ? "expired" : "error", detail: expired ? "카카오 연결 만료 — 재연결 필요" : e instanceof Error ? e.message : "연결 확인 실패" });
+    }
+  }
 
   // 구글 Ads — 아직 실제 조회 API가 없어 키 저장 여부만 확인
   const googleAdsKeysPresent = !!(client.google_ads_customer_id && client.google_ads_developer_token);
