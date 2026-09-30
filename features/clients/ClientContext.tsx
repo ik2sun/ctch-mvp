@@ -43,7 +43,12 @@ export function ClientProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // 선택된 광고주가 목록에서 사라지면(삭제 등) 선택 해제
+  // "선택 안 함" 상태는 두지 않는다 — 저장된 광고주가 없거나 삭제됐으면 첫 번째 광고주로 자동 선택
+  useEffect(() => {
+    if (loading || clients.length === 0) return;
+    if (!clients.some((c) => c.id === selectedId)) selectClient(clients[0].id);
+  }, [clients, selectedId, loading, selectClient]);
+
   const selected = clients.find((c) => c.id === selectedId) ?? null;
 
   return (

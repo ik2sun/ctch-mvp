@@ -39,7 +39,25 @@ export async function register() {
     }
   }
 
+  // GEO 인용 자동 측정 — 1시간마다 "주기가 된 광고주·끝나지 않은 회차"가 있는지 확인
+  async function runGeoSweep() {
+    try {
+      // if 블록 안에서 import해야 webpack이 edge 번들에서 뺀다(Anthropic SDK가 node:fs를 씀)
+      if (process.env.NEXT_RUNTIME === "nodejs") {
+        const { sweepGeoAuto } = await import("@/features/geo-citation/runner");
+        const summary = await sweepGeoAuto(Date.now() + 50 * 60 * 1000);
+        if (summary.created > 0 || summary.continued > 0 || summary.errors.length > 0) {
+          console.log(`[geo-citation] 자동 측정: 새 회차 ${summary.created}개, 이어서 처리 ${summary.continued}개`, summary.errors);
+        }
+      }
+    } catch (e) {
+      console.error("[geo-citation] 자동 측정 스윕 실패:", e);
+    }
+  }
+
   setTimeout(runSweep, 30_000);
+  setTimeout(runGeoSweep, 60_000);
+  setInterval(runGeoSweep, 60 * 60 * 1000);
   setInterval(runSweep, SWEEP_INTERVAL_MS);
   setTimeout(runBrandSweep, 45_000);
   setInterval(runBrandSweep, SWEEP_INTERVAL_MS);

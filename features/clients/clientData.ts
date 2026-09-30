@@ -1,7 +1,8 @@
 import { createClient } from "@/lib/supabase/client";
-import { parseBudgetInput } from "@/lib/utils/formatNumber";
+import { parseBudgetInput, formatBudgetInput } from "@/lib/utils/formatNumber";
 
-export { formatBudgetInput } from "@/lib/utils/formatNumber";
+export { formatBudgetInput };
+export { normalizeMetaAccountId } from "./metaAccount";
 
 export type Client = {
   id: string;
@@ -22,7 +23,6 @@ export type ClientInput = {
   monthly_budget: string;
   manager: string;
   memo: string;
-  meta_account_id: string;
 };
 
 const supabase = createClient();
@@ -47,13 +47,28 @@ function toRow(input: ClientInput) {
     monthly_budget: parseBudgetInput(input.monthly_budget),
     manager: input.manager.trim() || null,
     memo: input.memo.trim() || null,
-    // act_ 접두어 자동 보정
-    meta_account_id: input.meta_account_id.trim()
-      ? input.meta_account_id.trim().startsWith("act_")
-        ? input.meta_account_id.trim()
-        : `act_${input.meta_account_id.trim()}`
-      : null,
+    // 메타 광고계정 ID는 매체 연동(/api/clients/[id]/media-keys)에서 형식 검증 후 저장한다.
   };
+}
+
+export function toClientInput(c: Client | null): ClientInput {
+  return {
+    name: c?.name ?? "",
+    industry: c?.industry ?? "",
+    monthly_budget: c?.monthly_budget != null ? formatBudgetInput(c.monthly_budget.toString()) : "",
+    manager: c?.manager ?? "",
+    memo: c?.memo ?? "",
+  };
+}
+
+// 같은 이름 광고주가 여러 개면 구분용 꼬리표(업종·메타 계정·등록일)를 붙인다.
+export function clientLabel(c: Client, all: Client[]): string {
+  const dup = all.filter((x) => x.name.trim() === c.name.trim()).length > 1;
+  if (!dup) return c.name;
+  const tag = [c.industry, c.meta_account_id, `${new Date(c.created_at).toLocaleDateString("ko-KR")} 등록`]
+    .filter(Boolean)
+    .join(" · ");
+  return `${c.name} (${tag})`;
 }
 
 export async function createClientRow(input: ClientInput) {

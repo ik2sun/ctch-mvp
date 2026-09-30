@@ -26,7 +26,7 @@ export async function GET(req: Request) {
   if (!client) return NextResponse.json({ error: "광고주를 찾을 수 없어요." }, { status: 403 });
 
   try {
-    const credentials = resolveNaverAdCredentials(client);
+    const credentials = await resolveNaverAdCredentials(client);
     const adGroups = await fetchAllAdGroups(credentials, campaignId);
     return NextResponse.json({ adGroups });
   } catch (e) {

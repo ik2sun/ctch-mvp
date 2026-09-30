@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { resolveMetaToken } from "@/lib/meta/token";
 import { createClient } from "@/lib/supabase/server";
 
 // 대시보드용 경량 요약 — 계정 레벨만 조회 (현재기간 일별 + 직전기간 + 전월 동기간)
@@ -105,7 +106,7 @@ export async function POST(req: Request) {
   if (!client?.meta_account_id) {
     return NextResponse.json({ error: "메타 계정이 연결되지 않았어요." }, { status: 400 });
   }
-  const token = client.meta_access_token?.trim() || process.env.META_ACCESS_TOKEN;
+  const { token } = await resolveMetaToken(client.meta_access_token);
   if (!token) return NextResponse.json({ error: "메타 액세스 토큰이 없어요. 광고주 관리에서 등록해 주세요." }, { status: 400 });
 
   const accountId = client.meta_account_id as string;

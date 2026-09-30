@@ -1,455 +1,308 @@
 "use client";
 
-import { useEffect, useState } from "react";
+// 광고주 관리 — 상단 리스트 박스에서 광고주를 고르면 기본 정보·매체 연동·삭제를 한 화면에서 관리한다.
+// 신규 등록은 상단 버튼(또는 ?new=1). 카카오 OAuth 콜백은 ?kakao=linked|error&clientId= 로 돌아온다.
+import { Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useClients } from "@/features/clients/ClientContext";
-import {
-  createClientRow,
-  updateClientRow,
-  deleteClientRow,
-  fmtBudget,
-  formatBudgetInput,
-  type Client,
-  type ClientInput,
-} from "@/features/clients/clientData";
-import { fetchMediaStatus, saveMediaKeys, type MediaChannel, type MediaStatusItem } from "@/features/clients/mediaKeys";
-import { KakaoConnectPanel } from "@/features/clients/KakaoConnectPanel";
-
-const EMPTY: ClientInput = {
-  name: "",
-  industry: "",
-  monthly_budget: "",
-  manager: "",
-  memo: "",
-  meta_account_id: "",
-};
-
-type MediaFormState = {
-  meta_access_token: string;
-  naver_ad_api_key: string;
-  naver_ad_secret: string;
-  naver_ad_customer_id: string;
-  gfa_api_key: string;
-  gfa_secret: string;
-  gfa_customer_id: string;
-  kakao_ad_api_key: string;
-  kakao_ad_secret: string;
-  google_ads_customer_id: string;
-  google_ads_developer_token: string;
-  ga4_property_id: string;
-  ga4_service_account_json: string;
-};
-
-const EMPTY_MEDIA_FORM: MediaFormState = {
-  meta_access_token: "",
-  naver_ad_api_key: "",
-  naver_ad_secret: "",
-  naver_ad_customer_id: "",
-  gfa_api_key: "",
-  gfa_secret: "",
-  gfa_customer_id: "",
-  kakao_ad_api_key: "",
-  kakao_ad_secret: "",
-  google_ads_customer_id: "",
-  google_ads_developer_token: "",
-  ga4_property_id: "",
-  ga4_service_account_json: "",
-};
-
-const MEDIA_CHANNELS: {
-  key: MediaChannel;
-  label: string;
-  fields: { key: keyof MediaFormState; label: string; type?: "secret" | "text" | "digits" | "textarea" }[];
-  hint: string;
-}[] = [
-  {
-    key: "meta",
-    label: "메타",
-    fields: [{ key: "meta_access_token", label: "액세스 토큰" }],
-    hint: "메타 비즈니스 관리자에서 발급받아요. 아래 광고계정 ID는 메타 탭에서 같이 관리해요.",
-  },
-  {
-    key: "naver",
-    label: "네이버 SA",
-    fields: [
-      { key: "naver_ad_api_key", label: "API 키" },
-      { key: "naver_ad_secret", label: "Secret Key" },
-      { key: "naver_ad_customer_id", label: "고객 ID (Customer ID)" },
-    ],
-    hint: "네이버 검색광고 관리자센터 > 도구 > API 관리에서 발급받을 수 있어요.",
-  },
-  {
-    key: "gfa",
-    label: "GFA",
-    fields: [
-      { key: "gfa_api_key", label: "API 키" },
-      { key: "gfa_secret", label: "Secret" },
-      { key: "gfa_customer_id", label: "고객 ID" },
-    ],
-    hint: "키를 저장해두면 추후 연동이 열렸을 때 바로 쓸 수 있어요. 아직 실시간 데이터 조회는 지원하지 않아요.",
-  },
-  {
-    key: "kakao",
-    label: "카카오모먼트",
-    fields: [],
-    hint: "API 키가 아니라 카카오 계정(광고계정 멤버)으로 연결해요. 연결 후 광고계정을 선택하면 대시보드와 실시간 리포트에서 카카오모먼트 성과를 바로 볼 수 있어요.",
-  },
-  {
-    key: "google_ads",
-    label: "구글 Ads",
-    fields: [
-      { key: "google_ads_customer_id", label: "Customer ID" },
-      { key: "google_ads_developer_token", label: "Developer Token" },
-    ],
-    hint: "구글 Ads API 콘솔에서 발급받은 Customer ID와 Developer Token을 입력하세요. 아직 실시간 데이터 조회는 지원하지 않아요.",
-  },
-  {
-    key: "ga4",
-    label: "GA (Google Analytics)",
-    fields: [
-      { key: "ga4_property_id", label: "GA4 Property ID", type: "digits" },
-      { key: "ga4_service_account_json", label: "서비스 계정 JSON", type: "textarea" },
-    ],
-    hint: "GA4 속성 ID와 서비스 계정 JSON 키를 입력하세요. 아직 실시간 데이터 조회는 지원하지 않아요.",
-  },
-];
+import { clientLabel, deleteClientRow, fmtBudget, normalizeMetaAccountId, type Client } from "@/features/clients/clientData";
+import { ClientInfoForm } from "@/features/clients/ClientInfoForm";
+import { MediaConnections } from "@/features/clients/MediaConnections";
+import type { MediaChannel } from "@/features/clients/mediaKeys";
 
 export default function ClientsPage() {
-  const { clients, refresh, selected, selectClient, loading } = useClients();
-  const [form, setForm] = useState<ClientInput>(EMPTY);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  return (
+    <Suspense fallback={<p className="py-8 text-center text-[14px] text-ink-muted">불러오는 중…</p>}>
+      <ClientsManager />
+    </Suspense>
+  );
+}
 
-  const [mediaChannel, setMediaChannel] = useState<MediaChannel>("meta");
-  const [mediaForm, setMediaForm] = useState<MediaFormState>(EMPTY_MEDIA_FORM);
-  const [mediaStatus, setMediaStatus] = useState<MediaStatusItem[] | null>(null);
-  const [mediaStatusLoading, setMediaStatusLoading] = useState(false);
+function ClientsManager() {
+  const router = useRouter();
+  const params = useSearchParams();
+  const { clients, selected, selectClient, refresh, loading } = useClients();
 
-  const activeChannelDef = MEDIA_CHANNELS.find((c) => c.key === mediaChannel) ?? MEDIA_CHANNELS[0];
-
-  function set<K extends keyof ClientInput>(k: K, v: string) {
-    setForm((f) => ({ ...f, [k]: v }));
-  }
-
-  async function startEdit(c: Client) {
-    setEditingId(c.id);
-    setForm({
-      name: c.name,
-      industry: c.industry ?? "",
-      monthly_budget: c.monthly_budget != null ? formatBudgetInput(c.monthly_budget.toString()) : "",
-      manager: c.manager ?? "",
-      memo: c.memo ?? "",
-      meta_account_id: c.meta_account_id ?? "",
-    });
-    setMediaForm(EMPTY_MEDIA_FORM);
-    setMediaChannel("meta");
-    setError(null);
-    window.scrollTo({ top: 0, behavior: "smooth" });
-
-    setMediaStatusLoading(true);
-    setMediaStatus(await fetchMediaStatus(c.id));
-    setMediaStatusLoading(false);
-  }
-
-  // 카카오 OAuth 콜백에서 돌아온 경우(?kakao=linked|error&clientId=) — 해당 광고주 수정 화면을 열고 카카오 탭을 보여준다
+  const [mode, setMode] = useState<"edit" | "new">("edit");
+  const [managedId, setManagedId] = useState<string | null>(null);
+  const [dirty, setDirty] = useState(false);
+  const [initialChannel, setInitialChannel] = useState<MediaChannel>("meta");
+  const [notice, setNotice] = useState<{ tone: "good" | "bad"; text: string } | null>(null);
   const [kakaoNotice, setKakaoNotice] = useState<{ tone: "good" | "bad"; text: string } | null>(null);
+
+  const sorted = [...clients].sort((a, b) => a.name.localeCompare(b.name, "ko"));
+  const managed = clients.find((c) => c.id === managedId) ?? null;
+
+  // 관리 대상 = 현재 광고주 (리스트 박스·우측 상단 어느 쪽에서 바꿔도 같이 움직인다)
   useEffect(() => {
-    if (typeof window === "undefined" || clients.length === 0) return;
-    const sp = new URLSearchParams(window.location.search);
-    const k = sp.get("kakao");
-    if (!k) return;
-    const target = clients.find((c) => c.id === sp.get("clientId"));
+    if (selected) setManagedId(selected.id);
+  }, [selected]);
+
+  // ?new=1 → 신규 등록, ?kakao=… → 카카오 연결 결과 표시 후 해당 광고주의 카카오 탭
+  useEffect(() => {
+    if (params.get("new")) {
+      setMode("new");
+      router.replace("/clients");
+      return;
+    }
+    const k = params.get("kakao");
+    if (!k || clients.length === 0) return;
+    const target = clients.find((c) => c.id === params.get("clientId"));
     if (k === "linked") {
-      const n = sp.get("accounts") ?? "0";
-      const sel = sp.get("selected");
-      setKakaoNotice({ tone: "good", text: `카카오 계정이 연결됐어요. 접근 가능한 광고계정 ${n}개${sel ? ` · 광고계정 ${sel} 자동 선택됨` : " · 아래 카카오모먼트 탭에서 광고계정을 선택하세요"}` });
+      const n = params.get("accounts") ?? "0";
+      const sel = params.get("selected");
+      setKakaoNotice({
+        tone: "good",
+        text: `카카오 계정이 연결됐어요. 접근 가능한 광고계정 ${n}개${sel ? ` · 광고계정 ${sel} 자동 선택됨` : " · 아래에서 광고계정을 선택하세요"}`,
+      });
     } else {
-      setKakaoNotice({ tone: "bad", text: sp.get("msg") ?? "카카오 연결에 실패했어요." });
+      setKakaoNotice({ tone: "bad", text: params.get("msg") ?? "카카오 연결에 실패했어요." });
     }
-    window.history.replaceState(null, "", window.location.pathname);
     if (target) {
-      startEdit(target);
-      setMediaChannel("kakao");
+      setMode("edit");
+      setManagedId(target.id);
+      selectClient(target.id);
+      setInitialChannel("kakao");
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clients]);
+    router.replace("/clients");
+  }, [params, clients, router, selectClient]);
 
-  function cancelEdit() {
-    setEditingId(null);
-    setForm(EMPTY);
-    setMediaForm(EMPTY_MEDIA_FORM);
-    setMediaStatus(null);
-    setError(null);
+  function guard(): boolean {
+    if (dirty && !confirm("저장하지 않은 변경 사항이 있어요. 이동할까요?")) return false;
+    setDirty(false);
+    return true;
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!form.name.trim()) {
-      setError("광고주명은 필수예요.");
-      return;
-    }
-    setSaving(true);
-    setError(null);
-
-    const result = editingId ? await updateClientRow(editingId, form) : await createClientRow(form);
-    if (result.error) {
-      setSaving(false);
-      setError("저장에 실패했어요. 다시 시도해 주세요.");
-      return;
-    }
-
-    const targetId = editingId ?? (result.data as { id: string } | null)?.id ?? null;
-    if (targetId) {
-      for (const channel of MEDIA_CHANNELS) {
-        const filled: Record<string, string> = {};
-        for (const f of channel.fields) {
-          if (mediaForm[f.key].trim()) filled[f.key] = mediaForm[f.key].trim();
-        }
-        if (Object.keys(filled).length > 0) {
-          await saveMediaKeys(targetId, channel.key, filled);
-        }
-      }
-    }
-
-    setSaving(false);
-    cancelEdit();
-    refresh();
+  function pick(id: string) {
+    if (id === managedId && mode === "edit") return;
+    if (!guard()) return;
+    setMode("edit");
+    setManagedId(id);
+    selectClient(id); // 리스트 박스에서 고르면 바로 현재 광고주로 전환
+    setInitialChannel("meta");
+    setNotice(null);
+    setKakaoNotice(null);
   }
 
-  async function handleDelete(c: Client) {
-    if (!confirm(`'${c.name}' 광고주를 삭제할까요? 연결된 데이터도 함께 삭제돼요.`)) return;
-    await deleteClientRow(c.id);
-    if (selected?.id === c.id) selectClient(null);
-    refresh();
+  function startNew() {
+    if (!guard()) return;
+    setMode("new");
+    setNotice(null);
+  }
+
+  // 정리가 필요한 광고주 — 이름 중복, 메타 계정 ID 형식 오류, 같은 메타 계정 중복 연결
+  const issues: { client: Client; text: string }[] = [];
+  for (const c of sorted) {
+    if (sorted.filter((x) => x.name.trim() === c.name.trim()).length > 1) issues.push({ client: c, text: "같은 이름의 광고주가 있어요" });
+    if (c.meta_account_id && !normalizeMetaAccountId(c.meta_account_id).ok)
+      issues.push({ client: c, text: `메타 광고계정 ID 형식 오류 (${c.meta_account_id})` });
+    else if (c.meta_account_id && sorted.some((x) => x.id !== c.id && x.meta_account_id === c.meta_account_id))
+      issues.push({ client: c, text: `메타 광고계정 ${c.meta_account_id}을 다른 광고주와 같이 쓰고 있어요` });
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
-      <div className="rounded-card border border-line bg-surface p-5">
-        <h3 className="mb-4 text-[15px] font-semibold text-ink">
-          {editingId ? "광고주 정보 수정" : "새 광고주 등록"}
-        </h3>
-        <form onSubmit={handleSubmit} className="space-y-3">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Field label="광고주명 *" value={form.name} onChange={(v) => set("name", v)} placeholder="르무통" />
-            <Field label="업종" value={form.industry} onChange={(v) => set("industry", v)} placeholder="패션/뷰티" />
-            <Field label="월예산 (원)" value={form.monthly_budget} onChange={(v) => set("monthly_budget", formatBudgetInput(v))} placeholder="5,000,000" mono />
-            <Field label="담당자" value={form.manager} onChange={(v) => set("manager", v)} placeholder="담당 AE" />
-          </div>
-
-          {/* 매체 연동 설정 */}
-          <div className="rounded-lg border border-line bg-canvas p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <p className="text-[12px] font-medium text-ink-soft">매체 연동 설정</p>
-              {mediaStatusLoading && <span className="text-[11px] text-ink-muted">상태 확인 중…</span>}
+    <div className="mx-auto max-w-4xl space-y-5">
+      {/* 상단: 광고주 리스트 박스 + 신규 등록 */}
+      <div className="rounded-card border border-line bg-surface p-4">
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="min-w-[240px] flex-1">
+            <label htmlFor="client-pick" className="mb-1.5 block text-[12px] font-medium text-ink-soft">
+              광고주 선택 <span className="font-normal text-ink-faint">· {clients.length}곳 · 고르면 현재 광고주로 바뀌어요</span>
+            </label>
+            <div className="relative">
+              <select
+                id="client-pick"
+                value={mode === "edit" ? (managedId ?? "") : ""}
+                onChange={(e) => e.target.value && pick(e.target.value)}
+                disabled={loading || clients.length === 0}
+                className="field h-10 appearance-none pr-9 text-[14px]"
+              >
+                {(mode === "new" || !managedId) && <option value="">{mode === "new" ? "신규 광고주 등록 중…" : "광고주 선택"}</option>}
+                {sorted.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {clientLabel(c, clients)}
+                  </option>
+                ))}
+              </select>
+              <i className="ti ti-chevron-down pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[15px] text-ink-muted" aria-hidden />
             </div>
-
-            <div className="mb-3 flex flex-wrap gap-1.5">
-              {MEDIA_CHANNELS.map((ch) => {
-                const status = mediaStatus?.find((m) => m.key === ch.key);
-                return (
-                  <button
-                    key={ch.key}
-                    type="button"
-                    onClick={() => setMediaChannel(ch.key)}
-                    className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[12px] transition ${
-                      mediaChannel === ch.key
-                        ? "border-signal bg-signal-soft font-medium text-signal"
-                        : "border-line text-ink-soft hover:border-ink-faint"
-                    }`}
-                  >
-                    {ch.label}
-                    {editingId && (
-                      <span
-                        className={`h-1.5 w-1.5 rounded-full ${status?.connected ? "bg-good" : "bg-ink-faint"}`}
-                        aria-hidden
-                        title={status?.connected ? "연동됨" : "미연동"}
-                      />
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-
-            {activeChannelDef.key === "meta" && (
-              <div className="mb-2.5">
-                <Field
-                  label="메타 광고계정 ID"
-                  value={form.meta_account_id}
-                  onChange={(v) => set("meta_account_id", v)}
-                  placeholder="act_123456789012345"
-                  mono
-                />
-              </div>
-            )}
-
-            {kakaoNotice && (
-              <p className={`mb-2.5 rounded-lg border px-3.5 py-2.5 text-[12px] ${kakaoNotice.tone === "good" ? "border-good/30 bg-good/5 text-good" : "border-bad/20 bg-bad/5 text-bad"}`}>{kakaoNotice.text}</p>
-            )}
-
-            {activeChannelDef.key === "kakao" && (
-              <div className="mb-2.5">
-                <KakaoConnectPanel
-                  clientId={editingId}
-                  onChanged={async () => {
-                    if (editingId) setMediaStatus(await fetchMediaStatus(editingId));
-                  }}
-                />
-              </div>
-            )}
-
-            <div className="space-y-2.5">
-              {activeChannelDef.fields.map((f) => {
-                const status = mediaStatus?.find((m) => m.key === activeChannelDef.key);
-                return (
-                  <Field
-                    key={f.key}
-                    label={f.label}
-                    value={mediaForm[f.key]}
-                    onChange={(v) => setMediaForm((m) => ({ ...m, [f.key]: v }))}
-                    placeholder={editingId && status?.connected ? "저장됨 — 변경하려면 새로 입력" : undefined}
-                    type={f.type ?? "secret"}
-                  />
-                );
-              })}
-            </div>
-
-            <p className="mt-2 text-[11px] text-ink-muted">{activeChannelDef.hint}</p>
           </div>
-
-          <div>
-            <label className="mb-1.5 block text-[13px] font-medium text-ink-soft">메모</label>
-            <textarea
-              value={form.memo}
-              onChange={(e) => set("memo", e.target.value)}
-              rows={2}
-              placeholder="특이사항, 계약 조건 등"
-              className="w-full resize-y rounded-lg border border-line bg-surface p-3 text-[14px] outline-none focus:border-signal focus:ring-4 focus:ring-signal/10"
-            />
-          </div>
-
-          {error && (
-            <p className="rounded-lg border border-bad/20 bg-bad/5 px-3.5 py-2.5 text-[13px] text-bad">{error}</p>
-          )}
-
-          <div className="flex gap-2">
-            <button type="submit" disabled={saving} className="btn-signal">
-              {saving ? "저장 중…" : editingId ? "수정 저장" : "광고주 등록"}
-            </button>
-            {editingId && (
-              <button type="button" onClick={cancelEdit} className="btn-ghost">취소</button>
-            )}
-          </div>
-        </form>
-      </div>
-
-      <div>
-        <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-[15px] font-semibold text-ink">광고주 목록</h3>
-          <span className="text-[13px] text-ink-muted">{clients.length}곳</span>
+          <button type="button" onClick={startNew} className={`h-10 px-4 text-[14px] ${mode === "new" ? "btn-ghost" : "btn-signal"}`} disabled={mode === "new"}>
+            <i className="ti ti-plus text-[16px]" aria-hidden />
+            신규 광고주 등록
+          </button>
         </div>
 
-        {loading ? (
-          <p className="py-8 text-center text-[14px] text-ink-muted">불러오는 중…</p>
-        ) : clients.length === 0 ? (
-          <div className="rounded-card border border-dashed border-line bg-surface py-10 text-center">
-            <p className="text-[14px] text-ink-muted">아직 등록된 광고주가 없어요.</p>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {clients.map((c) => {
-              const isSelected = selected?.id === c.id;
-              return (
-                <div key={c.id} className={`rounded-card border bg-surface p-4 transition ${isSelected ? "border-signal" : "border-line"}`}>
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-[15px] font-semibold text-ink">{c.name}</span>
-                        {c.industry && (
-                          <span className="rounded bg-canvas px-1.5 py-0.5 text-[11px] text-ink-muted">{c.industry}</span>
-                        )}
-                        {c.meta_account_id && (
-                          <span className="rounded bg-signal-soft px-1.5 py-0.5 text-[11px] text-signal">메타 연동</span>
-                        )}
-                        {isSelected && (
-                          <span className="rounded-full bg-signal-soft px-2 py-0.5 text-[11px] font-medium text-signal">현재 선택됨</span>
-                        )}
-                      </div>
-                      <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-[13px] text-ink-muted">
-                        <span>월예산 {fmtBudget(c.monthly_budget)}</span>
-                        {c.manager && <span>담당 {c.manager}</span>}
-                        {c.meta_account_id && (
-                          <span className="font-mono text-[12px]">{c.meta_account_id}</span>
-                        )}
-                      </div>
-                      {c.memo && <p className="mt-1.5 text-[13px] leading-relaxed text-ink-soft">{c.memo}</p>}
-                    </div>
-                    <div className="flex flex-shrink-0 gap-1.5">
-                      {!isSelected && (
-                        <button
-                          onClick={() => selectClient(c.id)}
-                          className="rounded-lg border border-line px-2.5 py-1.5 text-[12px] text-ink-soft transition hover:border-signal hover:text-signal"
-                        >
-                          선택
-                        </button>
-                      )}
-                      <button onClick={() => startEdit(c)} className="flex h-8 w-8 items-center justify-center rounded-lg border border-line text-ink-muted transition hover:border-ink-faint" title="수정">
-                        <i className="ti ti-pencil text-[15px]" aria-hidden />
-                      </button>
-                      <button onClick={() => handleDelete(c)} className="flex h-8 w-8 items-center justify-center rounded-lg border border-line text-ink-muted transition hover:border-bad hover:text-bad" title="삭제">
-                        <i className="ti ti-trash text-[15px]" aria-hidden />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+        {issues.length > 0 && (
+          <div className="mt-3 rounded-lg border border-warn/30 bg-warn/5 px-3.5 py-2.5">
+            <p className="text-[12px] font-medium text-warn">
+              <i className="ti ti-alert-triangle mr-1" aria-hidden />
+              정리가 필요한 광고주 {new Set(issues.map((i) => i.client.id)).size}곳
+            </p>
+            <ul className="mt-1 space-y-0.5">
+              {issues.map((i, n) => (
+                <li key={n} className="text-[12px] text-ink-soft">
+                  <button type="button" onClick={() => pick(i.client.id)} className="font-medium text-ink hover:text-signal hover:underline">
+                    {clientLabel(i.client, clients)}
+                  </button>{" "}
+                  — {i.text}
+                </li>
+              ))}
+            </ul>
           </div>
         )}
       </div>
+
+      {notice && (
+        <p className={`rounded-lg border px-3.5 py-2.5 text-[13px] ${notice.tone === "good" ? "border-good/30 bg-good/5 text-good" : "border-bad/20 bg-bad/5 text-bad"}`}>
+          {notice.text}
+        </p>
+      )}
+
+      {mode === "new" ? (
+        <Section title="신규 광고주 등록" desc="기본 정보를 먼저 등록하면, 이어서 매체 연동을 설정할 수 있어요.">
+          <ClientInfoForm
+            client={null}
+            onDirtyChange={setDirty}
+            onCancel={() => {
+              setDirty(false);
+              setMode("edit");
+            }}
+            onSaved={async (id) => {
+              setDirty(false);
+              await refresh();
+              setMode("edit");
+              setManagedId(id);
+              selectClient(id);
+              setInitialChannel("meta");
+              setNotice({ tone: "good", text: "광고주를 등록했어요. 아래 매체 연동에서 광고계정을 연결하세요." });
+            }}
+          />
+        </Section>
+      ) : loading ? (
+        <p className="py-8 text-center text-[14px] text-ink-muted">불러오는 중…</p>
+      ) : !managed ? (
+        <div className="rounded-card border border-dashed border-line bg-surface py-12 text-center">
+          <p className="text-[14px] text-ink-muted">{clients.length ? "위에서 관리할 광고주를 선택하세요." : "아직 등록된 광고주가 없어요."}</p>
+          {!clients.length && (
+            <button type="button" onClick={startNew} className="btn-signal mt-3 h-10 px-4 text-[14px]">
+              첫 광고주 등록하기
+            </button>
+          )}
+        </div>
+      ) : (
+        <>
+          {/* 요약 */}
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-surface px-5 py-4">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-[17px] font-semibold text-ink">{managed.name}</h2>
+                {managed.id === selected?.id && (
+                  <span className="rounded-full bg-signal-soft px-2 py-0.5 text-[11px] font-medium text-signal">현재 광고주</span>
+                )}
+              </div>
+              <p className="mt-0.5 text-[12px] text-ink-muted">
+                {[managed.industry, `월예산 ${fmtBudget(managed.monthly_budget)}`, managed.manager ? `담당 ${managed.manager}` : null, `${new Date(managed.created_at).toLocaleDateString("ko-KR")} 등록`]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </p>
+            </div>
+          </div>
+
+          <Section title="기본 정보" desc="광고주명·업종·월예산·담당자·메모">
+            <ClientInfoForm client={managed} onDirtyChange={setDirty} onSaved={() => refresh()} />
+          </Section>
+
+          <Section title="매체 연동" desc="매체별 연동 상태를 점검하고, 계정·키는 매체별로 따로 저장해요.">
+            <MediaConnections client={managed} initialChannel={initialChannel} notice={kakaoNotice} />
+          </Section>
+
+          <DeleteZone
+            client={managed}
+            onDeleted={async () => {
+              setDirty(false);
+              setManagedId(null);
+              await refresh();
+              setNotice({ tone: "good", text: `'${managed.name}' 광고주를 삭제했어요.` });
+            }}
+          />
+        </>
+      )}
     </div>
   );
 }
 
-function Field({
-  label, value, onChange, placeholder, mono, secret, type,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  placeholder?: string;
-  mono?: boolean;
-  secret?: boolean;
-  type?: "secret" | "text" | "digits" | "textarea";
-}) {
-  if (type === "textarea") {
-    return (
-      <div>
-        <label className="mb-1.5 block text-[13px] font-medium text-ink-soft">{label}</label>
-        <textarea
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder}
-          rows={4}
-          className="field w-full resize-y font-mono text-[12px]"
-        />
-      </div>
-    );
+function Section({ title, desc, children }: { title: string; desc?: string; children: React.ReactNode }) {
+  return (
+    <section className="rounded-card border border-line bg-surface p-5">
+      <h3 className="text-[15px] font-semibold text-ink">{title}</h3>
+      {desc && <p className="mb-4 mt-0.5 text-[12px] text-ink-muted">{desc}</p>}
+      {children}
+    </section>
+  );
+}
+
+// 삭제 — 광고주명을 그대로 입력해야 삭제 버튼이 활성화된다(비슷한 이름 오삭제 방지)
+function DeleteZone({ client, onDeleted }: { client: Client; onDeleted: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [typed, setTyped] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setOpen(false);
+    setTyped("");
+    setError(null);
+  }, [client.id]);
+
+  async function remove() {
+    setBusy(true);
+    const { error } = await deleteClientRow(client.id);
+    setBusy(false);
+    if (error) {
+      setError("삭제에 실패했어요. 다시 시도해 주세요.");
+      return;
+    }
+    onDeleted();
   }
 
-  const isSecret = type === "secret" || secret;
   return (
-    <div>
-      <label className="mb-1.5 block text-[13px] font-medium text-ink-soft">{label}</label>
-      <input
-        type={isSecret ? "password" : "text"}
-        autoComplete={isSecret ? "off" : undefined}
-        inputMode={type === "digits" ? "numeric" : undefined}
-        value={value}
-        onChange={(e) => onChange(type === "digits" ? e.target.value.replace(/[^0-9]/g, "") : e.target.value)}
-        placeholder={placeholder}
-        className={`field h-10 text-[14px] ${mono ? "font-mono" : ""}`}
-      />
-    </div>
+    <section className="rounded-card border border-bad/25 bg-surface p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="text-[15px] font-semibold text-bad">광고주 삭제</h3>
+          <p className="mt-0.5 text-[12px] text-ink-muted">매체 연동 정보와 이 광고주에 저장된 리포트·설정이 함께 삭제되고 되돌릴 수 없어요.</p>
+        </div>
+        {!open && (
+          <button type="button" onClick={() => setOpen(true)} className="btn-ghost h-9 px-3 text-[13px] hover:border-bad hover:text-bad">
+            <i className="ti ti-trash text-[15px]" aria-hidden />
+            삭제하기
+          </button>
+        )}
+      </div>
+      {open && (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <input
+            value={typed}
+            onChange={(e) => setTyped(e.target.value)}
+            placeholder={`확인을 위해 '${client.name}' 입력`}
+            autoComplete="off"
+            className="field h-9 max-w-xs text-[13px]"
+          />
+          <button
+            type="button"
+            onClick={remove}
+            disabled={busy || typed.trim() !== client.name.trim()}
+            className="inline-flex h-9 items-center rounded-lg bg-bad px-4 text-[13px] font-medium text-white transition hover:brightness-95 disabled:opacity-40"
+          >
+            {busy ? "삭제 중…" : "영구 삭제"}
+          </button>
+          <button type="button" onClick={() => setOpen(false)} className="btn-ghost h-9 px-3 text-[13px]">
+            취소
+          </button>
+          {error && <p className="w-full text-[12px] text-bad">{error}</p>}
+        </div>
+      )}
+    </section>
   );
 }

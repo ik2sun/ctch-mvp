@@ -3,13 +3,12 @@
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { navByPath } from "./nav";
-import { useClients } from "@/features/clients/ClientContext";
+import { ClientSwitcher } from "./ClientSwitcher";
 
 export function Header() {
   const pathname = usePathname();
   const router = useRouter();
   const current = navByPath(pathname);
-  const { clients, selected, selectClient } = useClients();
 
   async function signOut() {
     const supabase = createClient();
@@ -26,28 +25,8 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-2.5">
-        {/* 현재 광고주 선택 */}
-        <div className="relative">
-          <select
-            value={selected?.id ?? ""}
-            onChange={(e) => selectClient(e.target.value || null)}
-            className="h-9 appearance-none rounded-lg border border-line bg-surface pl-8 pr-8 text-[13px] text-ink-soft outline-none transition hover:border-ink-faint focus:border-signal"
-          >
-            <option value="">광고주 선택 안 함</option>
-            {clients.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-          <i
-            className={`ti ti-building-store pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[15px] ${
-              selected ? "text-signal" : "text-ink-muted"
-            }`}
-            aria-hidden
-          />
-          <i className="ti ti-chevron-down pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[14px] text-ink-muted" aria-hidden />
-        </div>
+        {/* 광고주 전환 · 광고주 관리 */}
+        <ClientSwitcher />
 
         <button
           onClick={signOut}

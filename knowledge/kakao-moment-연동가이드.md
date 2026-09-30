@@ -1,5 +1,7 @@
 # 카카오모먼트 연동 가이드 (CTCH)
 
+> **2026-09-28 변경**: 카카오모먼트 API는 일반 카카오 로그인 토큰을 거절한다(401 "target biz token is not supplied."). CTCH는 **비즈니스 인증**(`/oauth/business/authorize` → `/oauth/business/token`, scope `moment_management`)으로 토큰을 받는다. REST API 키 설정의 **비즈니스 인증 리다이렉트 URI**에 콜백을 등록하고, `.env.local`에 **비즈니스 인증 시크릿**을 `KAKAO_BUSINESS_CLIENT_SECRET`으로 넣는다. 비즈니스 토큰은 리프레시 토큰이 없어 장기 미사용으로 만료되면 다시 연결한다. 아래 본문의 리프레시 토큰(60일) 설명은 이전 방식이다.
+
 CTCH의 매체 연동에 카카오모먼트를 추가했습니다. 네이버 검색광고·메타처럼 대시보드(성과 요약·매체별 표)와 실시간 리포트(캠페인 → 광고그룹 → 소재 트리)에서 카카오모먼트 데이터를 볼 수 있습니다.
 
 ## 1. 왜 API 키가 아니라 "카카오 계정 연결"인가

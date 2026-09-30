@@ -107,6 +107,10 @@ export default function DashboardHome() {
   const [kakaoLoading, setKakaoLoading] = useState(false);
   const [kakaoError, setKakaoError] = useState<string | null>(null);
 
+  const [gfaSummary, setGfaSummary] = useState<NaverSummaryRes | null>(null);
+  const [gfaLoading, setGfaLoading] = useState(false);
+  const [gfaError, setGfaError] = useState<string | null>(null);
+
   const [compareWindow, setCompareWindow] = useState(7);
   const [compareData, setCompareData] = useState<Compare | null>(null);
   const [compareLoading, setCompareLoading] = useState(false);
@@ -313,6 +317,58 @@ export default function DashboardHome() {
     [selected],
   );
   const kakaoConnected = media?.find((m) => m.key === "kakao")?.connected ?? false;
+
+  // GFA — 카카오와 같은 방식(연동 여부 기준 로드, 5분 캐시, 요청 제한 시 5초 뒤 1회 재시도)
+  const loadGfa = useCallback(
+    async (pk: string, force = false, isAutoRetry = false) => {
+      if (!selected?.id) {
+        setGfaSummary(null);
+        return;
+      }
+      const p = PERIODS.find((x) => x.key === pk) ?? PERIODS[1];
+      const since = p.since();
+      const until = p.until();
+      const cacheKey = `ctch_gfa_summary_${selected.id}_${since}_${until}`;
+      if (!force) {
+        const cached = getSessionCache<NaverSummaryRes>(cacheKey);
+        if (cached) {
+          setGfaSummary(cached);
+          setGfaError(null);
+          return;
+        }
+      }
+      setGfaLoading(true);
+      if (!isAutoRetry) setGfaError(null);
+      try {
+        const res = await fetch(`/api/gfa/summary?clientId=${selected.id}&since=${since}&until=${until}`);
+        const json = await res.json();
+        if (!res.ok) {
+          if (json.code === "RATE_LIMITED" && !isAutoRetry) {
+            setGfaError(json.error || "잠시 후 다시 시도해주세요.");
+            setTimeout(() => loadGfa(pk, force, true), 5000);
+            return;
+          }
+          throw new Error(json.error || "불러오기 실패");
+        }
+        setGfaSummary(json);
+        setGfaError(null);
+        setSessionCache(cacheKey, json);
+      } catch (e) {
+        setGfaError(e instanceof Error ? e.message : "오류가 발생했어요.");
+        setGfaSummary(null);
+      } finally {
+        setGfaLoading(false);
+      }
+    },
+    [selected],
+  );
+  const gfaConnected = media?.find((m) => m.key === "gfa")?.connected ?? false;
+  useEffect(() => {
+    setGfaSummary(null);
+    setGfaError(null);
+    if (gfaConnected && selected?.id) loadGfa(periodKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gfaConnected, selected?.id]);
   useEffect(() => {
     setKakaoSummary(null);
     setKakaoError(null);
@@ -341,11 +397,13 @@ export default function DashboardHome() {
 
   // 매체 필터 체크박스를 연동 상태로 게이팅하려면 표를 그리기 전에도 상태를 알아야 해서
   // selected가 바뀔 때마다 미리 조회한다.
+  const mediaReqSeq = useRef(0);
   const loadMediaStatus = useCallback(async () => {
     if (!selected?.id) {
       setMedia(null);
       return;
     }
+    const seq = ++mediaReqSeq.current; // 광고주 전환 시 이전 광고주 응답 무시
     setMediaLoading(true);
     try {
       const res = await fetch("/api/media-status", {
@@ -354,9 +412,10 @@ export default function DashboardHome() {
         body: JSON.stringify({ clientId: selected.id }),
       });
       const json = await res.json();
+      if (seq !== mediaReqSeq.current) return;
       setMedia(res.ok ? (json.media as MediaStatus[]) : null);
     } finally {
-      setMediaLoading(false);
+      if (seq === mediaReqSeq.current) setMediaLoading(false);
     }
   }, [selected]);
 
@@ -386,10 +445,7 @@ export default function DashboardHome() {
 
   const cur = summary?.current;
 
-  // 매체별 상세 표 행 — GFA는 실제 조회 API가 없어 항상 미연동으로 고정한다 (카카오모먼트는 OAuth 연동 시 실데이터)
-  // (GFA는 키가 저장돼 있어도 "기타 사항" 패널에서만 그 사실을 보여주고, 이 표에서는
-  // 실데이터를 보여줄 수 없다는 뜻에서 항상 미연동 취급한다). 카카오는 체크박스가
-  // 없으므로 checked를 항상 false로 고정해 행이 늘 흐리게 표시된다.
+  // 매체별 상세 표 행 — 네이버 SA·GFA·카카오모먼트는 연동(media-status 실검증) + 요약 조회가 끝난 경우에만 실데이터
   const mediaRows: MediaRow[] = [
     { key: "meta", label: "메타", checked: mediaFilter.meta, connected: !!cur, totals: cur ?? null },
     {
@@ -399,7 +455,7 @@ export default function DashboardHome() {
       connected: naverConnected && !!naverSummary,
       totals: naverSummary?.current ?? null,
     },
-    { key: "gfa", label: "GFA", checked: mediaFilter.gfa, connected: false, totals: null },
+    { key: "gfa", label: "GFA", checked: mediaFilter.gfa, connected: gfaConnected && !!gfaSummary, totals: gfaSummary?.current ?? null },
     { key: "kakao", label: "카카오모먼트", checked: mediaFilter.kakao, connected: kakaoConnected && !!kakaoSummary, totals: kakaoSummary?.current ?? null },
   ];
 
@@ -502,10 +558,10 @@ export default function DashboardHome() {
       setAiPlan(null);
       return;
     }
-    if (loading || naverLoading || kakaoLoading) return;
+    if (loading || naverLoading || kakaoLoading || gfaLoading) return;
     loadAiPlan();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected?.id, periodKey, loading, naverLoading, kakaoLoading, media]);
+  }, [selected?.id, periodKey, loading, naverLoading, kakaoLoading, gfaLoading, media]);
 
   const aiActionCount = aiPlan ? aiPlan.issues.length + aiPlan.urgentActions.length + aiPlan.nextWeekActions.length : 0;
 
@@ -589,6 +645,7 @@ export default function DashboardHome() {
                   load(p.key);
                   loadNaver(p.key);
                   loadKakao(p.key);
+                  loadGfa(p.key);
                 }}
                 className={`rounded-lg border px-2.5 py-1.5 text-[12px] transition ${
                   periodKey === p.key
@@ -604,11 +661,12 @@ export default function DashboardHome() {
                 load(periodKey, true);
                 loadNaver(periodKey, true);
                 loadKakao(periodKey, true);
+                loadGfa(periodKey, true);
               }}
-              disabled={loading || naverLoading || kakaoLoading}
+              disabled={loading || naverLoading || kakaoLoading || gfaLoading}
               className="rounded-lg border border-line px-2.5 py-1.5 text-[12px] text-ink-soft transition hover:border-signal hover:text-signal"
             >
-              <i className={`ti ${loading || naverLoading || kakaoLoading ? "ti-loader-2 animate-spin" : "ti-refresh"} text-[13px]`} aria-hidden />
+              <i className={`ti ${loading || naverLoading || kakaoLoading || gfaLoading ? "ti-loader-2 animate-spin" : "ti-refresh"} text-[13px]`} aria-hidden />
             </button>
           </div>
         </div>
@@ -622,6 +680,9 @@ export default function DashboardHome() {
             )}
             {kakaoError && (
               <p className="mb-3 rounded-lg border border-bad/20 bg-bad/5 px-3.5 py-2.5 text-[13px] text-bad">카카오모먼트: {kakaoError}</p>
+            )}
+            {gfaError && (
+              <p className="mb-3 rounded-lg border border-bad/20 bg-bad/5 px-3.5 py-2.5 text-[13px] text-bad">GFA: {gfaError}</p>
             )}
             {kakaoLoading && !kakaoSummary && (
               <p className="mb-3 text-[12px] text-ink-muted">카카오모먼트 보고서를 불러오는 중… (요청 제한 때문에 10~15초 걸려요)</p>

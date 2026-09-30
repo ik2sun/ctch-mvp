@@ -1,7 +1,7 @@
 "use client";
 
 // 광고주 관리 > 매체 연동 > 카카오모먼트 탭 — API 키 입력이 아니라 카카오 계정 OAuth 연결 + 광고계정 선택 방식
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 type AdAccount = { id: string; name: string; memberType: string | null; status: string | null };
 type Status = {
@@ -22,23 +22,31 @@ export function KakaoConnectPanel({ clientId, onChanged }: { clientId: string | 
   const [pick, setPick] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
 
+  // 광고주 전환 시 이전 광고주 응답이 늦게 와서 덮어쓰지 않도록 마지막 요청만 반영
+  const reqSeq = useRef(0);
   const load = useCallback(async () => {
     if (!clientId) return;
+    const seq = ++reqSeq.current;
     setLoading(true);
     try {
       const res = await fetch(`/api/kakao-moment/ad-accounts?clientId=${clientId}`);
       const json = (await res.json()) as Status & { error?: string };
+      if (seq !== reqSeq.current) return;
       if (!res.ok) throw new Error(json.error || "상태를 불러오지 못했어요.");
       setStatus(json);
       setPick(json.adAccountId ?? (json.accounts.length === 1 ? json.accounts[0].id : ""));
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "오류가 발생했어요.");
     } finally {
-      setLoading(false);
+      if (seq === reqSeq.current) setLoading(false);
     }
   }, [clientId]);
 
   useEffect(() => {
+    // 광고주가 바뀌면 이전 광고주 상태를 먼저 지운다
+    setStatus(null);
+    setMsg(null);
+    setPick("");
     load();
   }, [load]);
 
@@ -105,7 +113,6 @@ export function KakaoConnectPanel({ clientId, onChanged }: { clientId: string | 
               </span>
               <span className="ml-2 text-ink-muted">
                 {status?.linkedAt && `연결 ${new Date(status.linkedAt).toLocaleDateString("ko-KR")}`}
-                {status?.refreshExpiresAt && ` · 재연결 기한 ${new Date(status.refreshExpiresAt).toLocaleDateString("ko-KR")}`}
               </span>
               {status?.adAccountId ? (
                 <span className="ml-2 text-ink">
@@ -182,16 +189,16 @@ export function KakaoConnectPanel({ clientId, onChanged }: { clientId: string | 
             앱 → <b>카카오모먼트</b> 메뉴 → <b>사용 권한 신청</b>(카카오 검수, 영업일 기준 수일). 승인 전에는 API가 403으로 거절돼요.
           </li>
           <li>
-            앱 → 카카오 로그인 <b>활성화</b> → Redirect URI에 <span className="font-mono">{typeof window !== "undefined" ? `${window.location.origin}/api/kakao-moment/oauth/callback` : "/api/kakao-moment/oauth/callback"}</span> 등록. 보안 → Client Secret 생성(권장).
+            앱 → 플랫폼 키 → REST API 키 → <b>비즈니스 인증 리다이렉트 URI</b>에 <span className="font-mono">{typeof window !== "undefined" ? `${window.location.origin}/api/kakao-moment/oauth/callback` : "/api/kakao-moment/oauth/callback"}</span> 등록. 같은 화면 클라이언트 시크릿의 <b>비즈니스 인증</b> 코드를 사용(카카오 로그인 코드와 다름).
           </li>
           <li>
-            서버 <span className="font-mono">.env.local</span>에 <span className="font-mono">KAKAO_REST_API_KEY</span>, <span className="font-mono">KAKAO_CLIENT_SECRET</span>, 배포 도메인(<span className="font-mono">NEXT_PUBLIC_SITE_URL</span>) 설정 후 재시작.
+            서버 <span className="font-mono">.env.local</span>에 <span className="font-mono">KAKAO_REST_API_KEY</span>, <span className="font-mono">KAKAO_BUSINESS_CLIENT_SECRET</span>(비즈니스 인증 시크릿), 배포 도메인(<span className="font-mono">NEXT_PUBLIC_SITE_URL</span>) 설정 후 재시작.
           </li>
           <li>
             Supabase SQL Editor에서 <span className="font-mono">supabase/migrations/0013_kakao_moment.sql</span> 실행(컬럼 추가).
           </li>
           <li>
-            이 화면에서 <b>카카오 계정으로 연결</b> → 광고계정 멤버인 카카오계정으로 로그인·동의 → 돌아와서 <b>광고계정 선택 → 저장</b>. 연결은 약 60일마다(리프레시 토큰 만료) 다시 해야 해요.
+            이 화면에서 <b>카카오 계정으로 연결</b> → 광고계정 멤버인 카카오계정으로 로그인·동의 → 돌아와서 <b>광고계정 선택 → 저장</b>. 비즈니스 토큰은 오래 쓰지 않으면 만료되니, "토큰이 유효하지 않아요"가 나오면 다시 연결하세요.
           </li>
         </ol>
       </details>

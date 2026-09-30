@@ -36,7 +36,7 @@ export async function GET(req: Request) {
   const ids = idsParam.split(",").map((s) => s.trim()).filter(Boolean);
 
   try {
-    const credentials = resolveNaverAdCredentials(client);
+    const credentials = await resolveNaverAdCredentials(client);
     const statMap = await fetchBulkStats(credentials, ids, since, until);
     const stats = ids.map((id) => deriveNaverMetrics(statMap.get(id), id));
     return NextResponse.json({ stats });

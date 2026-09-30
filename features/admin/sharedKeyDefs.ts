@@ -1,0 +1,110 @@
+// API 공용 키 관리 — 매체별 입력 항목 정의 (화면·서버 공용, 값 없음)
+import type { SharedChannel } from "@/lib/sharedKeys";
+
+export type SharedFieldDef = {
+  key: string;
+  label: string;
+  secret?: boolean; // true면 화면에 마스킹 표시
+  digits?: boolean;
+  textarea?: boolean;
+  optional?: boolean;
+};
+
+export type SharedChannelDef = {
+  channel: SharedChannel;
+  label: string;
+  accountLabel: string; // 광고주별로 넣는 값
+  fields: SharedFieldDef[];
+  oauth?: boolean; // 키 입력 대신 계정 연결(카카오)
+  connect?: { href: string; label: string }; // 키 저장 후 추가로 계정 연결이 필요한 매체(GFA: 네이버 로그인)
+  testable: boolean; // 저장 전 실제 API로 확인하는지
+  live: boolean; // 대시보드·리포트에서 실제로 조회하는 매체인지
+  steps: string[];
+};
+
+export const SHARED_DEFS: SharedChannelDef[] = [
+  {
+    channel: "meta",
+    label: "메타",
+    accountLabel: "광고계정 ID",
+    fields: [{ key: "access_token", label: "시스템 사용자 액세스 토큰", secret: true }],
+    testable: true,
+    live: true,
+    steps: [
+      "비즈니스 설정 → 사용자 → 시스템 사용자(예: nextmediagroup-bot)",
+      "자산 추가 → 광고 계정: 관리하는 광고주 계정에 권한 부여",
+      "새 토큰 생성 → 만료 '사용 안 함', 권한 ads_read(+read_insights) → 토큰 복사",
+    ],
+  },
+  {
+    channel: "naver",
+    label: "네이버 검색광고",
+    accountLabel: "고객 ID",
+    fields: [
+      { key: "api_key", label: "엑세스라이선스", secret: true },
+      { key: "secret", label: "비밀키", secret: true },
+      { key: "owner_customer_id", label: "키를 발급한 대행사 계정 번호 · 키 확인용", digits: true, optional: true },
+    ],
+    testable: true,
+    live: true,
+    steps: [
+      "searchad.naver.com에 NMG 대행사(관리) 계정으로 로그인 — 개별 광고주 계정 X",
+      "도구 → API 사용 관리 → 네이버 검색광고 API 서비스 신청",
+      "엑세스라이선스·비밀키 입력 → 테스트 → 저장 (광고주 고객 ID는 여기가 아니라 광고주 관리에서 넣어요)",
+    ],
+  },
+  {
+    channel: "kakao",
+    label: "카카오모먼트",
+    accountLabel: "광고계정 ID",
+    fields: [],
+    oauth: true,
+    testable: true,
+    live: true,
+    steps: [
+      "NMG 공용 카카오계정을 각 광고주 카카오모먼트 광고계정의 멤버로 초대받기",
+      "아래 '공용 카카오 계정 연결' → 그 카카오계정으로 로그인·비즈니스 동의",
+      "연결되면 멤버로 있는 모든 광고계정을 광고계정 ID만으로 조회",
+    ],
+  },
+  {
+    channel: "gfa",
+    label: "GFA",
+    accountLabel: "광고계정 번호",
+    fields: [
+      { key: "client_id", label: "Client ID (네이버 개발자센터)" },
+      { key: "client_secret", label: "Client Secret", secret: true },
+      { key: "manager_account_no", label: "NMG 관리 계정 번호", digits: true, optional: true },
+    ],
+    connect: { href: "/api/gfa/oauth/start", label: "네이버 계정 연결" },
+    testable: true,
+    live: true,
+    steps: [
+      "네이버 개발자센터 → 애플리케이션 등록: 사용 API '네이버 로그인'(제공 정보 항목은 선택하지 않음), Callback URL에 아래 주소 등록",
+      "GFA(ads.naver.com) 대표 관리 계정 → 설정 → API 관리 → 'API 사용 신청'에 Client ID 등록 → 승인 대기(공식 파트너사만 가능)",
+      "Client ID·Secret·관리 계정 번호 저장 → '네이버 계정 연결'로 관리 계정 멤버인 네이버 아이디로 로그인·동의",
+      "승인 전에 동의했다면 인증 실패(024) — 네이버 내정보 → 이력관리 → 연결된 서비스에서 동의 철회 후 다시 연결",
+    ],
+  },
+  {
+    channel: "google_ads",
+    label: "구글 Ads",
+    accountLabel: "Customer ID",
+    fields: [
+      { key: "developer_token", label: "Developer Token", secret: true },
+      { key: "login_customer_id", label: "관리자(MCC) 계정 ID", digits: true, optional: true },
+    ],
+    testable: false,
+    live: false,
+    steps: ["MCC(관리자 계정) → 도구 → API 센터에서 Developer Token 확인(아직 조회 미지원)"],
+  },
+  {
+    channel: "ga4",
+    label: "GA4",
+    accountLabel: "속성 ID",
+    fields: [{ key: "service_account_json", label: "서비스 계정 JSON", secret: true, textarea: true }],
+    testable: false,
+    live: false,
+    steps: ["GCP 서비스 계정 JSON 키 — 각 GA4 속성에 이 서비스 계정 이메일을 뷰어로 추가(아직 조회 미지원)"],
+  },
+];

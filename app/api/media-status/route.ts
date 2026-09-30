@@ -1,13 +1,19 @@
 import { NextResponse } from "next/server";
+import { resolveMetaToken } from "@/lib/meta/token";
+import { getShared } from "@/lib/sharedKeys";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllCampaigns } from "@/lib/naver-ad/aggregate";
-import { resolveNaverAdCredentials } from "@/lib/naver-ad/auth";
-import { ensureKakaoAccessToken, KakaoAuthError } from "@/lib/kakao-moment/auth";
+import { resolveNaverAdCredentials, NaverAdNotConfiguredError } from "@/lib/naver-ad/auth";
+import { ensureKakaoAccessToken } from "@/lib/kakao-moment/auth";
 import { fetchCampaigns as fetchKakaoCampaigns } from "@/lib/kakao-moment/aggregate";
 import { KakaoMomentApiError } from "@/lib/kakao-moment/client";
+import { normalizeMetaAccountId } from "@/features/clients/metaAccount";
+import { getGfaCredentials, GfaAuthError } from "@/lib/gfa/auth";
+import { fetchAdAccount as fetchGfaAdAccount, fetchCampaigns as fetchGfaCampaigns } from "@/lib/gfa/aggregate";
+import { GfaApiError } from "@/lib/gfa/client";
 
 // 매체 연동 상태 점검 — 광고주별로 저장된 키를 기준으로 가벼운 호출 1회씩 유효성 확인
-// (구 app/api/meta-status를 메타 전용에서 메타/네이버/GFA로 확장)
+// (구 app/api/meta-status를 메타 전용에서 전 매체로 확장)
 const API_VERSION = "v21.0";
 
 type MediaStatus = {
@@ -16,6 +22,8 @@ type MediaStatus = {
   connected: boolean;
   status: "ok" | "expired" | "error" | "none";
   detail: string;
+  warning?: string;
+  ownToken?: boolean; // 메타: 광고주 전용 토큰 저장 여부(없으면 공용 토큰 사용)
 };
 
 export async function POST(req: Request) {
@@ -31,7 +39,7 @@ export async function POST(req: Request) {
   const { data: client } = await supabase
     .from("clients")
     .select(
-      "name, meta_account_id, meta_access_token, naver_ad_api_key, naver_ad_secret, naver_ad_customer_id, gfa_api_key, gfa_secret, gfa_customer_id, kakao_ad_account_id, kakao_access_token, kakao_token_expires_at, kakao_refresh_token, kakao_refresh_expires_at, kakao_linked_at, google_ads_customer_id, google_ads_developer_token, ga4_property_id, ga4_service_account_json",
+      "name, meta_account_id, meta_access_token, naver_ad_api_key, naver_ad_secret, naver_ad_customer_id, gfa_customer_id, kakao_ad_account_id, kakao_access_token, kakao_token_expires_at, kakao_refresh_token, kakao_refresh_expires_at, kakao_linked_at, google_ads_customer_id, google_ads_developer_token, ga4_property_id, ga4_service_account_json",
     )
     .eq("id", clientId)
     .eq("user_id", user.id)
@@ -41,31 +49,56 @@ export async function POST(req: Request) {
   const media: MediaStatus[] = [];
 
   // 메타 — 광고주별 토큰이 없으면 .env.local 고정 토큰을 폴백으로 사용
-  const metaToken = client.meta_access_token?.trim() || process.env.META_ACCESS_TOKEN;
+  const ownMetaToken = client.meta_access_token?.trim();
+  const { token: metaToken } = await resolveMetaToken(client.meta_access_token);
+  const tokenSource = ownMetaToken ? "광고주 전용 토큰" : "공용 토큰";
+  const metaIdCheck = client.meta_account_id ? normalizeMetaAccountId(client.meta_account_id) : null;
   if (!client.meta_account_id) {
-    media.push({ key: "meta", label: "메타", connected: false, status: "none", detail: "계정 ID 미등록" });
+    media.push({ key: "meta", label: "메타", connected: false, status: "none", detail: "계정 ID 미등록", ownToken: !!ownMetaToken });
+  } else if (metaIdCheck && !metaIdCheck.ok) {
+    media.push({ key: "meta", label: "메타", connected: false, status: "error", detail: `광고계정 ID 형식 오류(${client.meta_account_id}) — 숫자로 다시 입력`, ownToken: !!ownMetaToken });
   } else if (!metaToken) {
     media.push({ key: "meta", label: "메타", connected: false, status: "error", detail: "액세스 토큰 없음" });
   } else {
-    const accountId = client.meta_account_id as string;
-    const act = accountId.startsWith("act_") ? accountId : `act_${accountId}`;
+    const act = metaIdCheck?.ok && metaIdCheck.value ? metaIdCheck.value : (client.meta_account_id as string);
+    const tk = encodeURIComponent(metaToken);
     try {
-      const res = await fetch(
-        `https://graph.facebook.com/${API_VERSION}/${act}?fields=name,account_status&access_token=${metaToken}`,
-      );
+      const res = await fetch(`https://graph.facebook.com/${API_VERSION}/${act}?fields=name,account_status&access_token=${tk}`);
       const json = await res.json();
       if (json.error) {
         const code = json.error.code as number;
-        const expired = code === 190;
+        const expired = code === 190 && !/parse/i.test(String(json.error.message));
         media.push({
           key: "meta",
           label: "메타",
           connected: false,
           status: expired ? "expired" : "error",
-          detail: expired ? "토큰 만료 — 재발급 필요" : String(json.error.message ?? "연결 실패"),
+          detail: expired
+            ? `${tokenSource} 만료 — 재발급 필요`
+            : code === 190
+              ? `${tokenSource} 형식 오류 — 토큰을 다시 입력하거나 삭제해 공용 토큰 사용`
+              : String(json.error.message ?? "연결 실패"),
+          ownToken: !!ownMetaToken,
         });
       } else {
-        media.push({ key: "meta", label: "메타", connected: true, status: "ok", detail: (json.name as string) ?? act });
+        // 계정은 맞지만 집행이 없는 계정을 잘못 고른 경우를 잡기 위해 최근 30일 지출을 확인
+        let warning: string | undefined;
+        try {
+          const ins = await (await fetch(`https://graph.facebook.com/${API_VERSION}/${act}/insights?fields=spend&date_preset=last_30d&access_token=${tk}`)).json();
+          if (!ins.error && !(Number(ins.data?.[0]?.spend) > 0)) warning = "최근 30일 집행 내역이 없어요. 광고계정이 맞는지 확인하세요.";
+        } catch {
+          /* 경고 확인 실패는 무시 */
+        }
+        if (json.account_status !== 1) warning = `광고계정이 활성 상태가 아니에요(상태 코드 ${json.account_status}).`;
+        media.push({
+          key: "meta",
+          label: "메타",
+          connected: true,
+          status: "ok",
+          detail: `${(json.name as string) ?? act} · ${act.replace("act_", "")} · ${tokenSource}`,
+          warning,
+          ownToken: !!ownMetaToken,
+        });
       }
     } catch {
       media.push({ key: "meta", label: "메타", connected: false, status: "error", detail: "연결 확인 실패" });
@@ -74,7 +107,7 @@ export async function POST(req: Request) {
 
   // 네이버 SA — 키가 있으면 실제 캠페인 목록 조회로 연동 확인 (메타와 동일 수준의 실검증)
   try {
-    const credentials = resolveNaverAdCredentials(client);
+    const credentials = await resolveNaverAdCredentials(client);
     try {
       const campaigns = await fetchAllCampaigns(credentials);
       media.push({
@@ -82,66 +115,109 @@ export async function POST(req: Request) {
         label: "네이버 SA",
         connected: true,
         status: "ok",
-        detail: `캠페인 ${campaigns.length.toLocaleString("ko-KR")}개 연동됨`,
+        detail: `고객 ID ${credentials.customerId} · 캠페인 ${campaigns.length.toLocaleString("ko-KR")}개 · ${credentials.sharedKey ? "공용 API 키" : "광고주 전용 API 키"}`,
+        warning: campaigns.length === 0 ? "캠페인이 없는 계정이에요. 고객 ID가 맞는지 확인하세요." : undefined,
       });
     } catch (e) {
+      const msg = e instanceof Error ? e.message : "연결 확인 실패";
       media.push({
         key: "naver",
         label: "네이버 SA",
         connected: false,
         status: "error",
-        detail: e instanceof Error ? e.message : "연결 확인 실패",
+        detail: credentials.sharedKey
+          ? `고객 ID ${credentials.customerId} — 공용 API 키로 접근할 수 없어요. 이 광고주의 API 키·Secret을 함께 등록하세요. (${msg})`
+          : `고객 ID ${credentials.customerId} — ${msg}`,
       });
     }
-  } catch {
-    media.push({ key: "naver", label: "네이버 SA", connected: false, status: "none", detail: "미등록" });
+  } catch (e) {
+    media.push({ key: "naver", label: "네이버 SA", connected: false, status: "none", detail: e instanceof NaverAdNotConfiguredError ? "고객 ID 미등록" : "미등록" });
   }
 
-  // GFA — 아직 실제 조회 API가 없어 키 저장 여부만 확인
-  const gfaKeysPresent = !!(client.gfa_api_key && client.gfa_secret && client.gfa_customer_id);
-  media.push({
-    key: "gfa",
-    label: "GFA",
-    connected: gfaKeysPresent,
-    status: gfaKeysPresent ? "ok" : "none",
-    detail: gfaKeysPresent ? "키 저장됨 (연동 API 준비 중)" : "미등록",
-  });
+  // GFA — 광고계정 번호 + 공용 네이버 계정 연결(관리 계정 헤더)로 계정·캠페인 조회 실검증
+  const gfaNo = client.gfa_customer_id?.trim();
+  if (!gfaNo) {
+    media.push({ key: "gfa", label: "GFA", connected: false, status: "none", detail: "광고계정 번호 미등록" });
+  } else if (!/^\d+$/.test(gfaNo)) {
+    media.push({ key: "gfa", label: "GFA", connected: false, status: "error", detail: `광고계정 번호 형식 오류(${gfaNo}) — 숫자로 다시 입력` });
+  } else {
+    try {
+      const creds = await getGfaCredentials(gfaNo);
+      const [account, campaigns] = await Promise.all([fetchGfaAdAccount(creds).catch(() => null), fetchGfaCampaigns(creds, 1)]);
+      media.push({
+        key: "gfa",
+        label: "GFA",
+        connected: true,
+        status: "ok",
+        detail: `${account?.name ? `${account.name} · ` : ""}광고계정 ${gfaNo} · 캠페인 ${campaigns.length >= 100 ? "100개 이상" : `${campaigns.length}개`} · 공용 연결`,
+        warning: campaigns.length === 0 ? "캠페인이 없는 계정이에요. 광고계정 번호가 맞는지 확인하세요." : account?.disabled ? "비활성화된 광고계정이에요." : undefined,
+      });
+    } catch (e) {
+      const expired = e instanceof GfaApiError && e.code === "UNAUTHORIZED";
+      media.push({
+        key: "gfa",
+        label: "GFA",
+        connected: false,
+        status: expired ? "expired" : "error",
+        detail: e instanceof GfaAuthError
+          ? `광고계정 ${gfaNo} — ${e.message}`
+          : expired
+          ? "GFA 인증 실패 — 관리자가 API 공용 키 관리에서 네이버 계정을 다시 연결해야 해요"
+          : e instanceof GfaApiError && e.code === "FORBIDDEN"
+            ? `광고계정 ${gfaNo}에 권한이 없어요 — 관리 계정 하위도 아니고 연결한 네이버 아이디가 직접 멤버인 계정도 아니에요`
+            : `광고계정 ${gfaNo} — ${e instanceof Error ? e.message : "연결 확인 실패"}`,
+      });
+    }
+  }
 
-  // 카카오모먼트 — OAuth 연결 + 광고계정 선택이 끝났으면 캠페인 목록 조회로 실검증
-  if (!client.kakao_refresh_token) {
-    media.push({ key: "kakao", label: "카카오모먼트", connected: false, status: "none", detail: "카카오 계정 미연결" });
-  } else if (!client.kakao_ad_account_id) {
-    media.push({ key: "kakao", label: "카카오모먼트", connected: false, status: "error", detail: "광고계정 미선택 — 광고주 관리에서 선택" });
+  // 조회 API가 아직 없는 매체(구글 Ads·GA4) — 광고계정 ID + (개별 키 또는 공용 키)가 있는지만 확인
+  const [gadsShared, ga4Shared] = await Promise.all([getShared("google_ads"), getShared("ga4")]);
+  const storedOnly = (key: string, label: string, accountId: string | null | undefined, ownKey: boolean, sharedKey: boolean, idLabel: string) => {
+    const id = accountId?.trim();
+    if (!id) {
+      media.push({ key, label, connected: false, status: "none", detail: `${idLabel} 미등록` });
+    } else if (!ownKey && !sharedKey) {
+      media.push({ key, label, connected: false, status: "error", detail: `${idLabel} ${id} — 공용 키가 없어요. API 공용 키 관리에서 등록하거나 개별 키를 넣으세요.` });
+    } else {
+      media.push({ key, label, connected: true, status: "ok", detail: `${idLabel} ${id} · ${ownKey ? "개별 키" : "공용 키"} (연동 API 준비 중)` });
+    }
+  };
+
+  // 카카오모먼트 — 광고계정 ID + (개별 연결 또는 공용 카카오 계정)으로 캠페인 목록 조회 실검증
+  if (!client.kakao_ad_account_id) {
+    media.push({ key: "kakao", label: "카카오모먼트", connected: false, status: "none", detail: "광고계정 ID 미등록" });
   } else {
     try {
       const creds = await ensureKakaoAccessToken(supabase, clientId, client);
       const campaigns = await fetchKakaoCampaigns(creds);
-      media.push({ key: "kakao", label: "카카오모먼트", connected: true, status: "ok", detail: `광고계정 ${creds.adAccountId} · 캠페인 ${campaigns.length.toLocaleString("ko-KR")}개 연동됨` });
+      media.push({
+        key: "kakao",
+        label: "카카오모먼트",
+        connected: true,
+        status: "ok",
+        detail: `광고계정 ${creds.adAccountId} · 캠페인 ${campaigns.length.toLocaleString("ko-KR")}개 · ${creds.shared ? "공용 카카오 계정" : "개별 연결"}`,
+      });
     } catch (e) {
-      const expired = (e instanceof KakaoAuthError && e.code === "REFRESH_EXPIRED") || (e instanceof KakaoMomentApiError && e.code === "UNAUTHORIZED");
-      media.push({ key: "kakao", label: "카카오모먼트", connected: false, status: expired ? "expired" : "error", detail: expired ? "카카오 연결 만료 — 재연결 필요" : e instanceof Error ? e.message : "연결 확인 실패" });
+      const expired = e instanceof KakaoMomentApiError && e.code === "UNAUTHORIZED";
+      const forbidden = e instanceof KakaoMomentApiError && e.code === "FORBIDDEN";
+      media.push({
+        key: "kakao",
+        label: "카카오모먼트",
+        connected: false,
+        status: expired ? "expired" : "error",
+        detail: expired
+          ? "카카오 연결 만료 — 다시 연결 필요"
+          : forbidden
+            ? `광고계정 ${client.kakao_ad_account_id}에 권한이 없어요 — 연결한 카카오 계정을 이 광고계정 멤버로 초대하거나 개별 연결하세요`
+            : e instanceof Error
+              ? e.message
+              : "연결 확인 실패",
+      });
     }
   }
 
-  // 구글 Ads — 아직 실제 조회 API가 없어 키 저장 여부만 확인
-  const googleAdsKeysPresent = !!(client.google_ads_customer_id && client.google_ads_developer_token);
-  media.push({
-    key: "google_ads",
-    label: "구글 Ads",
-    connected: googleAdsKeysPresent,
-    status: googleAdsKeysPresent ? "ok" : "none",
-    detail: googleAdsKeysPresent ? "키 저장됨 (연동 API 준비 중)" : "미등록",
-  });
-
-  // GA (Google Analytics) — 아직 실제 조회 API가 없어 키 저장 여부만 확인
-  const ga4KeysPresent = !!(client.ga4_property_id && client.ga4_service_account_json);
-  media.push({
-    key: "ga4",
-    label: "GA (Google Analytics)",
-    connected: ga4KeysPresent,
-    status: ga4KeysPresent ? "ok" : "none",
-    detail: ga4KeysPresent ? "키 저장됨 (연동 API 준비 중)" : "미등록",
-  });
+  storedOnly("google_ads", "구글 Ads", client.google_ads_customer_id, !!client.google_ads_developer_token, !!gadsShared?.config.developer_token, "Customer ID");
+  storedOnly("ga4", "GA4", client.ga4_property_id, !!client.ga4_service_account_json, !!ga4Shared?.config.service_account_json, "속성 ID");
 
   return NextResponse.json({ media, clientName: client.name });
 }

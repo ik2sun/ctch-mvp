@@ -3,16 +3,17 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { NAV, CLIENTS_NAV, ADMIN_NAV, isInCategory, type NavItem } from "./nav";
+import { NAV, ADMIN_NAV, API_KEYS_NAV, isInCategory, type NavItem } from "./nav";
 import { Wordmark } from "@/components/ui/Wordmark";
 import { useClients } from "@/features/clients/ClientContext";
 import { fmtBudget } from "@/features/clients/clientData";
+import { CurrentClientDialog } from "@/features/clients/CurrentClientDialog";
 import type { Role } from "@/lib/supabase/profile";
 
 export function Sidebar({ email, role }: { email: string; role: Role }) {
   const pathname = usePathname();
-  const { selected } = useClients();
-  const onClientsPage = pathname === CLIENTS_NAV.href;
+  const { selected, loading } = useClients();
+  const [dialogOpen, setDialogOpen] = useState(false);
 
   // 현재 경로가 속한 카테고리는 자동으로 펼침
   const [open, setOpen] = useState<Record<string, boolean>>({});
@@ -64,36 +65,37 @@ export function Sidebar({ email, role }: { email: string; role: Role }) {
         <Wordmark />
       </Link>
 
-      {/* 현재 광고주 컨텍스트 카드 */}
+      {/* 현재 광고주 — 표시만 하고, 누르면 이 광고주의 상태 점검·정보 수정 팝업 (전환은 우측 상단) */}
       <div className="p-3">
-        <Link
-          href={CLIENTS_NAV.href!}
-          className={`block rounded-lg border px-3 py-2.5 transition ${
-            onClientsPage
-              ? "border-signal bg-signal-soft"
-              : selected
-                ? "border-signal/40 bg-signal-soft/50 hover:border-signal"
-                : "border-dashed border-line hover:border-ink-faint"
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-medium tracking-wide text-signal-strong">현재 광고주</span>
-            <i className="ti ti-selector text-[14px] text-signal-strong" aria-hidden />
-          </div>
-          {selected ? (
-            <>
-              <div className="mt-0.5 truncate text-[15px] font-medium text-ink">{selected.name}</div>
-              <div className="mt-0.5 truncate text-[11px] text-ink-muted">
-                {[selected.industry, selected.monthly_budget ? `월 ${fmtBudget(selected.monthly_budget)}` : null]
-                  .filter(Boolean)
-                  .join(" · ") || "정보 없음"}
-              </div>
-            </>
-          ) : (
-            <div className="mt-0.5 text-[13px] text-ink-muted">광고주를 선택하세요</div>
-          )}
-        </Link>
+        {selected ? (
+          <button
+            type="button"
+            onClick={() => setDialogOpen(true)}
+            className="block w-full rounded-lg border border-signal/40 bg-signal-soft/50 px-3 py-2.5 text-left transition hover:border-signal"
+            title="연동 상태 점검 · 정보 수정"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-medium tracking-wide text-signal-strong">현재 광고주</span>
+              <i className="ti ti-settings text-[14px] text-signal-strong" aria-hidden />
+            </div>
+            <div className="mt-0.5 truncate text-[15px] font-medium text-ink">{selected.name}</div>
+            <div className="mt-0.5 truncate text-[11px] text-ink-muted">
+              {[selected.industry, selected.monthly_budget ? `월 ${fmtBudget(selected.monthly_budget)}` : null]
+                .filter(Boolean)
+                .join(" · ") || "정보 없음"}
+            </div>
+          </button>
+        ) : (
+          <Link
+            href="/clients?new=1"
+            className="block rounded-lg border border-dashed border-line px-3 py-2.5 transition hover:border-ink-faint"
+          >
+            <span className="text-[10px] font-medium tracking-wide text-ink-faint">현재 광고주</span>
+            <div className="mt-0.5 text-[13px] text-ink-muted">{loading ? "불러오는 중…" : "광고주를 먼저 등록하세요 →"}</div>
+          </Link>
+        )}
       </div>
+      <CurrentClientDialog open={dialogOpen} onClose={() => setDialogOpen(false)} />
 
       {/* 기능 메뉴 */}
       <nav className="flex-1 overflow-y-auto px-3 pb-3">
@@ -136,10 +138,11 @@ export function Sidebar({ email, role }: { email: string; role: Role }) {
         </div>
       </nav>
 
-      {/* 관리자 전용 */}
-      {role === "superadmin" && (
-        <div className="border-t border-line px-3 py-2">
-          {renderLeaf(ADMIN_NAV, 0)}
+      {/* 관리 메뉴 — API 공용 키: 관리자·최고관리자 / 회원 관리: 최고관리자 */}
+      {(role === "superadmin" || role === "admin") && (
+        <div className="space-y-0.5 border-t border-line px-3 py-2">
+          {renderLeaf(API_KEYS_NAV, 0)}
+          {role === "superadmin" && renderLeaf(ADMIN_NAV, 0)}
         </div>
       )}
 

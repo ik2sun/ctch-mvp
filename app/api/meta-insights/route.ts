@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { resolveMetaToken } from "@/lib/meta/token";
 import { createClient } from "@/lib/supabase/server";
 
 // 메타 Marketing API — 3계층 + 일별 추세 조회 (서버 전용)
@@ -161,7 +162,7 @@ export async function POST(req: Request) {
   }
 
   // 광고주별 토큰이 없으면 .env.local 고정 토큰을 폴백으로 사용
-  const token = client.meta_access_token?.trim() || process.env.META_ACCESS_TOKEN;
+  const { token } = await resolveMetaToken(client.meta_access_token);
   if (!token) {
     return NextResponse.json(
       { error: `'${client.name}'에 메타 액세스 토큰이 없어요. 광고주 관리에서 등록해 주세요.` },

@@ -72,7 +72,7 @@ export async function GET(req: Request) {
   const monthUntil = shiftMonths(until, -1);
 
   try {
-    const credentials = resolveNaverAdCredentials(client);
+    const credentials = await resolveNaverAdCredentials(client);
     const campaigns = await fetchAllCampaigns(credentials);
     const campaignIds = campaigns.map((c) => c.nccCampaignId);
 
