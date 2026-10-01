@@ -155,3 +155,11 @@ NMG(넥스트미디어그룹) 내부용 AI 기반 퍼포먼스 마케팅 대시�
 - **최신 정보** `briefs.ts`: 코드 시드 `briefSeed.ts`(2026-10-01 웹 조사 36건, 출처 URL 확인 — 일부는 업계 매체 출처라 요약에 표시) + DB `perf_briefs`(마이그레이션 `0019_perf_briefs.sql`, RLS on·정책 없음=service_role만). 화면 "최신 정보 업데이트"(뷰어 불가, `/api/perf-manager/briefs` POST, 1~3분·API 비용) 와 주간 크론 `/api/cron/perf-briefs`(월 00:00 UTC = 09:00 KST, vercel.json)가 Claude+웹 검색으로 새 항목을 JSON으로 받아 URL 중복 제외 후 저장. 최신 정보 목록 상위 40건은 대화 시스템 프롬프트에도 들어감
 - 광고주 브랜드 색(2026-10-01): `clients.brand_color`(#RRGGBB, **마이그레이션 `0020_client_brand_color.sql` — SQL Editor 실행 필요**). 광고주 관리 기본 정보의 "브랜드 색"(견본 12색·색 선택·hex)에서 저장 → 사이드바 현재 광고주·우측 상단 광고주 전환의 이니셜 박스 색. 비우면 이름 해시로 범주 팔레트 자동 색(`brandColorOf`), 밝은 색이면 글자 자동 어둡게(`onColor`). 마이그레이션 전에도 목록 조회·저장이 깨지지 않게 brand_color 없이 재시도
 - 대시보드 속도(2026-10-01): 요약 API 4종에 전월 동기 생략 옵션(meta-summary POST `withMonth:false`, naver·kakao·gfa GET `month=0`; 기본은 포함 — 미디어믹스 등 기존 호출 그대로). 대시보드는 비교 기준이 "전월 동기"일 때만 전월을 받고 캐시 키에 `_nm`(미디어믹스와 같은 캐시 이름이라 섞이지 않게). 요약 API 서버 메모리 캐시 10분(소유 확인 뒤 조회). 네이버 일별 근사 상위 20→8 캠페인(네이버 요청 대기열 1초 간격이라 12건≈12초 절약). dashboard-smart는 lastMonth 없을 때도 동작. 카카오는 보고서 5초/1회 제한이 근본 원인이라 최소 ~10초
+
+## 로그인·권한 (2026-10-01 개편)
+- 로그인은 **구글 계정(@nmg.co.kr)만**(`app/(auth)/login`, hd 힌트 + `/auth/callback`·미들웨어에서 도메인 외 계정 로그아웃). 비밀번호 가입 없음(`/signup`은 /login으로)
+- 워크스페이스 = 소유자(`SUPERADMIN_EMAIL` = k2s@nmg.co.kr) 데이터 하나. nmg 계정은 자동 승인 뷰어로 **읽기만**, 저장·수정·삭제·실제 예산 변경·공용 키·회원 관리는 소유자만. 회원 관리에서 거절한 계정은 거절 유지
+- DB: `0021_workspace_sharing.sql` — user_id 칸이 있는 테이블 전부 `ws_read`(user_id=`workspace_owner_id()` + `is_workspace_member()`) / `ws_insert·update·delete`(소유자 본인). 소유자 이메일은 함수 안에 하드코딩 → 바꿀 땐 env와 함께. 새 user_id 테이블을 만들면 0021의 DO 블록을 다시 실행
+- 서버: `lib/workspace.ts` — 읽기 라우트는 `.eq("user_id", await dataOwnerId(user))`, 쓰기 라우트는 첫 줄 `ownerOnly(user)`(403). 미들웨어용 순수 판정은 `lib/workspaceEmail.ts`(edge에서 admin 클라이언트 import 금지)
+- 화면: `features/workspace/WorkspaceContext.tsx` `useCanEdit()`·`EditGate`(fieldset disabled). 헤더에 "보기 전용" 표시. 그 외 화면의 저장 버튼은 RLS가 막는다(오류 문구로 표시)
+- 미들웨어는 `/api/cron/*`을 로그인 없이 통과시킨다(라우트가 `CRON_SECRET` 검증)
