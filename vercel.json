@@ -2,6 +2,7 @@
   "crons": [
     { "path": "/api/cron/competitor-rank-check", "schedule": "0 * * * *" },
     { "path": "/api/cron/brand-keyword-check", "schedule": "0 * * * *" },
-    { "path": "/api/cron/geo-citation-check", "schedule": "30 * * * *" }
+    { "path": "/api/cron/geo-citation-check", "schedule": "30 * * * *" },
+    { "path": "/api/cron/perf-briefs", "schedule": "0 0 * * 1" }
   ]
 }

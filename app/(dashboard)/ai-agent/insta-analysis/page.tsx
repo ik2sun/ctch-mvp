@@ -13,9 +13,9 @@ function KpiCard({ label, value, sub, tone }: { label: string; value: string; su
   const color = tone === "good" ? "text-good" : tone === "bad" ? "text-bad" : tone === "warn" ? "text-warn" : "text-ink";
   return (
     <div className="rounded-card border border-line bg-surface p-4">
-      <p className="text-[12px] text-ink-muted">{label}</p>
+      <p className="text-[13px] text-ink-muted">{label}</p>
       <p className={`mt-0.5 font-display text-[22px] font-semibold ${color}`}>{value}</p>
-      {sub && <p className="mt-0.5 text-[11px] text-ink-muted">{sub}</p>}
+      {sub && <p className="mt-0.5 text-[13px] text-ink-muted">{sub}</p>}
     </div>
   );
 }
@@ -95,7 +95,7 @@ export default function BrandAnalysisPage() {
     metrics && metrics.reelShare != null && metrics.reelEngagementShare != null ? metrics.reelEngagementShare - metrics.reelShare : null;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-5">
+    <div className="mx-auto w-full max-w-[1600px] space-y-6">
       {/* 계정 입력 */}
       <div className="rounded-card border border-line bg-surface p-4">
         <div className="flex flex-wrap items-center gap-2">
@@ -108,12 +108,12 @@ export default function BrandAnalysisPage() {
             className="field h-10 min-w-[240px] flex-1"
           />
           <button onClick={runAnalyze} disabled={loading} className="btn-signal h-10">
-            <i className={`ti ${loading ? "ti-loader-2 animate-spin" : "ti-search"} text-[16px]`} aria-hidden />
+            <i className={`ti ${loading ? "ti-loader-2 animate-spin" : "ti-search"} text-[17px]`} aria-hidden />
             {loading ? "분석 중…" : "분석 시작"}
           </button>
         </div>
         {error && (
-          <p className="mt-3 rounded-lg border border-bad/20 bg-bad/5 px-3.5 py-2.5 text-[13px] text-bad">{error}</p>
+          <p className="mt-3 rounded-lg border border-bad/20 bg-bad/5 px-3.5 py-2.5 text-[15px] text-bad">{error}</p>
         )}
       </div>
 
@@ -151,54 +151,54 @@ export default function BrandAnalysisPage() {
             />
           </div>
           {profile.isMock && (
-            <p className="text-[11px] text-warn">
+            <p className="text-[13px] text-warn">
               샘플 데이터예요. 서버에 APIFY_API_TOKEN을 설정하면 실제 인스타그램 데이터로 표시돼요.
             </p>
           )}
 
           {/* AI 퍼포먼스 진단 */}
-          <div className="rounded-card border border-line bg-surface p-5">
+          <div className="rounded-card border border-line bg-surface p-6">
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>
-                <span className="text-[13px] font-medium text-ink-soft">AI 퍼포먼스 진단</span>
-                <p className="text-[11px] text-ink-muted">게시물별 유형·훅·CTA 태깅과 상위/하위 패턴, 광고 소재 후보를 뽑아요</p>
+                <span className="text-[15px] font-medium text-ink-soft">AI 퍼포먼스 진단</span>
+                <p className="text-[13px] text-ink-muted">게시물별 유형·훅·CTA 태깅과 상위/하위 패턴, 광고 소재 후보를 뽑아요</p>
               </div>
-              <button onClick={runDiagnosis} disabled={aiLoading} className="btn-signal h-9 px-3 text-[13px]">
-                <i className={`ti ${aiLoading ? "ti-loader-2 animate-spin" : "ti-sparkles"} text-[15px]`} aria-hidden />
+              <button onClick={runDiagnosis} disabled={aiLoading} className="btn-signal h-9 px-3 text-[15px]">
+                <i className={`ti ${aiLoading ? "ti-loader-2 animate-spin" : "ti-sparkles"} text-[16px]`} aria-hidden />
                 {aiLoading ? "진단 중…" : diagnosis ? "다시 진단" : "AI 진단 실행"}
               </button>
             </div>
 
             {aiError && (
-              <p className="mb-3 rounded-lg border border-bad/20 bg-bad/5 px-3.5 py-2.5 text-[13px] text-bad">{aiError}</p>
+              <p className="mb-3 rounded-lg border border-bad/20 bg-bad/5 px-3.5 py-2.5 text-[15px] text-bad">{aiError}</p>
             )}
 
             {diagnosis ? (
               <div className="space-y-3">
-                <p className="text-[13px] leading-relaxed text-ink">{diagnosis.summary}</p>
+                <p className="text-[15px] leading-relaxed text-ink">{diagnosis.summary}</p>
                 <div className="grid gap-3 md:grid-cols-2">
                   <div className="rounded-lg border border-good/20 bg-good/5 p-3.5">
-                    <p className="mb-1 text-[12px] font-semibold text-good">
+                    <p className="mb-1 text-[13px] font-semibold text-good">
                       <i className="ti ti-trending-up mr-1" aria-hidden />
                       잘 되는 게시물의 공통점
                     </p>
-                    <p className="text-[13px] leading-relaxed text-ink-soft">{diagnosis.winningPattern}</p>
+                    <p className="text-[15px] leading-relaxed text-ink-soft">{diagnosis.winningPattern}</p>
                   </div>
                   <div className="rounded-lg border border-bad/20 bg-bad/5 p-3.5">
-                    <p className="mb-1 text-[12px] font-semibold text-bad">
+                    <p className="mb-1 text-[13px] font-semibold text-bad">
                       <i className="ti ti-trending-down mr-1" aria-hidden />
                       안 되는 게시물의 공통점
                     </p>
-                    <p className="text-[13px] leading-relaxed text-ink-soft">{diagnosis.losingPattern}</p>
+                    <p className="text-[15px] leading-relaxed text-ink-soft">{diagnosis.losingPattern}</p>
                   </div>
                 </div>
                 <div className="grid gap-3 md:grid-cols-2">
                   <div className="rounded-lg border border-line bg-canvas p-3.5">
-                    <p className="mb-1.5 text-[12px] font-semibold text-ink">실행 제안</p>
-                    <ol className="space-y-1.5 text-[13px] leading-relaxed text-ink-soft">
+                    <p className="mb-1.5 text-[13px] font-semibold text-ink">실행 제안</p>
+                    <ol className="space-y-1.5 text-[15px] leading-relaxed text-ink-soft">
                       {diagnosis.suggestions.map((s, i) => (
                         <li key={i} className="flex gap-2">
-                          <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-signal/15 text-[11px] font-semibold text-signal">
+                          <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-signal/15 text-[13px] font-semibold text-signal">
                             {i + 1}
                           </span>
                           <span>{s}</span>
@@ -207,14 +207,14 @@ export default function BrandAnalysisPage() {
                     </ol>
                   </div>
                   <div className="rounded-lg border border-line bg-canvas p-3.5">
-                    <p className="mb-1.5 text-[12px] font-semibold text-ink">
+                    <p className="mb-1.5 text-[13px] font-semibold text-ink">
                       <i className="ti ti-ad-2 mr-1 text-signal" aria-hidden />
                       광고 소재 후보
                     </p>
                     {diagnosis.adCandidates.length === 0 ? (
-                      <p className="text-[12px] text-ink-muted">상위 등급 게시물 중 소재화 추천이 없어요.</p>
+                      <p className="text-[13px] text-ink-muted">상위 등급 게시물 중 소재화 추천이 없어요.</p>
                     ) : (
-                      <ul className="space-y-1.5 text-[13px] text-ink-soft">
+                      <ul className="space-y-1.5 text-[15px] text-ink-soft">
                         {diagnosis.adCandidates.map((c) => {
                           const m = metrics.posts.find((p) => p.post.id === c.id);
                           return (
@@ -234,7 +234,7 @@ export default function BrandAnalysisPage() {
                 </div>
               </div>
             ) : (
-              <div className="rounded-lg border border-dashed border-line bg-canvas p-4 text-[13px] text-ink-muted">
+              <div className="rounded-lg border border-dashed border-line bg-canvas p-4 text-[15px] text-ink-muted">
                 아래 지표는 이미 계산됐어요. AI 진단을 실행하면 게시물마다 콘텐츠 유형·훅·CTA를 태깅하고, 상위·하위 게시물의 공통점과 실행 제안을 정리해요.
                 {metrics.bestSlot && (
                   <span className="mt-1 block">

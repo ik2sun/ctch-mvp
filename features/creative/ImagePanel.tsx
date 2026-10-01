@@ -133,12 +133,12 @@ export function ImagePanel() {
       <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h3 className="text-[15px] font-semibold text-gray-900">AI 이미지 생성</h3>
-            <p className="mt-0.5 text-xs text-gray-500">생성 방법을 고르세요. API 방식은 여기서 바로 만들고, 다른 도구에서 만든 이미지는 올려서 광고주별로 모아 둘 수 있어요.</p>
+            <h3 className="text-[16px] font-semibold text-gray-900">AI 이미지 생성</h3>
+            <p className="mt-0.5 text-[13px] text-gray-500">생성 방법을 고르세요. API 방식은 여기서 바로 만들고, 다른 도구에서 만든 이미지는 올려서 광고주별로 모아 둘 수 있어요.</p>
           </div>
-          <div className="flex items-center gap-2 text-xs text-gray-500">
+          <div className="flex items-center gap-2 text-[13px] text-gray-500">
             <span>광고주</span>
-            <select value={selected?.id ?? ""} onChange={(e) => selectClient(e.target.value || null)} className={`${FIELD} h-8 px-2.5 text-[12px]`}>
+            <select value={selected?.id ?? ""} onChange={(e) => selectClient(e.target.value || null)} className={`${FIELD} h-8 px-2.5 text-[13px]`}>
               <option value="">전체 (미지정)</option>
               {clients.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -171,15 +171,15 @@ export function ImagePanel() {
                       on ? "bg-gradient-to-br from-signal to-violet-500 text-white shadow-sm shadow-signal/30" : "bg-gray-100 text-gray-600"
                     }`}
                   >
-                    <i className={`ti ti-${it.icon} text-[16px]`} aria-hidden />
+                    <i className={`ti ti-${it.icon} text-[17px]`} aria-hidden />
                   </span>
-                  <span className={`ml-auto rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                  <span className={`whitespace-nowrap ml-auto rounded-full px-2 py-0.5 text-[12px] font-medium ${
                     it.mode === "upload" ? "bg-emerald-50 text-emerald-700" : missingKey ? "bg-amber-50 text-amber-700" : "bg-white/80 text-gray-500 ring-1 ring-gray-200"
                   }`}>
                     {it.mode === "upload" ? "비용 없음" : missingKey ? "키 필요" : "API"}
                   </span>
                 </div>
-                <p className={`mt-2.5 text-[13px] font-semibold leading-snug ${on ? "text-signal-strong" : "text-gray-900"}`}>{it.name}</p>
+                <p className={`mt-2.5 text-[15px] font-semibold leading-snug ${on ? "text-signal-strong" : "text-gray-900"}`}>{it.name}</p>
                 <p className={`mt-0.5 text-[11.5px] ${on ? "text-signal" : "text-gray-500"}`}>{it.tagline}</p>
               </button>
             );
@@ -193,7 +193,7 @@ export function ImagePanel() {
           </span>
         </p>
         {notReady && (
-          <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-800">
+          <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[13px] text-amber-800">
             서버에 <span className="font-mono">{m.envKey}</span>가 없어 지금은 생성할 수 없어요. .env.local(배포 환경은 Vercel 환경변수)에 키를 넣고 서버를 다시 시작해 주세요.
           </p>
         )}
@@ -209,14 +209,14 @@ export function ImagePanel() {
               className="flex min-h-[112px] cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-300 bg-gradient-to-b from-slate-50 to-white px-4 py-5 text-center text-gray-500 transition hover:border-signal/50 hover:text-signal"
             >
               <i className="ti ti-photo-up text-[22px] text-signal" aria-hidden />
-              <span className="mt-1.5 text-[13px] font-medium">{uploadFiles.length ? `${uploadFiles.length}장 선택됨 · 더 추가` : "이미지 끌어다 놓기 또는 클릭"}</span>
-              <span className="mt-0.5 text-[11px] text-gray-400">png · jpg · webp, 한 번에 20장까지</span>
+              <span className="mt-1.5 text-[15px] font-medium">{uploadFiles.length ? `${uploadFiles.length}장 선택됨 · 더 추가` : "이미지 끌어다 놓기 또는 클릭"}</span>
+              <span className="mt-0.5 text-[13px] text-gray-400">png · jpg · webp, 한 번에 20장까지</span>
               <input type="file" accept="image/png,image/jpeg,image/webp" multiple className="hidden" onChange={(e) => (addFiles(e.target.files), (e.target.value = ""))} />
             </label>
             <div>
               <label className="block">
-                <span className="mb-1 block text-[11px] font-medium text-gray-500">수정에 쓸 도구</span>
-                <select value={editTool} onChange={(e) => setEditTool(e.target.value as EditToolId)} className={`${FIELD} h-9 w-full px-3 text-[13px]`}>
+                <span className="mb-1 block text-[13px] font-medium text-gray-500">수정에 쓸 도구</span>
+                <select value={editTool} onChange={(e) => setEditTool(e.target.value as EditToolId)} className={`${FIELD} h-9 w-full px-3 text-[15px]`}>
                   {EDIT_TOOLS.map((t) => (
                     <option key={t.id} value={t.id}>
                       {t.name}
@@ -226,7 +226,7 @@ export function ImagePanel() {
                 <span className="mt-1 block text-[10.5px] leading-snug text-gray-400">도구마다 프롬프트 형식이 달라요. 수정 요청을 적으면 이 형식으로 만들어요.</span>
               </label>
               {EDIT_TOOL_BY_ID[editTool]?.api && (
-                <label className="mt-1.5 flex cursor-pointer items-center gap-2 text-[12px] text-violet-900">
+                <label className="mt-1.5 flex cursor-pointer items-center gap-2 text-[13px] text-violet-900">
                   <input
                     type="checkbox"
                     checked={editApply}
@@ -267,12 +267,12 @@ export function ImagePanel() {
               : "예) 20-30대 여성이 러닝화를 신고 도심을 달리는 역동적인 사진, 아침 햇살, 광고 캠페인 느낌"
           }
           rows={isUpload ? 2 : 3}
-          className={`${FIELD} mt-4 w-full resize-y px-3.5 py-2.5 text-[14px]`}
+          className={`${FIELD} mt-4 w-full resize-y px-3.5 py-2.5 text-[15px]`}
         />
 
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
           {!isUpload ? (
-            <div className="flex items-center gap-1.5 text-xs text-gray-500">
+            <div className="flex items-center gap-1.5 text-[13px] text-gray-500">
               <span className="mr-1">비율</span>
               {m.ratios.map((r) => (
                 <button
@@ -288,37 +288,37 @@ export function ImagePanel() {
               ))}
             </div>
           ) : (
-            <span className="text-xs text-gray-500">{progress ?? (prompt.trim() ? "업로드 후 첫 이미지로 수정 프롬프트를 만들어요." : "보관함에 올린 이미지는 카드의 '수정'으로 언제든 고칠 수 있어요.")}</span>
+            <span className="text-[13px] text-gray-500">{progress ?? (prompt.trim() ? "업로드 후 첫 이미지로 수정 프롬프트를 만들어요." : "보관함에 올린 이미지는 카드의 '수정'으로 언제든 고칠 수 있어요.")}</span>
           )}
           <button
             onClick={isUpload ? upload : generate}
             disabled={loading || notReady}
             className="inline-flex h-10 items-center gap-2 rounded-lg bg-gradient-to-r from-signal to-violet-600 px-4 text-[13.5px] font-medium text-white shadow-sm shadow-signal/25 transition hover:brightness-110 disabled:opacity-50"
           >
-            <i className={`ti ${loading ? "ti-loader-2 animate-spin" : isUpload ? "ti-upload" : "ti-sparkles"} text-[16px]`} aria-hidden />
+            <i className={`ti ${loading ? "ti-loader-2 animate-spin" : isUpload ? "ti-upload" : "ti-sparkles"} text-[17px]`} aria-hidden />
             {loading ? (isUpload ? "업로드 중…" : "생성 중… (수십 초 소요될 수 있어요)") : isUpload ? prompt.trim() ? "업로드하고 수정 프롬프트 만들기" : `${uploadFiles.length || ""}${uploadFiles.length ? "장 " : ""}업로드` : `${m.name}로 생성`}
           </button>
         </div>
 
-        {error && <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3.5 py-2.5 text-[13px] text-red-700">{error}</p>}
+        {error && <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3.5 py-2.5 text-[15px] text-red-700">{error}</p>}
       </div>
 
       <div>
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-[14px] font-semibold text-gray-900">
+          <h3 className="text-[15px] font-semibold text-gray-900">
             이미지 보관함 {selected ? <span className="font-normal text-gray-500">— {selected.name}</span> : null}
           </h3>
-          <span className="text-xs text-gray-500">{creatives.length}개</span>
+          <span className="text-[13px] text-gray-500">{creatives.length}개</span>
         </div>
 
         {listLoading ? (
-          <p className="py-8 text-center text-[14px] text-gray-500">불러오는 중…</p>
+          <p className="py-8 text-center text-[15px] text-gray-500">불러오는 중…</p>
         ) : creatives.length === 0 ? (
           <div className="flex flex-col items-center rounded-xl border border-dashed border-gray-300 bg-white py-10 text-center">
             <span className="flex h-12 w-12 items-center justify-center rounded-full bg-signal-soft text-signal">
               <i className="ti ti-photo text-[22px]" aria-hidden />
             </span>
-            <p className="mt-3 text-[14px] text-gray-500">아직 생성하거나 올린 이미지가 없어요.</p>
+            <p className="mt-3 text-[15px] text-gray-500">아직 생성하거나 올린 이미지가 없어요.</p>
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
@@ -332,25 +332,25 @@ export function ImagePanel() {
                 </a>
                 <div className="p-3">
                   <span className="inline-block rounded-full bg-signal-soft px-2 py-0.5 text-[10.5px] font-medium text-signal">{creativeSourceLabel(c.model)}</span>
-                  <p className="mt-1.5 line-clamp-2 text-[12px] leading-snug text-gray-700">{c.prompt}</p>
-                  <p className="mt-1.5 text-xs text-gray-500">{new Date(c.created_at).toLocaleDateString("ko-KR")}</p>
+                  <p className="mt-1.5 line-clamp-2 text-[13px] leading-snug text-gray-700">{c.prompt}</p>
+                  <p className="mt-1.5 text-[13px] text-gray-500">{new Date(c.created_at).toLocaleDateString("ko-KR")}</p>
                 </div>
                 <div className="absolute left-2 top-2 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
                   <button
                     type="button"
                     onClick={() => setEditing({ source: c, request: "", autoRun: false, apply: false })}
-                    className="inline-flex h-7 items-center gap-1 rounded-full bg-white/90 px-2.5 text-[11px] font-medium text-signal shadow-sm backdrop-blur hover:bg-white"
+                    className="inline-flex h-7 items-center gap-1 rounded-full bg-white/90 px-2.5 text-[13px] font-medium text-signal shadow-sm backdrop-blur hover:bg-white"
                     title="수정 요청 → 도구별 수정 프롬프트 (옵션: API로 바로 수정)"
                   >
-                    <i className="ti ti-wand text-[13px]" aria-hidden /> 수정
+                    <i className="ti ti-wand text-[15px]" aria-hidden /> 수정
                   </button>
                   <button
                     type="button"
                     onClick={() => setComposing(c)}
-                    className="inline-flex h-7 items-center gap-1 rounded-full bg-white/90 px-2.5 text-[11px] font-medium text-signal shadow-sm backdrop-blur hover:bg-white"
+                    className="inline-flex h-7 items-center gap-1 rounded-full bg-white/90 px-2.5 text-[13px] font-medium text-signal shadow-sm backdrop-blur hover:bg-white"
                     title="매체 규격·카피 입힌 광고 소재 만들기"
                   >
-                    <i className="ti ti-layout-grid text-[13px]" aria-hidden /> 광고 소재
+                    <i className="ti ti-layout-grid text-[15px]" aria-hidden /> 광고 소재
                   </button>
                 </div>
                 <button
@@ -359,7 +359,7 @@ export function ImagePanel() {
                   className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/50 text-white opacity-0 backdrop-blur transition-opacity hover:bg-red-600 group-hover:opacity-100"
                   title="삭제"
                 >
-                  <i className="ti ti-trash text-[14px]" aria-hidden />
+                  <i className="ti ti-trash text-[15px]" aria-hidden />
                 </button>
               </div>
             ))}

@@ -53,12 +53,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "서버에 ANTHROPIC_API_KEY가 없어요." }, { status: 500 });
   }
 
-  const { clientName, period, channels, combined, compare } = (await req.json()) as {
+  const { clientName, period, channels, channelCompare, combined, compare } = (await req.json()) as {
     clientName?: string;
     period?: { since: string; until: string };
     channels: ChannelInput[];
+    channelCompare?: { label: string; previous: Totals; lastMonth?: Totals }[];
     combined: Totals;
-    compare?: { previous: Totals; lastMonth: Totals } | null;
+    compare?: { previous: Totals; lastMonth?: Totals } | null;
   };
 
   if (!channels || channels.length === 0) {
@@ -70,8 +71,10 @@ export async function POST(req: Request) {
     기간: period ? `${period.since} ~ ${period.until}` : "",
     매체별: Object.fromEntries(channels.map((c) => [c.label, round(c)])),
     합계: round(combined),
-    전주비교: compare ? round(compare.previous) : null,
-    전월비교: compare ? round(compare.lastMonth) : null,
+    직전기간비교: compare ? round(compare.previous) : null,
+    전월비교: compare?.lastMonth ? round(compare.lastMonth) : null,
+    매체별_직전기간: channelCompare ? Object.fromEntries(channelCompare.map((c) => [c.label, round(c.previous)])) : null,
+    매체별_전월동기간: channelCompare?.every((c) => c.lastMonth) ? Object.fromEntries(channelCompare.map((c) => [c.label, round(c.lastMonth!)])) : null,
   };
 
   const userMsg = `${JSON.stringify(payload, null, 1)}

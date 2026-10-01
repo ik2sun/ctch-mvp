@@ -31,7 +31,7 @@ export function MetricTrendGrid({ daily }: { daily: DailyPoint[] }) {
           <div key={m.key} className="rounded-card border border-line bg-surface p-3.5">
             <div className="flex items-center gap-1.5">
               <span className="h-2 w-2 flex-shrink-0 rounded-full" style={{ background: m.color }} aria-hidden />
-              <span className="text-[12px] text-ink-muted">{m.label}</span>
+              <span className="text-[13px] text-ink-muted">{m.label}</span>
             </div>
             <p className="mt-0.5 font-display text-[17px] font-semibold text-ink">{fmt(last, m.kind)}</p>
             <div className="mt-1.5 h-[64px] w-full">
@@ -48,7 +48,7 @@ export function MetricTrendGrid({ daily }: { daily: DailyPoint[] }) {
                     contentStyle={{
                       borderRadius: 10,
                       border: "1px solid #E6E6E2",
-                      fontSize: 12,
+                      fontSize: 13,
                       fontFamily: "Pretendard, sans-serif",
                     }}
                     labelStyle={{ color: "#767C86" }}

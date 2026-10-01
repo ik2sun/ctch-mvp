@@ -40,6 +40,7 @@ async function performRequest<T>(
   path: string,
   credentials: NaverAdCredentials,
   query?: Query,
+  body?: unknown,
 ): Promise<T> {
   await scheduleSlot();
 
@@ -53,6 +54,7 @@ async function performRequest<T>(
   const res = await fetch(url.toString(), {
     method,
     headers: buildNaverAdHeaders(method, path, credentials),
+    body: body === undefined ? undefined : JSON.stringify(body),
     cache: "no-store",
   });
 
@@ -67,31 +69,32 @@ async function performRequest<T>(
   }
 
   if (!res.ok) {
-    const body = json as { type?: string; title?: string; message?: string; detail?: string } | null;
-    const isRateLimited = res.status === 429 || body?.type === "urn:naver:api:problem:toomanyrequest";
+    const problem = json as { type?: string; title?: string; message?: string; detail?: string } | null;
+    const isRateLimited = res.status === 429 || problem?.type === "urn:naver:api:problem:toomanyrequest";
     if (isRateLimited) {
       throw new NaverAdApiError("잠시 후 다시 시도해주세요.", "RATE_LIMITED");
     }
     const detail =
-      body?.title ?? body?.message ?? body?.detail ?? `네이버 검색광고 API 요청이 실패했어요. (${res.status})`;
+      problem?.title ?? problem?.message ?? problem?.detail ?? `네이버 검색광고 API 요청이 실패했어요. (${res.status})`;
     throw new NaverAdApiError(detail);
   }
 
   return json as T;
 }
 
-// 실패 시(429 포함) 3초 후 1회만 재시도한다.
+// 실패 시(429 포함) 3초 후 1회만 재시도한다. body는 쓰기 요청(PUT 등)용 — 같은 값을 다시 보내도 결과가 같은 요청만 넘길 것.
 export async function naverAdRequest<T>(
   method: "GET" | "POST" | "PUT" | "DELETE",
   path: string,
   credentials: NaverAdCredentials,
   query?: Query,
+  body?: unknown,
 ): Promise<T> {
   try {
-    return await performRequest<T>(method, path, credentials, query);
+    return await performRequest<T>(method, path, credentials, query, body);
   } catch {
     await sleep(3000);
-    return await performRequest<T>(method, path, credentials, query);
+    return await performRequest<T>(method, path, credentials, query, body);
   }
 }
 

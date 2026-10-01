@@ -19,7 +19,7 @@ const TIER_STYLE: Record<PostTier, string> = {
 
 export function TierBadge({ tier, erIndex }: { tier: PostTier; erIndex: number | null }) {
   return (
-    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium ${TIER_STYLE[tier]}`}>
+    <span className={`whitespace-nowrap inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[13px] font-medium ${TIER_STYLE[tier]}`}>
       {TIER_LABELS[tier]}
       {erIndex != null && tier !== "na" && <span className="opacity-80">{erIndex.toFixed(2)}x</span>}
     </span>
@@ -86,12 +86,12 @@ export function PostTable({
   const Th = ({ label, k, align = "right" }: { label: string; k?: SortKey; align?: "left" | "right" }) => (
     <th
       onClick={k ? () => toggleSort(k) : undefined}
-      className={`whitespace-nowrap px-2 py-2 text-[11px] font-medium text-ink-muted ${align === "left" ? "text-left" : "text-right"} ${
+      className={`whitespace-nowrap px-2 py-2 text-[13px] font-medium text-ink-muted ${align === "left" ? "text-left" : "text-right"} ${
         k ? "cursor-pointer select-none hover:text-ink" : ""
       }`}
     >
       {label}
-      {k && sortKey === k && <i className={`ti ${desc ? "ti-chevron-down" : "ti-chevron-up"} ml-0.5 text-[11px]`} aria-hidden />}
+      {k && sortKey === k && <i className={`ti ${desc ? "ti-chevron-down" : "ti-chevron-up"} ml-0.5 text-[13px]`} aria-hidden />}
     </th>
   );
 
@@ -105,9 +105,9 @@ export function PostTable({
   ];
 
   return (
-    <div className="rounded-card border border-line bg-surface p-5">
+    <div className="rounded-card border border-line bg-surface p-6">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <p className="text-[13px] font-medium text-ink-soft">
+        <p className="text-[15px] font-medium text-ink-soft">
           게시물별 성과 <span className="font-normal text-ink-muted">{rows.length}개</span>
         </p>
         <div className="flex flex-wrap gap-1">
@@ -115,7 +115,7 @@ export function PostTable({
             <button
               key={f.key}
               onClick={() => setFilter(f.key)}
-              className={`rounded-full border px-2.5 py-1 text-[11px] transition ${
+              className={`rounded-full border px-2.5 py-1 text-[13px] transition ${
                 filter === f.key ? "border-signal bg-signal-soft text-signal" : "border-line bg-surface text-ink-muted hover:text-ink"
               }`}
             >
@@ -126,7 +126,7 @@ export function PostTable({
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[720px] text-[12px]">
+        <table className="w-full min-w-[720px] text-[13px]">
           <thead>
             <tr className="border-b border-line">
               <Th label="게시물" align="left" />
@@ -173,7 +173,7 @@ export function PostTable({
             })}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={9} className="py-8 text-center text-[13px] text-ink-muted">
+                <td colSpan={9} className="py-8 text-center text-[15px] text-ink-muted">
                   조건에 맞는 게시물이 없어요.
                 </td>
               </tr>

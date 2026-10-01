@@ -45,7 +45,7 @@ function Badge({ status }: { status: SmartStatus }) {
   return (
     <span
       title={status.reason}
-      className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${t.cls}`}
+      className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-1.5 py-0.5 text-[12px] font-medium ${t.cls}`}
     >
       {t.emoji} {t.label}
     </span>
@@ -91,7 +91,7 @@ export function TreeTable({
                 className="mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border border-line text-ink-muted transition hover:border-signal hover:text-signal"
                 aria-label={open ? "접기" : "펼치기"}
               >
-                <i className={`ti ${open ? "ti-minus" : "ti-plus"} text-[11px]`} aria-hidden />
+                <i className={`ti ${open ? "ti-minus" : "ti-plus"} text-[13px]`} aria-hidden />
               </button>
             ) : (
               <span className="mt-0.5 h-4 w-4 flex-shrink-0" />
@@ -136,7 +136,7 @@ export function TreeTable({
 
   return (
     <div className="overflow-x-auto rounded-lg border border-line">
-      <table className="w-full text-left text-[12px]">
+      <table className="w-full text-left text-[13px]">
         <thead className="bg-canvas text-ink-muted">
           <tr>
             <th className="px-2 py-2 font-medium">{view === "campaign" ? "캠페인 / 광고세트 / 소재" : view === "adset" ? "광고 세트" : "광고 소재"}</th>
@@ -168,7 +168,7 @@ export function TreeTable({
                         {openA[s.id] && creatives.map((ad) => <Row key={ad.id} r={ad} depth={2} />)}
                         {openA[s.id] && creatives.length === 0 && (
                           <tr className="border-t border-line bg-canvas/40">
-                            <td colSpan={8} className="px-2 py-2 pl-12 text-[11px] text-ink-muted">
+                            <td colSpan={8} className="px-2 py-2 pl-12 text-[13px] text-ink-muted">
                               이 광고세트에 소재 데이터가 없어요.
                             </td>
                           </tr>
@@ -178,7 +178,7 @@ export function TreeTable({
                   })}
                 {openC[c.id] && sets.length === 0 && (
                   <tr className="border-t border-line">
-                    <td colSpan={8} className="px-2 py-2 pl-8 text-[11px] text-ink-muted">
+                    <td colSpan={8} className="px-2 py-2 pl-8 text-[13px] text-ink-muted">
                       이 캠페인에 광고세트 데이터가 없어요.
                     </td>
                   </tr>

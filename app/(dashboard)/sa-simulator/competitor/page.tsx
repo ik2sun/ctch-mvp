@@ -37,14 +37,14 @@ function selectValueToInterval(value: string): CheckIntervalHours {
 }
 
 function RankBadge({ check }: { check?: RankCheck }) {
-  if (!check) return <span className="text-[13px] text-ink-faint">-</span>;
+  if (!check) return <span className="text-[15px] text-ink-faint">-</span>;
   if (check.matched_rank == null) {
-    return <span className="text-[13px] text-ink-muted">10위 밖</span>;
+    return <span className="text-[15px] text-ink-muted">10위 밖</span>;
   }
   const good = check.matched_rank <= 3;
   return (
     <span
-      className={`inline-flex h-6 min-w-[36px] items-center justify-center rounded-md px-1.5 text-[13px] font-semibold ${
+      className={`inline-flex h-6 min-w-[36px] items-center justify-center rounded-md px-1.5 text-[15px] font-semibold ${
         good ? "bg-good/10 text-good" : "bg-signal-soft text-signal"
       }`}
     >
@@ -235,18 +235,18 @@ export default function CompetitorMonitorPage() {
 
   if (!clientId) {
     return (
-      <div className="mx-auto max-w-5xl">
+      <div className="mx-auto w-full max-w-[1600px] space-y-6">
         <div className="rounded-card border border-line bg-surface p-8 text-center">
-          <p className="text-[13px] text-ink-muted">먼저 상단에서 광고주를 선택해 주세요.</p>
+          <p className="text-[15px] text-ink-muted">먼저 상단에서 광고주를 선택해 주세요.</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-5">
+    <div className="mx-auto w-full max-w-[1600px] space-y-6">
       <div className="rounded-card border border-line bg-surface p-4">
-        <h3 className="mb-3 text-[15px] font-semibold text-ink">감시 키워드 추가</h3>
+        <h3 className="mb-3 text-[16px] font-semibold text-ink">감시 키워드 추가</h3>
         <div className="flex flex-wrap items-center gap-2">
           <input
             value={newKeyword}
@@ -275,14 +275,14 @@ export default function CompetitorMonitorPage() {
             ))}
           </select>
           <button onClick={handleAdd} disabled={adding} className="btn-signal h-10">
-            <i className={`ti ${adding ? "ti-loader-2 animate-spin" : "ti-plus"} text-[16px]`} aria-hidden />
+            <i className={`ti ${adding ? "ti-loader-2 animate-spin" : "ti-plus"} text-[17px]`} aria-hidden />
             추가
           </button>
         </div>
         {addError && (
-          <p className="mt-3 rounded-lg border border-bad/20 bg-bad/5 px-3.5 py-2.5 text-[13px] text-bad">{addError}</p>
+          <p className="mt-3 rounded-lg border border-bad/20 bg-bad/5 px-3.5 py-2.5 text-[15px] text-bad">{addError}</p>
         )}
-        <p className="mt-2 text-[11px] text-ink-faint">
+        <p className="mt-2 text-[13px] text-ink-faint">
           네이버 검색결과의 파워링크(검색광고) 상위 10위 전체를 실시간으로 확인해요. 화면에는 타겟 도메인의 노출 성공 여부와 순위만 보여주고,
           상위 10개 전체(업체명·URL·광고문구)는 &quot;엑셀로 내보내기&quot;에서 확인할 수 있어요. 상위 10위 안에 없으면 &quot;10위 밖&quot;으로 표시돼요.
           자동 체크 주기를 설정하면 매시 정각에 서버가 주기가 된 키워드만 골라 자동으로 다시 확인해요.
@@ -291,25 +291,25 @@ export default function CompetitorMonitorPage() {
 
       <div>
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-[15px] font-semibold text-ink">감시 중인 키워드 {selected ? `— ${selected.name}` : ""}</h3>
+          <h3 className="text-[16px] font-semibold text-ink">감시 중인 키워드 {selected ? `— ${selected.name}` : ""}</h3>
           <div className="flex items-center gap-2">
-            <span className="text-[13px] text-ink-muted">{keywords.length}개</span>
+            <span className="text-[15px] text-ink-muted">{keywords.length}개</span>
             {keywords.length > 0 && (
               <>
                 <button
                   onClick={handleExport}
                   disabled={exporting}
-                  className="flex h-8 items-center gap-1.5 rounded-lg border border-line px-3 text-[12px] font-medium text-ink-soft transition hover:bg-canvas disabled:opacity-50"
+                  className="flex h-8 items-center gap-1.5 rounded-lg border border-line px-3 text-[13px] font-medium text-ink-soft transition hover:bg-canvas disabled:opacity-50"
                 >
-                  <i className={`ti ${exporting ? "ti-loader-2 animate-spin" : "ti-file-spreadsheet"} text-[14px]`} aria-hidden />
+                  <i className={`ti ${exporting ? "ti-loader-2 animate-spin" : "ti-file-spreadsheet"} text-[15px]`} aria-hidden />
                   엑셀로 내보내기
                 </button>
                 <button
                   onClick={runCheckAll}
                   disabled={checkingAll || checkingId !== null}
-                  className="flex h-8 items-center gap-1.5 rounded-lg border border-line px-3 text-[12px] font-medium text-ink-soft transition hover:bg-canvas disabled:opacity-50"
+                  className="flex h-8 items-center gap-1.5 rounded-lg border border-line px-3 text-[13px] font-medium text-ink-soft transition hover:bg-canvas disabled:opacity-50"
                 >
-                  <i className={`ti ${checkingAll ? "ti-loader-2 animate-spin" : "ti-refresh"} text-[14px]`} aria-hidden />
+                  <i className={`ti ${checkingAll ? "ti-loader-2 animate-spin" : "ti-refresh"} text-[15px]`} aria-hidden />
                   전체 확인
                 </button>
               </>
@@ -318,20 +318,20 @@ export default function CompetitorMonitorPage() {
         </div>
 
         {exportError && (
-          <p className="mb-3 rounded-lg border border-bad/20 bg-bad/5 px-3.5 py-2.5 text-[13px] text-bad">{exportError}</p>
+          <p className="mb-3 rounded-lg border border-bad/20 bg-bad/5 px-3.5 py-2.5 text-[15px] text-bad">{exportError}</p>
         )}
 
         {listLoading ? (
-          <p className="py-8 text-center text-[14px] text-ink-muted">불러오는 중…</p>
+          <p className="py-8 text-center text-[15px] text-ink-muted">불러오는 중…</p>
         ) : keywords.length === 0 ? (
           <div className="rounded-card border border-dashed border-line bg-surface py-10 text-center">
-            <p className="text-[14px] text-ink-muted">아직 등록된 감시 키워드가 없어요.</p>
+            <p className="text-[15px] text-ink-muted">아직 등록된 감시 키워드가 없어요.</p>
           </div>
         ) : (
           <div className="overflow-hidden rounded-card border border-line bg-surface">
-            <table className="w-full text-left text-[13px]">
+            <table className="w-full text-left text-[15px]">
               <thead>
-                <tr className="border-b border-line bg-canvas text-[11px] text-ink-muted">
+                <tr className="border-b border-line bg-canvas text-[13px] text-ink-muted">
                   <th className="px-4 py-2.5 font-medium">키워드</th>
                   <th className="px-4 py-2.5 font-medium">타겟 도메인</th>
                   <th className="px-4 py-2.5 font-medium">PC 순위</th>
@@ -357,12 +357,12 @@ export default function CompetitorMonitorPage() {
                         <td className="px-4 py-3">
                           <RankBadge check={checks?.mobile} />
                         </td>
-                        <td className="px-4 py-3 text-[12px] text-ink-muted">{fmtTime(lastCheckedAt)}</td>
+                        <td className="px-4 py-3 text-[13px] text-ink-muted">{fmtTime(lastCheckedAt)}</td>
                         <td className="px-4 py-3">
                           <select
                             value={intervalToSelectValue(k.check_interval_hours)}
                             onChange={(e) => handleIntervalChange(k.id, selectValueToInterval(e.target.value))}
-                            className="field h-8 py-0 text-[12px]"
+                            className="field h-8 py-0 text-[13px]"
                           >
                             {INTERVAL_OPTIONS.map((opt) => (
                               <option key={opt.label} value={intervalToSelectValue(opt.value)}>
@@ -376,9 +376,9 @@ export default function CompetitorMonitorPage() {
                             <button
                               onClick={() => runCheck(k.id)}
                               disabled={isChecking || checkingAll}
-                              className="flex h-7 items-center gap-1 rounded-md px-2 text-[12px] font-medium text-signal transition hover:bg-signal-soft disabled:opacity-50"
+                              className="flex h-7 items-center gap-1 rounded-md px-2 text-[13px] font-medium text-signal transition hover:bg-signal-soft disabled:opacity-50"
                             >
-                              <i className={`ti ${isChecking ? "ti-loader-2 animate-spin" : "ti-search"} text-[13px]`} aria-hidden />
+                              <i className={`ti ${isChecking ? "ti-loader-2 animate-spin" : "ti-search"} text-[15px]`} aria-hidden />
                               확인
                             </button>
                             <button
@@ -386,7 +386,7 @@ export default function CompetitorMonitorPage() {
                               className="flex h-7 w-7 items-center justify-center rounded-md text-ink-faint transition hover:bg-bad/10 hover:text-bad"
                               title="삭제"
                             >
-                              <i className="ti ti-trash text-[14px]" aria-hidden />
+                              <i className="ti ti-trash text-[15px]" aria-hidden />
                             </button>
                           </div>
                         </td>
@@ -394,7 +394,7 @@ export default function CompetitorMonitorPage() {
                       {rowError[k.id] && (
                         <tr key={`${k.id}-error`}>
                           <td colSpan={7} className="px-4 pb-2">
-                            <p className="rounded-lg border border-bad/20 bg-bad/5 px-3.5 py-2 text-[12px] text-bad">
+                            <p className="rounded-lg border border-bad/20 bg-bad/5 px-3.5 py-2 text-[13px] text-bad">
                               {rowError[k.id]}
                             </p>
                           </td>

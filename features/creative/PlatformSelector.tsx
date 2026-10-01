@@ -46,11 +46,11 @@ export function PlatformSelector({
                 {on && <span className="h-2 w-2 rounded-full bg-white" />}
               </span>
             </div>
-            <p className={`mt-3 text-[14px] font-semibold ${on ? "text-signal-strong" : "text-gray-900"}`}>{p.name}</p>
-            <p className={`mt-0.5 text-[12px] ${on ? "text-signal" : "text-gray-500"}`}>{p.tagline}</p>
+            <p className={`mt-3 text-[15px] font-semibold ${on ? "text-signal-strong" : "text-gray-900"}`}>{p.name}</p>
+            <p className={`mt-0.5 text-[13px] ${on ? "text-signal" : "text-gray-500"}`}>{p.tagline}</p>
             {!compact && (
               <span
-                className={`mt-3 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                className={`whitespace-nowrap mt-3 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[12px] font-medium ${
                   p.mode === "api" ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-600"
                 }`}
               >

@@ -74,7 +74,7 @@ export function ImageCollector({ keywords, onAdd, remaining }: { keywords: strin
     <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
       <div className="flex flex-wrap items-center gap-2">
         <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-gray-600 shadow-sm">
-          <i className="ti ti-link text-[16px]" aria-hidden />
+          <i className="ti ti-link text-[17px]" aria-hidden />
         </span>
         <div className="min-w-0 flex-1">
           <input
@@ -82,16 +82,16 @@ export function ImageCollector({ keywords, onAdd, remaining }: { keywords: strin
             onChange={(e) => setUrl(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && !loading && collect()}
             placeholder="제품 상세 페이지 주소를 붙여넣으세요 (예: 공식몰 상품 페이지)"
-            className="h-9 w-full rounded-lg border border-gray-200 bg-white px-3 text-[13px] text-gray-900 placeholder:text-gray-400 outline-none focus:border-signal focus:ring-4 focus:ring-signal/10"
+            className="h-9 w-full rounded-lg border border-gray-200 bg-white px-3 text-[15px] text-gray-900 placeholder:text-gray-400 outline-none focus:border-signal focus:ring-4 focus:ring-signal/10"
           />
         </div>
         <button
           type="button"
           onClick={collect}
           disabled={loading || adding}
-          className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-signal px-4 text-[13px] font-medium text-white shadow-sm transition hover:bg-signal-strong disabled:opacity-50"
+          className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-signal px-4 text-[15px] font-medium text-white shadow-sm transition hover:bg-signal-strong disabled:opacity-50"
         >
-          <i className={`ti ${loading ? "ti-loader-2 animate-spin" : "ti-download"} text-[15px]`} aria-hidden />
+          <i className={`ti ${loading ? "ti-loader-2 animate-spin" : "ti-download"} text-[16px]`} aria-hidden />
           {loading ? "가져오는 중…" : "사진 가져오기"}
         </button>
       </div>
@@ -99,7 +99,7 @@ export function ImageCollector({ keywords, onAdd, remaining }: { keywords: strin
         페이지에서 큰 사진을 찾아 숏폼에 맞는 순서로 정렬하고, 로고·아이콘·배너는 걸러냅니다. 자바스크립트로만 그려지는 페이지는 못 읽을 수 있어요.
       </p>
 
-      {error && <p className="mt-2 text-[12px] text-red-600">{error}</p>}
+      {error && <p className="mt-2 text-[13px] text-red-600">{error}</p>}
 
       {result && (
         <div className="mt-4">
@@ -113,7 +113,7 @@ export function ImageCollector({ keywords, onAdd, remaining }: { keywords: strin
                 type="button"
                 onClick={addPicked}
                 disabled={adding || picked.size === 0}
-                className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-signal px-3 text-[12px] font-medium text-white transition hover:bg-signal-strong disabled:opacity-50"
+                className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-signal px-3 text-[13px] font-medium text-white transition hover:bg-signal-strong disabled:opacity-50"
               >
                 <i className={`ti ${adding ? "ti-loader-2 animate-spin" : "ti-plus"}`} aria-hidden />
                 {adding ? "추가하는 중…" : `선택한 ${picked.size}장 추가`}
@@ -144,7 +144,7 @@ export function ImageCollector({ keywords, onAdd, remaining }: { keywords: strin
                       className={`h-full w-full object-cover transition ${on ? "" : "opacity-85 group-hover:opacity-100"}`}
                     />
                     <span
-                      className={`absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full border-2 text-[11px] transition ${
+                      className={`absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full border-2 text-[13px] transition ${
                         on ? "border-signal bg-signal text-white" : "border-white/80 bg-black/30 text-transparent"
                       }`}
                       aria-hidden

@@ -13,7 +13,7 @@ export const BADGE_TONE: Record<BadgeTone, string> = {
 
 export function Badge({ tone, children, className = "" }: { tone: BadgeTone; children: React.ReactNode; className?: string }) {
   return (
-    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium backdrop-blur ${BADGE_TONE[tone]} ${className}`}>
+    <span className={`whitespace-nowrap inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[13px] font-medium backdrop-blur ${BADGE_TONE[tone]} ${className}`}>
       {children}
     </span>
   );
@@ -62,7 +62,7 @@ export function MediaCard({ poster, title, brand, meta, badge, duration, platfor
           </Badge>
         )}
         {duration && (
-          <span className="absolute bottom-2 right-2 rounded-md bg-black/60 px-1.5 py-0.5 font-mono text-[10px] text-white backdrop-blur">
+          <span className="whitespace-nowrap absolute bottom-2 right-2 rounded-md bg-black/60 px-1.5 py-0.5 font-mono text-[12px] text-white backdrop-blur">
             {duration}
           </span>
         )}
@@ -81,11 +81,11 @@ export function MediaCard({ poster, title, brand, meta, badge, duration, platfor
 
       <div className="flex flex-1 flex-col p-3">
         <div className="flex items-center justify-between gap-2">
-          <p className="truncate text-[11px] font-medium uppercase tracking-wide text-gray-500">{brand}</p>
-          {platform && <span className="shrink-0 text-[10px] text-gray-400">{platform}</span>}
+          <p className="truncate text-[13px] font-medium uppercase tracking-wide text-gray-500">{brand}</p>
+          {platform && <span className="shrink-0 text-[12px] text-gray-400">{platform}</span>}
         </div>
         <p className="mt-0.5 line-clamp-2 text-[13.5px] font-semibold leading-snug text-gray-900">{title}</p>
-        <p className="mt-auto pt-2 text-xs text-gray-500">{meta}</p>
+        <p className="mt-auto pt-2 text-[13px] text-gray-500">{meta}</p>
       </div>
     </button>
   );

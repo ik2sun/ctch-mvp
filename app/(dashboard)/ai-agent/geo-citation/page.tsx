@@ -169,19 +169,19 @@ export default function GeoCitationPage() {
   }, [run, answers]);
 
   if (!clientId) {
-    return <p className="mx-auto max-w-6xl rounded-card border border-line bg-surface p-8 text-center text-[13px] text-ink-muted">광고주를 먼저 선택해 주세요.</p>;
+    return <p className="mx-auto w-full max-w-[1600px] space-y-6 rounded-card border border-line bg-surface p-8 text-center text-[15px] text-ink-muted">광고주를 먼저 선택해 주세요.</p>;
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-5">
+    <div className="mx-auto w-full max-w-[1600px] space-y-6">
       {/* 헤더 */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-surface p-4">
         <div className="min-w-0">
-          <p className="text-[15px] font-semibold text-ink">
+          <p className="text-[16px] font-semibold text-ink">
             <i className="ti ti-quote mr-1.5 text-signal" aria-hidden />
             {selected?.name} · AI 인용 추적
           </p>
-          <p className="mt-0.5 text-[11px] text-ink-muted">
+          <p className="mt-0.5 text-[13px] text-ink-muted">
             비브랜드 질문 {activePrompts}개 × 엔진 {readyEngines}종을 웹 검색 켠 API로 새 세션마다 묻고, 답변 원문·인용 URL에서 자사 언급·인용을 집계해요
             {modeLabel && <> · {modeLabel}</>}
           </p>
@@ -200,17 +200,17 @@ export default function GeoCitationPage() {
             onClick={startRun}
             disabled={executing || !settings || activePrompts === 0 || measureOff}
             title={measureOff ? "설정에서 '측정 안 함'으로 되어 있어요" : undefined}
-            className="btn-signal h-9 px-3 text-[13px]"
+            className="btn-signal h-9 px-3 text-[15px]"
           >
-            <i className={`ti ${executing ? "ti-loader-2 animate-spin" : measureOff ? "ti-player-pause" : "ti-player-play"} text-[15px]`} aria-hidden />
+            <i className={`ti ${executing ? "ti-loader-2 animate-spin" : measureOff ? "ti-player-pause" : "ti-player-play"} text-[16px]`} aria-hidden />
             {executing ? "측정 중…" : measureOff ? "측정 꺼짐" : "지금 측정"}
           </button>
         </div>
       </div>
 
       {error && <ErrorBox>{error}</ErrorBox>}
-      {notice && <p className="rounded-lg border border-warn/30 bg-warn/5 px-3.5 py-2.5 text-[13px] text-ink">{notice}</p>}
-      {loading && <p className="text-center text-[12px] text-ink-muted">불러오는 중…</p>}
+      {notice && <p className="rounded-lg border border-warn/30 bg-warn/5 px-3.5 py-2.5 text-[15px] text-ink">{notice}</p>}
+      {loading && <p className="text-center text-[13px] text-ink-muted">불러오는 중…</p>}
 
       {!loading && tab === "settings" && (
         <SettingsPanel
@@ -230,8 +230,8 @@ export default function GeoCitationPage() {
         <>
           {runs.length === 0 ? (
             <div className="rounded-card border border-line bg-surface p-8 text-center">
-              <p className="text-[14px] font-medium text-ink">아직 측정 기록이 없어요</p>
-              <ol className="mx-auto mt-3 max-w-md space-y-1 text-left text-[12px] text-ink-soft">
+              <p className="text-[15px] font-medium text-ink">아직 측정 기록이 없어요</p>
+              <ol className="mx-auto mt-3 max-w-md space-y-1 text-left text-[13px] text-ink-soft">
                 <li className={settings ? "text-good" : ""}>1. 설정 — 자사 도메인·브랜드 표기·경쟁사 {settings && "✓"}</li>
                 <li className={activePrompts ? "text-good" : ""}>2. 질문 세트 — 비브랜드 질문 10~20개 (여정 4단계 분산) {activePrompts > 0 && `✓ ${activePrompts}개`}</li>
                 <li>3. 지금 측정 — 질문 20개 × 엔진 3종이면 5~10분 걸려요</li>
@@ -242,8 +242,8 @@ export default function GeoCitationPage() {
               {/* 회차 선택 */}
               <div className="flex flex-wrap items-center justify-between gap-2 rounded-card border border-line bg-surface px-4 py-3">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-[12px] text-ink-muted">측정 회차</span>
-                  <select value={runId ?? ""} onChange={(e) => setRunId(e.target.value)} className="field h-8 text-[12px]">
+                  <span className="text-[13px] text-ink-muted">측정 회차</span>
+                  <select value={runId ?? ""} onChange={(e) => setRunId(e.target.value)} className="field h-8 text-[13px]">
                     {runs.map((r) => (
                       <option key={r.id} value={r.id}>
                         {fmtDate(r.started_at)} · {r.trigger === "cron" ? "자동" : "수동"} · {r.status === "running" ? `진행 ${r.completed}/${r.total}` : r.status === "failed" ? "실패" : `${r.total}건`}
@@ -251,13 +251,13 @@ export default function GeoCitationPage() {
                     ))}
                   </select>
                   {run?.status === "running" && (
-                    <span className="flex items-center gap-2 text-[12px] text-ink-soft">
+                    <span className="flex items-center gap-2 text-[13px] text-ink-soft">
                       <span className="h-1.5 w-32 overflow-hidden rounded-full bg-canvas">
                         <span className="block h-full bg-signal transition-all" style={{ width: `${run.total ? (run.completed / run.total) * 100 : 0}%` }} />
                       </span>
                       {run.completed}/{run.total}
                       {!executing && (
-                        <button onClick={() => execute(run.id)} className="btn-ghost h-7 px-2 text-[12px]">
+                        <button onClick={() => execute(run.id)} className="btn-ghost h-7 px-2 text-[13px]">
                           이어서 실행
                         </button>
                       )}
@@ -265,8 +265,8 @@ export default function GeoCitationPage() {
                   )}
                 </div>
                 {run && run.status !== "running" && (
-                  <a href={`/api/geo-citation/export?runId=${run.id}`} className="btn-ghost h-8 px-3 text-[12px]">
-                    <i className="ti ti-file-spreadsheet text-[15px] text-good" aria-hidden />
+                  <a href={`/api/geo-citation/export?runId=${run.id}`} className="btn-ghost h-8 px-3 text-[13px]">
+                    <i className="ti ti-file-spreadsheet text-[16px] text-good" aria-hidden />
                     별첨 엑셀 · 8시트
                   </a>
                 )}
@@ -284,7 +284,7 @@ export default function GeoCitationPage() {
 
                   <Section title="엔진별 결과" desc="엔진마다 따로 집계해요. 네이버(수동 입력)는 글로벌 엔진 합계에 넣지 않아요">
                     <div className="overflow-x-auto">
-                      <table className="w-full min-w-[640px] text-[12px]">
+                      <table className="w-full min-w-[640px] text-[13px]">
                         <thead className="text-ink-muted">
                           <tr className="border-b border-line">
                             <th className="py-2 text-left font-medium">엔진</th>
@@ -303,20 +303,20 @@ export default function GeoCitationPage() {
                               <td className="py-2">
                                 <EngineName engine={s.engine} className="font-medium text-ink" />
                               </td>
-                              <td className="py-2 text-right font-mono">{s.answered}</td>
-                              <td className="py-2 text-right font-mono">{pctText(s.answered ? s.mentioned / s.answered : null)}</td>
-                              <td className="py-2 text-right font-mono">{s.firstMention}</td>
-                              <td className="py-2 text-right font-mono">{pctText(s.answered ? s.ownCited / s.answered : null)}</td>
-                              <td className="py-2 text-right font-mono">{s.avgOwnCiteRank?.toFixed(1) ?? "-"}</td>
-                              <td className="py-2 text-right font-mono text-ink-muted">{s.noCitations}</td>
-                              <td className={`py-2 text-right font-mono ${s.errors ? "text-bad" : "text-ink-muted"}`}>{s.errors}</td>
+                              <td className="py-2 text-right tabular-nums">{s.answered}</td>
+                              <td className="py-2 text-right tabular-nums">{pctText(s.answered ? s.mentioned / s.answered : null)}</td>
+                              <td className="py-2 text-right tabular-nums">{s.firstMention}</td>
+                              <td className="py-2 text-right tabular-nums">{pctText(s.answered ? s.ownCited / s.answered : null)}</td>
+                              <td className="py-2 text-right tabular-nums">{s.avgOwnCiteRank?.toFixed(1) ?? "-"}</td>
+                              <td className="py-2 text-right tabular-nums text-ink-muted">{s.noCitations}</td>
+                              <td className={`py-2 text-right tabular-nums ${s.errors ? "text-bad" : "text-ink-muted"}`}>{s.errors}</td>
                             </tr>
                           ))}
                         </tbody>
                       </table>
                     </div>
                     {view.perEngine.some((s) => s.errors > 0) && (
-                      <p className="mt-2 text-[11px] text-bad">
+                      <p className="mt-2 text-[13px] text-bad">
                         오류: {[...new Set(answers.filter((a) => a.status === "error").map((a) => a.error))].slice(0, 3).join(" / ")}
                       </p>
                     )}
@@ -341,7 +341,7 @@ export default function GeoCitationPage() {
                   <div className="grid gap-5 lg:grid-cols-5">
                     <div className="lg:col-span-3">
                       <Section title="인용 도메인 상위 20" desc="글로벌 엔진 합계 · 자사는 강조 표시">
-                        <table className="w-full text-[12px]">
+                        <table className="w-full text-[13px]">
                           <thead className="text-ink-muted">
                             <tr className="border-b border-line">
                               <th className="py-1.5 text-left font-medium">도메인</th>
@@ -360,10 +360,10 @@ export default function GeoCitationPage() {
                               <tr key={d.domain} className={d.own ? "bg-signal/5" : ""}>
                                 <td className={`max-w-[200px] truncate py-1.5 ${d.own ? "font-semibold text-signal" : "text-ink"}`}>{d.domain}</td>
                                 <td className="py-1.5 text-ink-muted">{d.type}</td>
-                                <td className="py-1.5 text-right font-mono">{d.count}</td>
-                                <td className="py-1.5 text-right font-mono text-ink-muted">{d.answers}</td>
+                                <td className="py-1.5 text-right tabular-nums">{d.count}</td>
+                                <td className="py-1.5 text-right tabular-nums text-ink-muted">{d.answers}</td>
                                 {run.engines.map((e) => (
-                                  <td key={e} className="py-1.5 text-right font-mono text-ink-soft">
+                                  <td key={e} className="py-1.5 text-right tabular-nums text-ink-soft">
                                     {d.engines[e] ?? "·"}
                                   </td>
                                 ))}
@@ -371,7 +371,7 @@ export default function GeoCitationPage() {
                             ))}
                           </tbody>
                         </table>
-                        {view.domains.length === 0 && <p className="py-4 text-center text-[12px] text-ink-muted">인용된 도메인이 없어요.</p>}
+                        {view.domains.length === 0 && <p className="py-4 text-center text-[13px] text-ink-muted">인용된 도메인이 없어요.</p>}
                       </Section>
                     </div>
                     <div className="space-y-5 lg:col-span-2">
@@ -380,9 +380,9 @@ export default function GeoCitationPage() {
                       </Section>
                       <Section title="경쟁사 동시 호명">
                         {view.comps.length === 0 ? (
-                          <p className="text-[12px] text-ink-muted">설정에 경쟁사를 등록하면 집계돼요.</p>
+                          <p className="text-[13px] text-ink-muted">설정에 경쟁사를 등록하면 집계돼요.</p>
                         ) : (
-                          <table className="w-full text-[12px]">
+                          <table className="w-full text-[13px]">
                             <thead className="text-ink-muted">
                               <tr className="border-b border-line">
                                 <th className="py-1.5 text-left font-medium">경쟁사</th>
@@ -395,9 +395,9 @@ export default function GeoCitationPage() {
                               {view.comps.map((c) => (
                                 <tr key={c.name}>
                                   <td className="py-1.5 text-ink">{c.name}</td>
-                                  <td className="py-1.5 text-right font-mono">{c.mentioned}</td>
-                                  <td className="py-1.5 text-right font-mono text-ink-soft">{c.together}</td>
-                                  <td className={`py-1.5 text-right font-mono ${c.aloneWithoutUs > 0 ? "font-semibold text-bad" : "text-ink-muted"}`}>{c.aloneWithoutUs}</td>
+                                  <td className="py-1.5 text-right tabular-nums">{c.mentioned}</td>
+                                  <td className="py-1.5 text-right tabular-nums text-ink-soft">{c.together}</td>
+                                  <td className={`py-1.5 text-right tabular-nums ${c.aloneWithoutUs > 0 ? "font-semibold text-bad" : "text-ink-muted"}`}>{c.aloneWithoutUs}</td>
                                 </tr>
                               ))}
                             </tbody>
@@ -411,10 +411,10 @@ export default function GeoCitationPage() {
                     <Section title="전 엔진 미언급 질문" desc="어느 글로벌 엔진에서도 자사가 나오지 않은 질문과 그 자리를 차지한 브랜드·출처 — 콘텐츠·외부 채널 보강 후보">
                       <ul className="divide-y divide-line">
                         {view.missing.map((m) => (
-                          <li key={m.query} className="py-2 text-[12px]">
+                          <li key={m.query} className="py-2 text-[13px]">
                             <span className="text-ink">{m.query}</span>
-                            <span className="ml-2 rounded bg-canvas px-1.5 py-px text-[10px] text-ink-soft">{m.stage}</span>
-                            <span className="mt-0.5 block text-[11px] text-ink-muted">
+                            <span className="ml-2 rounded bg-canvas px-1.5 py-px text-[12px] text-ink-soft">{m.stage}</span>
+                            <span className="mt-0.5 block text-[13px] text-ink-muted">
                               {m.competitors.length > 0 && <>호명 경쟁사 {m.competitors.join(", ")} · </>}
                               상위 인용 {m.topDomains.join(", ") || "없음"}
                             </span>
@@ -424,7 +424,7 @@ export default function GeoCitationPage() {
                     </Section>
                   )}
 
-                  <details className="rounded-card border border-line bg-surface px-5 py-3 text-[12px] text-ink-soft">
+                  <details className="rounded-card border border-line bg-surface px-5 py-3 text-[13px] text-ink-soft">
                     <summary className="cursor-pointer font-medium">측정 한계 — 보고 전에 꼭 읽어 주세요</summary>
                     <ul className="mt-2 list-disc space-y-1 pl-5">
                       <li>웹 검색을 켠 API 응답이에요. 사람이 쓰는 ChatGPT·Gemini·Claude 화면과 같지 않아요(개인화·로그인·UI 전용 기능 없음). 경향·추이 지표로 봐 주세요.</li>

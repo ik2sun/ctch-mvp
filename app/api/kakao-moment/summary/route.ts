@@ -14,6 +14,19 @@ function toTotals(m: KakaoMetrics): Totals {
   return { ...m, frequency: m.reach > 0 ? m.impressions / m.reach : 0 };
 }
 
+
+// 서버 캐시(10분) — 같은 광고주·기간·옵션은 새로고침·다른 탭에서도 바로. 같은 서버 프로세스 안에서만.
+const SUMMARY_TTL_MS = 10 * 60 * 1000;
+const summaryCache = new Map<string, { at: number; body: unknown }>();
+function cachedSummary(key: string) {
+  const hit = summaryCache.get(key);
+  return hit && Date.now() - hit.at < SUMMARY_TTL_MS ? hit.body : null;
+}
+function saveSummary(key: string, body: unknown) {
+  if (summaryCache.size > 200) summaryCache.clear();
+  summaryCache.set(key, { at: Date.now(), body });
+}
+
 export async function GET(req: Request) {
   const supabase = await createClient();
   const {
@@ -36,20 +49,29 @@ export async function GET(req: Request) {
   const prevUntil = shiftDays(until, -days);
   const monthSince = shiftMonths(since, -1);
   const monthUntil = shiftMonths(until, -1);
+  const withYear = searchParams.get("year") === "1";
+  const withMonth = searchParams.get("month") !== "0"; // 전월 동기 — 기본 포함, 대시보드는 고를 때만
+  const cacheKey = `kakao|${clientId}|${since}|${until}|${withMonth ? 1 : 0}|${withYear ? 1 : 0}`;
+  const hit = cachedSummary(cacheKey);
+  if (hit) return NextResponse.json(hit);
+  const yearSince = shiftMonths(since, -12);
+  const yearUntil = shiftMonths(until, -12);
 
   try {
     const creds = await ensureKakaoAccessToken(supabase, clientId, client);
     // 같은 광고계정의 계정 보고서는 5초에 1회만 허용되므로 클라이언트 대기열이 자동으로 간격을 둔다 (약 10~15초 소요)
-    const [curRows, prevRows, monthRows] = await Promise.all([
+    const [curRows, prevRows, monthRows, yearRows] = await Promise.all([
       fetchAccountReport(creds, { since, until, timeUnit: "DAY" }),
       fetchAccountReport(creds, { since: prevSince, until: prevUntil, timeUnit: "ALL" }),
-      fetchAccountReport(creds, { since: monthSince, until: monthUntil, timeUnit: "ALL" }),
+      withMonth ? fetchAccountReport(creds, { since: monthSince, until: monthUntil, timeUnit: "ALL" }) : Promise.resolve(null),
+      withYear ? fetchAccountReport(creds, { since: yearSince, until: yearUntil, timeUnit: "ALL" }).catch(() => null) : Promise.resolve(null),
     ]);
 
-    return NextResponse.json({
+    const body = {
       current: toTotals(sumRows(curRows)),
       previous: toTotals(sumRows(prevRows)),
-      lastMonth: toTotals(sumRows(monthRows)),
+      ...(monthRows ? { lastMonth: toTotals(sumRows(monthRows)) } : {}),
+      ...(yearRows ? { lastYear: toTotals(sumRows(yearRows)), yearPeriod: { since: yearSince, until: yearUntil } } : {}),
       daily: dailyFromRows(curRows, since, until),
       period: { since, until },
       prevPeriod: { since: prevSince, until: prevUntil },
@@ -57,7 +79,9 @@ export async function GET(req: Request) {
       clientName: client.name,
       adAccountId: creds.adAccountId,
       note: "카카오모먼트 보고서는 당일 데이터가 다음날 08:00 전까지 변동될 수 있어요. 전환·매출은 픽셀&SDK '구매' 지표(7일 기여) 기준이에요.",
-    });
+    };
+    saveSummary(cacheKey, body);
+    return NextResponse.json(body);
   } catch (e) {
     return kakaoErrorResponse(e, "카카오모먼트 요약 데이터 조회 중 오류가 발생했어요.");
   }

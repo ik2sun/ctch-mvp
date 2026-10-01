@@ -7,6 +7,7 @@ export type MediaRow = {
   checked: boolean;
   connected: boolean;
   totals: Totals | null;
+  note?: string; // 미연동 대신 보여줄 상태(예: 조회 준비 중인 매체)
 };
 
 const ZERO_TOTALS: Totals = { impressions: 0, clicks: 0, cost: 0, conversions: 0, revenue: 0, reach: 0, frequency: 0 };
@@ -22,7 +23,7 @@ function Row({ row }: { row: MediaRow }) {
 
   return (
     <tr className={`border-t border-line transition ${dim ? "opacity-50" : ""}`}>
-      <td className="px-3 py-2.5 text-[13px] font-medium text-ink">{row.label}</td>
+      <td className="px-3 py-2.5 text-[15px] font-medium text-ink">{row.label}</td>
       <Cell value={row.connected ? fmt(t.cost, "won") : "—"} dim={dim} />
       <Cell value={row.connected ? fmt(t.impressions, "int") : "—"} dim={dim} />
       <Cell value={row.connected ? fmt(t.clicks, "int") : "—"} dim={dim} />
@@ -32,12 +33,12 @@ function Row({ row }: { row: MediaRow }) {
       <Cell value={row.connected ? fmt(d.roas, "x") : "—"} dim={dim} />
       <td className="px-3 py-2.5 text-right">
         {row.connected ? (
-          <span className="inline-flex items-center gap-1 rounded-full bg-good/10 px-2 py-0.5 text-[11px] font-medium text-good">
+          <span className="whitespace-nowrap inline-flex items-center gap-1 rounded-full bg-good/10 px-2 py-0.5 text-[13px] font-medium text-good">
             ✅ 연동됨
           </span>
         ) : (
-          <span className="inline-flex items-center gap-1 rounded-full bg-canvas px-2 py-0.5 text-[11px] font-medium text-ink-muted">
-            ⚪ 미연동
+          <span className="whitespace-nowrap inline-flex items-center gap-1 rounded-full bg-canvas px-2 py-0.5 text-[13px] font-medium text-ink-muted">
+            ⚪ {row.note ?? "미연동"}
           </span>
         )}
       </td>
@@ -64,7 +65,7 @@ export function MediaBreakdownTable({ rows }: { rows: MediaRow[] }) {
 
   return (
     <div className="overflow-x-auto rounded-lg border border-line">
-      <table className="w-full text-[13px]">
+      <table className="w-full text-[15px]">
         <thead className="bg-canvas text-ink-muted">
           <tr>
             <th className="px-3 py-2 text-left font-medium">매체</th>
@@ -83,7 +84,7 @@ export function MediaBreakdownTable({ rows }: { rows: MediaRow[] }) {
             <Row key={r.key} row={r} />
           ))}
           <tr className="border-t border-line bg-canvas/60 font-semibold">
-            <td className="px-3 py-2.5 text-[13px] text-ink">합계</td>
+            <td className="px-3 py-2.5 text-[15px] text-ink">합계</td>
             <td className="px-3 py-2.5 text-right text-ink">{fmt(totalTotals.cost, "won")}</td>
             <td className="px-3 py-2.5 text-right text-ink">{fmt(totalTotals.impressions, "int")}</td>
             <td className="px-3 py-2.5 text-right text-ink">{fmt(totalTotals.clicks, "int")}</td>

@@ -9,14 +9,14 @@ import type { PostTag } from "@/features/brand-analysis/diagnosisTypes";
 const FORMAT_COLORS: Record<string, string> = { 릴스: "#ec4899", 캐러셀: "#8b5cf6", 이미지: "#3b82f6" };
 const TYPE_COLORS = ["#4F46E5", "#ec4899", "#f97316", "#10b981", "#0ea5e9", "#8b5cf6", "#f59e0b", "#94a3b8"];
 
-const TOOLTIP_STYLE = { borderRadius: 10, border: "1px solid #E6E6E2", fontSize: 12, fontFamily: "Pretendard, sans-serif" };
+const TOOLTIP_STYLE = { borderRadius: 10, border: "1px solid #E6E6E2", fontSize: 13, fontFamily: "Pretendard, sans-serif" };
 
 function Card({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-card border border-line bg-surface p-5">
+    <div className="rounded-card border border-line bg-surface p-6">
       <div className="mb-3">
-        <p className="text-[13px] font-medium text-ink-soft">{title}</p>
-        {sub && <p className="text-[11px] text-ink-muted">{sub}</p>}
+        <p className="text-[15px] font-medium text-ink-soft">{title}</p>
+        {sub && <p className="text-[13px] text-ink-muted">{sub}</p>}
       </div>
       {children}
     </div>
@@ -41,8 +41,8 @@ export function FormatBreakdown({ metrics }: { metrics: AccountMetrics }) {
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: -16 }} barGap={4}>
             <CartesianGrid stroke="#E6E6E2" vertical={false} />
-            <XAxis dataKey="name" tick={{ fontSize: 12, fill: "#767C86" }} tickLine={false} axisLine={{ stroke: "#E6E6E2" }} />
-            <YAxis tick={{ fontSize: 11, fill: "#A7ACB4" }} tickLine={false} axisLine={false} unit="%" />
+            <XAxis dataKey="name" tick={{ fontSize: 13, fill: "#767C86" }} tickLine={false} axisLine={{ stroke: "#E6E6E2" }} />
+            <YAxis tick={{ fontSize: 13, fill: "#A7ACB4" }} tickLine={false} axisLine={false} unit="%" />
             <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v) => `${v}%`} />
             <Bar dataKey="게시비중" fill="#D5D7DC" radius={[4, 4, 0, 0]} />
             <Bar dataKey="반응비중" radius={[4, 4, 0, 0]}>
@@ -53,7 +53,7 @@ export function FormatBreakdown({ metrics }: { metrics: AccountMetrics }) {
           </BarChart>
         </ResponsiveContainer>
       </div>
-      <table className="mt-2 w-full text-[12px]">
+      <table className="mt-2 w-full text-[13px]">
         <thead>
           <tr className="text-ink-muted">
             <th className="py-1 text-left font-medium">포맷</th>
@@ -85,7 +85,7 @@ export function ContentTypeBreakdown({ metrics, tags }: { metrics: AccountMetric
   if (!tags || tags.length === 0) {
     return (
       <Card title="콘텐츠 유형별 성과" sub="AI 진단을 실행하면 게시물 유형별 ER이 표시돼요">
-        <div className="flex h-[180px] items-center justify-center text-[13px] text-ink-muted">AI 진단 대기 중</div>
+        <div className="flex h-[180px] items-center justify-center text-[15px] text-ink-muted">AI 진단 대기 중</div>
       </Card>
     );
   }
@@ -114,7 +114,7 @@ export function ContentTypeBreakdown({ metrics, tags }: { metrics: AccountMetric
           <BarChart data={data} layout="vertical" margin={{ top: 4, right: 40, bottom: 0, left: 8 }}>
             <CartesianGrid stroke="#E6E6E2" horizontal={false} />
             <XAxis type="number" hide />
-            <YAxis type="category" dataKey="name" width={86} tick={{ fontSize: 11, fill: "#3B4048" }} tickLine={false} axisLine={false} />
+            <YAxis type="category" dataKey="name" width={86} tick={{ fontSize: 13, fill: "#3B4048" }} tickLine={false} axisLine={false} />
             <Tooltip
               contentStyle={TOOLTIP_STYLE}
               formatter={(v, _n, item) => [`${fmt(Number(v), "pct")} · ${item?.payload?.count}개`, "평균 ER"]}
@@ -127,7 +127,7 @@ export function ContentTypeBreakdown({ metrics, tags }: { metrics: AccountMetric
           </BarChart>
         </ResponsiveContainer>
       </div>
-      <p className="mt-1 text-[11px] text-ink-muted">계정 중앙값 ER {fmt(metrics.medianEr, "pct")}</p>
+      <p className="mt-1 text-[13px] text-ink-muted">계정 중앙값 ER {fmt(metrics.medianEr, "pct")}</p>
     </Card>
   );
 }
@@ -141,13 +141,13 @@ export function TimeHeatmap({ metrics }: { metrics: AccountMetrics }) {
         <div className="grid min-w-[360px] gap-1" style={{ gridTemplateColumns: `36px repeat(${SLOT_COUNT}, 1fr)` }}>
           <div />
           {Array.from({ length: SLOT_COUNT }).map((_, s) => (
-            <div key={s} className="text-center text-[10px] text-ink-muted">
+            <div key={s} className="text-center text-[12px] text-ink-muted">
               {slotLabel(s).replace("시", "")}
             </div>
           ))}
           {DOW_LABELS.map((d, dow) => (
             <div key={d} className="contents">
-              <div className="flex items-center text-[11px] text-ink-muted">{d}</div>
+              <div className="flex items-center text-[13px] text-ink-muted">{d}</div>
               {Array.from({ length: SLOT_COUNT }).map((_, slot) => {
                 const cell = metrics.heatmap.find((c) => c.dow === dow && c.slot === slot);
                 const intensity = cell?.avgEr != null ? Math.max(0.12, cell.avgEr / max) : 0;
@@ -160,7 +160,7 @@ export function TimeHeatmap({ metrics }: { metrics: AccountMetrics }) {
                         ? `${d}요일 ${slotLabel(slot)} · ${cell.count}개 · 평균 ER ${fmt(cell.avgEr, "pct")}`
                         : `${d}요일 ${slotLabel(slot)} · 게시 없음`
                     }
-                    className={`flex h-7 items-center justify-center rounded text-[10px] ${isBest ? "ring-2 ring-signal" : ""}`}
+                    className={`flex h-7 items-center justify-center rounded text-[12px] ${isBest ? "ring-2 ring-signal" : ""}`}
                     style={{
                       background: cell?.count ? `rgba(79, 70, 229, ${intensity})` : "#F0F0EE",
                       color: intensity > 0.55 ? "#fff" : "#767C86",
@@ -174,7 +174,7 @@ export function TimeHeatmap({ metrics }: { metrics: AccountMetrics }) {
           ))}
         </div>
       </div>
-      <p className="mt-2 text-[11px] text-ink-muted">
+      <p className="mt-2 text-[13px] text-ink-muted">
         {metrics.bestSlot
           ? `최고 성과 시간대: ${DOW_LABELS[metrics.bestSlot.dow]}요일 ${slotLabel(metrics.bestSlot.slot)} (평균 ER ${fmt(metrics.bestSlot.avgEr, "pct")}, 2개 이상 게시 기준)`
           : "같은 시간대에 2개 이상 게시된 구간이 없어 최고 시간대를 판단하기 어려워요."}
@@ -187,8 +187,8 @@ export function TimeHeatmap({ metrics }: { metrics: AccountMetrics }) {
 function BucketTable({ title, buckets, median }: { title: string; buckets: Bucket[]; median: number | null }) {
   return (
     <div>
-      <p className="mb-1 text-[12px] font-medium text-ink">{title}</p>
-      <table className="w-full text-[12px]">
+      <p className="mb-1 text-[13px] font-medium text-ink">{title}</p>
+      <table className="w-full text-[13px]">
         <tbody>
           {buckets.map((b) => {
             const idx = b.avgEr != null && median ? b.avgEr / median : null;
@@ -226,7 +226,7 @@ export function HashtagBreakdown({ metrics }: { metrics: AccountMetrics }) {
   if (metrics.hashtagPerformance.length === 0) {
     return (
       <Card title="해시태그별 성과" sub="2회 이상 사용된 태그만 집계">
-        <div className="flex h-[120px] items-center justify-center text-[13px] text-ink-muted">반복 사용된 해시태그가 없어요</div>
+        <div className="flex h-[120px] items-center justify-center text-[15px] text-ink-muted">반복 사용된 해시태그가 없어요</div>
       </Card>
     );
   }
@@ -244,9 +244,9 @@ export function HashtagBreakdown({ metrics }: { metrics: AccountMetrics }) {
                   ? "border-bad/30 bg-bad/10 text-bad"
                   : "border-line bg-canvas text-ink-soft";
           return (
-            <span key={h.tag} className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[12px] ${tone}`}>
+            <span key={h.tag} className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[13px] ${tone}`}>
               {h.tag}
-              <span className="text-[11px] opacity-80">
+              <span className="text-[13px] opacity-80">
                 {h.count}회 · {idx != null ? `${idx.toFixed(2)}x` : fmt(h.avgEr, "pct")}
               </span>
             </span>

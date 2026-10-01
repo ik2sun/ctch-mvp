@@ -11,6 +11,19 @@ function toTotals(m: GfaMetrics) {
   return { ...m, frequency: 0 };
 }
 
+
+// 서버 캐시(10분) — 같은 광고주·기간·옵션은 새로고침·다른 탭에서도 바로. 같은 서버 프로세스 안에서만.
+const SUMMARY_TTL_MS = 10 * 60 * 1000;
+const summaryCache = new Map<string, { at: number; body: unknown }>();
+function cachedSummary(key: string) {
+  const hit = summaryCache.get(key);
+  return hit && Date.now() - hit.at < SUMMARY_TTL_MS ? hit.body : null;
+}
+function saveSummary(key: string, body: unknown) {
+  if (summaryCache.size > 200) summaryCache.clear();
+  summaryCache.set(key, { at: Date.now(), body });
+}
+
 export async function GET(req: Request) {
   const supabase = await createClient();
   const {
@@ -33,18 +46,27 @@ export async function GET(req: Request) {
   const prevUntil = shiftDays(until, -days);
   const monthSince = shiftMonths(since, -1);
   const monthUntil = shiftMonths(until, -1);
+  const withYear = searchParams.get("year") === "1";
+  const withMonth = searchParams.get("month") !== "0"; // 전월 동기 — 기본 포함, 대시보드는 고를 때만
+  const cacheKey = `gfa|${clientId}|${since}|${until}|${withMonth ? 1 : 0}|${withYear ? 1 : 0}`;
+  const hit = cachedSummary(cacheKey);
+  if (hit) return NextResponse.json(hit);
+  const yearSince = shiftMonths(since, -12);
+  const yearUntil = shiftMonths(until, -12);
 
   try {
     const creds = await getGfaCredentials(client.gfa_customer_id);
-    const [curRows, prevRows, monthRows] = await Promise.all([
+    const [curRows, prevRows, monthRows, yearRows] = await Promise.all([
       fetchPastPerformance(creds, "campaigns", since, until),
       fetchPastPerformance(creds, "campaigns", prevSince, prevUntil),
-      fetchPastPerformance(creds, "campaigns", monthSince, monthUntil),
+      withMonth ? fetchPastPerformance(creds, "campaigns", monthSince, monthUntil) : Promise.resolve(null),
+      withYear ? fetchPastPerformance(creds, "campaigns", yearSince, yearUntil).catch(() => null) : Promise.resolve(null),
     ]);
-    return NextResponse.json({
+    const body = {
       current: toTotals(sumRows(curRows)),
       previous: toTotals(sumRows(prevRows)),
-      lastMonth: toTotals(sumRows(monthRows)),
+      ...(monthRows ? { lastMonth: toTotals(sumRows(monthRows)) } : {}),
+      ...(yearRows ? { lastYear: toTotals(sumRows(yearRows)), yearPeriod: { since: yearSince, until: yearUntil } } : {}),
       daily: dailyFromRows(curRows, since, until),
       period: { since, until },
       prevPeriod: { since: prevSince, until: prevUntil },
@@ -52,7 +74,9 @@ export async function GET(req: Request) {
       clientName: client.name,
       adAccountId: creds.adAccountNo,
       note: "GFA 과거 성과 기준이에요. 도달(reach)은 API에서 제공하지 않아요. 전환·매출은 전 전환 유형 합계예요.",
-    });
+    };
+    saveSummary(cacheKey, body);
+    return NextResponse.json(body);
   } catch (e) {
     return gfaErrorResponse(e, "GFA 요약 데이터 조회 중 오류가 발생했어요.");
   }

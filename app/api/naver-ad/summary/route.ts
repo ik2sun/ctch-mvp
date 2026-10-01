@@ -39,7 +39,20 @@ function sumStats(statMap: Map<string, NaverStatRaw>): Totals {
   );
 }
 
-const DAILY_TOP_N = 20;
+const DAILY_TOP_N = 8; // 일별은 근사치 — 광고비 상위 8개면 대부분을 덮고, 네이버 대기열(1초 간격) 12건을 줄인다
+
+
+// 서버 캐시(10분) — 같은 광고주·기간·옵션은 새로고침·다른 탭에서도 바로. 같은 서버 프로세스 안에서만.
+const SUMMARY_TTL_MS = 10 * 60 * 1000;
+const summaryCache = new Map<string, { at: number; body: unknown }>();
+function cachedSummary(key: string) {
+  const hit = summaryCache.get(key);
+  return hit && Date.now() - hit.at < SUMMARY_TTL_MS ? hit.body : null;
+}
+function saveSummary(key: string, body: unknown) {
+  if (summaryCache.size > 200) summaryCache.clear();
+  summaryCache.set(key, { at: Date.now(), body });
+}
 
 export async function GET(req: Request) {
   const supabase = await createClient();
@@ -70,24 +83,33 @@ export async function GET(req: Request) {
   const prevUntil = shiftDays(until, -days);
   const monthSince = shiftMonths(since, -1);
   const monthUntil = shiftMonths(until, -1);
+  const withYear = searchParams.get("year") === "1";
+  const withMonth = searchParams.get("month") !== "0"; // 전월 동기 — 기본 포함, 대시보드는 고를 때만
+  const cacheKey = `naver|${clientId}|${since}|${until}|${withMonth ? 1 : 0}|${withYear ? 1 : 0}`;
+  const hit = cachedSummary(cacheKey);
+  if (hit) return NextResponse.json(hit);
+  const yearSince = shiftMonths(since, -12);
+  const yearUntil = shiftMonths(until, -12);
 
   try {
     const credentials = await resolveNaverAdCredentials(client);
     const campaigns = await fetchAllCampaigns(credentials);
     const campaignIds = campaigns.map((c) => c.nccCampaignId);
 
-    const [curMap, prevMap, monthMap] = await Promise.all([
+    const [curMap, prevMap, monthMap, yearMap] = await Promise.all([
       fetchBulkStats(credentials, campaignIds, since, until),
       fetchBulkStats(credentials, campaignIds, prevSince, prevUntil),
-      fetchBulkStats(credentials, campaignIds, monthSince, monthUntil),
+      withMonth ? fetchBulkStats(credentials, campaignIds, monthSince, monthUntil) : Promise.resolve(null),
+      withYear ? fetchBulkStats(credentials, campaignIds, yearSince, yearUntil).catch(() => null) : Promise.resolve(null),
     ]);
 
     const daily = await buildApproxDailyTrend(credentials, curMap, since, until, DAILY_TOP_N);
 
-    return NextResponse.json({
+    const body = {
       current: sumStats(curMap),
       previous: sumStats(prevMap),
-      lastMonth: sumStats(monthMap),
+      ...(monthMap ? { lastMonth: sumStats(monthMap) } : {}),
+      ...(yearMap ? { lastYear: sumStats(yearMap), yearPeriod: { since: yearSince, until: yearUntil } } : {}),
       daily,
       period: { since, until },
       prevPeriod: { since: prevSince, until: prevUntil },
@@ -95,7 +117,9 @@ export async function GET(req: Request) {
       clientName: client.name,
       dailyApprox: campaignIds.length > DAILY_TOP_N,
       campaignCount: campaignIds.length,
-    });
+    };
+    saveSummary(cacheKey, body);
+    return NextResponse.json(body);
   } catch (e) {
     return naverErrorResponse(e, "네이버 요약 데이터 조회 중 오류가 발생했어요.");
   }

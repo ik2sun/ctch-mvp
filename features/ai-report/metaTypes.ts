@@ -17,6 +17,7 @@ export type Totals = {
   revenue: number;
   reach: number;
   frequency: number;
+  addToCart?: number; // 장바구니 담기 — 제공하는 매체만(현재 메타). 없으면 undefined(0과 구분)
 };
 
 export type MetaLevel = "campaign" | "adset" | "ad";

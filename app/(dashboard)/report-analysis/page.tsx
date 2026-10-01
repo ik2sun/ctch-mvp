@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import * as XLSX from "xlsx";
 import {
   analyzeGrid,
@@ -21,9 +21,18 @@ import {
   type SavedReport,
 } from "@/features/ai-report/reportData";
 import { getTemplate, saveTemplate } from "@/features/ai-report/templateData";
+import type { Totals } from "@/features/ai-report/metaTypes";
+import { buildInsights, colorsForNames, efficiency, type MediaSeries } from "@/features/dashboard/analysis";
+import { KpiStrip } from "@/features/dashboard/KpiStrip";
+import { MediaEfficiencyTable } from "@/features/dashboard/MediaEfficiencyTable";
+import { BudgetShareChart } from "@/features/dashboard/BudgetShareChart";
+import { InsightPanel } from "@/features/dashboard/InsightPanel";
+import { Card } from "@/features/dashboard/ui";
 
 type SheetData = { name: string; grid: unknown[][] };
 const METRIC_KEYS: MetricKey[] = ["impressions", "clicks", "cost", "conversions", "revenue"];
+
+const toTotals = (t: Record<MetricKey, number>): Totals => ({ ...t, reach: 0, frequency: 0 });
 
 export default function ReportAnalysisPage() {
   const { selected } = useClients();
@@ -51,6 +60,7 @@ export default function ReportAnalysisPage() {
   const [viewingSaved, setViewingSaved] = useState(false);
 
   const [tplMsg, setTplMsg] = useState<string | null>(null);
+  const [highlight, setHighlight] = useState<string | null>(null);
   const [showMapping, setShowMapping] = useState(false);
 
   const loadClientData = useCallback(async () => {
@@ -195,43 +205,48 @@ export default function ReportAnalysisPage() {
     loadClientData();
   }
 
-  const cards = summary
-    ? [
-        { label: "노출수", value: fmt(summary.totals.impressions, "int") },
-        { label: "클릭수", value: fmt(summary.totals.clicks, "int") },
-        { label: "광고비", value: fmt(summary.totals.cost, "won") },
-        { label: "전환수", value: fmt(summary.totals.conversions, "int") },
-        { label: "전환매출", value: fmt(summary.totals.revenue, "won") },
-        { label: "CTR", value: fmt(summary.derived.ctr, "pct") },
-        { label: "CPC", value: fmt(summary.derived.cpc, "won") },
-        { label: "CPA", value: fmt(summary.derived.cpa, "won") },
-        { label: "CVR", value: fmt(summary.derived.cvr, "pct") },
-        { label: "ROAS", value: fmt(summary.derived.roas, "x") },
-      ]
-    : [];
+  // 파일의 매체 그룹 → 대시보드와 같은 효율 계산(비교 기간·일별 없음)
+  const groupView = useMemo(() => {
+    if (groups.length < 2) return null;
+    const colors = colorsForNames(groups.map((g) => g.name));
+    const series: MediaSeries[] = groups.map((g) => ({
+      key: g.name,
+      label: g.name,
+      color: colors[g.name] ?? "",
+      current: toTotals(g.summary.totals),
+      previous: null,
+      daily: [],
+    }));
+    const eff = efficiency(series);
+    return { ...eff, insights: buildInsights(eff.rows, eff.total, null, "") };
+  }, [groups]);
 
   const hasMissing = summary && summary.missing.length > 0;
 
   return (
-    <div className="mx-auto max-w-5xl space-y-5">
+    <div className="mx-auto w-full max-w-[1600px] space-y-6">
+      <div>
+        <p className="text-[15px] text-ink-muted">파일 분석 · CSV·엑셀 리포트</p>
+        <h2 className="mt-1 text-[26px] font-bold tracking-tight text-[#1A1A1A]">{selected ? `${selected.name} 리포트 분석` : "리포트 파일 분석"}</h2>
+      </div>
       {/* 업로드 */}
       <div className="rounded-card border border-line bg-surface p-5">
-        <label className="mb-2 block text-[13px] font-medium text-ink-soft">
+        <label className="mb-2 block text-[15px] font-medium text-ink-soft">
           리포트 파일 업로드 (CSV · 엑셀)
         </label>
-        <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-line bg-canvas py-8 text-[14px] text-ink-muted transition hover:border-signal hover:text-signal">
+        <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-line bg-canvas py-8 text-[15px] text-ink-muted transition hover:border-signal hover:text-signal">
           <i className={`ti ${parsing ? "ti-loader-2 animate-spin" : "ti-upload"} text-[18px]`} aria-hidden />
           {parsing ? "파일 분석 중… (큰 파일은 시간이 걸려요)" : fileName || "클릭해서 CSV 또는 .xlsx 파일을 선택하세요"}
           <input type="file" accept=".csv,.xlsx,.xls" onChange={handleFile} className="hidden" disabled={parsing} />
         </label>
 
         {sizeWarn && (
-          <p className="mt-2 rounded-lg bg-warn/10 px-3 py-2 text-[12px] text-warn">{sizeWarn}</p>
+          <p className="mt-2 rounded-lg bg-warn/10 px-3 py-2 text-[13px] text-warn">{sizeWarn}</p>
         )}
 
         {sheets.length > 1 && !viewingSaved && (
           <div className="mt-3">
-            <p className="mb-1.5 text-[12px] text-ink-muted">
+            <p className="mb-1.5 text-[13px] text-ink-muted">
               시트 {sheets.length}개 — 분석할 시트를 선택하세요
             </p>
             <div className="flex flex-wrap gap-2">
@@ -239,7 +254,7 @@ export default function ReportAnalysisPage() {
                 <button
                   key={s.name}
                   onClick={() => selectSheet(i)}
-                  className={`rounded-lg border px-3 py-1.5 text-[13px] transition ${
+                  className={`rounded-lg border px-3 py-1.5 text-[15px] transition ${
                     activeSheet === i
                       ? "border-signal bg-signal-soft font-medium text-signal"
                       : "border-line text-ink-soft hover:border-ink-faint"
@@ -254,12 +269,12 @@ export default function ReportAnalysisPage() {
 
         {summary && (
           <div className="mt-3 flex items-center justify-between">
-            <p className="font-mono text-[11px] text-ink-muted">
+            <p className="font-mono text-[12px] text-ink-muted">
               인식 방식: {summary.mode === "pivot" ? "피벗 리포트" : "표"} · 감지된 지표:{" "}
               {summary.found.length ? summary.found.map((k) => METRIC_LABELS_KO[k]).join(", ") : "없음"}
             </p>
             {!viewingSaved && (
-              <button onClick={() => setShowMapping((v) => !v)} className="text-[12px] text-signal hover:underline">
+              <button onClick={() => setShowMapping((v) => !v)} className="text-[13px] text-signal hover:underline">
                 {showMapping ? "매핑 닫기" : "매핑 수정"}
               </button>
             )}
@@ -270,8 +285,8 @@ export default function ReportAnalysisPage() {
       {/* 매핑 수정 */}
       {summary && !viewingSaved && (showMapping || hasMissing) && (
         <div className="rounded-card border border-signal/20 bg-signal-soft/30 p-5">
-          <p className="mb-1 text-[13px] font-medium text-ink">지표 매핑</p>
-          <p className="mb-3 text-[12px] text-ink-muted">
+          <p className="mb-1 text-[15px] font-medium text-ink">지표 매핑</p>
+          <p className="mb-3 text-[13px] text-ink-muted">
             {hasMissing
               ? "일부 지표를 자동으로 못 찾았어요. 리포트에서 각 지표가 어떤 이름인지 골라주세요."
               : "각 지표가 리포트의 어떤 라벨과 연결됐는지 확인·수정할 수 있어요."}
@@ -281,10 +296,10 @@ export default function ReportAnalysisPage() {
               const detected = summary.found.includes(m);
               return (
                 <div key={m}>
-                  <label className="mb-1 flex items-center gap-1.5 text-[12px] text-ink-soft">
+                  <label className="mb-1 flex items-center gap-1.5 text-[13px] text-ink-soft">
                     {METRIC_LABELS_KO[m]}
                     {detected ? (
-                      <span className="text-good"><i className="ti ti-check text-[13px]" aria-hidden /></span>
+                      <span className="text-good"><i className="ti ti-check text-[15px]" aria-hidden /></span>
                     ) : (
                       <span className="text-warn">미인식</span>
                     )}
@@ -292,7 +307,7 @@ export default function ReportAnalysisPage() {
                   <select
                     value={labelMap[m] ?? ""}
                     onChange={(e) => setMetricLabel(m, e.target.value)}
-                    className="field h-10 text-[13px]"
+                    className="field h-10 text-[15px]"
                   >
                     <option value="">자동 감지</option>
                     {fileLabels.map((lbl) => (
@@ -305,14 +320,14 @@ export default function ReportAnalysisPage() {
           </div>
           {selected ? (
             <div className="mt-4 flex items-center gap-3">
-              <button onClick={handleSaveTemplate} className="btn-signal h-9 text-[13px]">
-                <i className="ti ti-device-floppy text-[15px]" aria-hidden />
+              <button onClick={handleSaveTemplate} className="btn-signal h-9 text-[15px]">
+                <i className="ti ti-device-floppy text-[16px]" aria-hidden />
                 {selected.name} 템플릿으로 저장
               </button>
-              {tplMsg && <span className="text-[12px] text-signal">{tplMsg}</span>}
+              {tplMsg && <span className="text-[13px] text-signal">{tplMsg}</span>}
             </div>
           ) : (
-            <p className="mt-3 text-[12px] text-ink-muted">템플릿으로 저장하려면 먼저 광고주를 선택하세요.</p>
+            <p className="mt-3 text-[13px] text-ink-muted">템플릿으로 저장하려면 먼저 광고주를 선택하세요.</p>
           )}
         </div>
       )}
@@ -320,84 +335,57 @@ export default function ReportAnalysisPage() {
       {summary && (
         <>
           {viewingSaved && (
-            <div className="flex items-center gap-2 rounded-lg border border-signal/20 bg-signal-soft px-3.5 py-2 text-[13px] text-signal">
-              <i className="ti ti-eye text-[15px]" aria-hidden />
+            <div className="flex items-center gap-2 rounded-lg border border-signal/20 bg-signal-soft px-3.5 py-2 text-[15px] text-signal">
+              <i className="ti ti-eye text-[16px]" aria-hidden />
               저장된 리포트를 보는 중이에요.
             </div>
           )}
 
-          <div className="rounded-card border border-line bg-surface p-5">
-            <div className="mb-3 flex items-center justify-between">
-              <span className="text-[13px] font-medium text-ink-soft">
-                지표 요약{" "}
-                <span className="font-normal text-ink-muted">
-                  ({summary.mode === "pivot" ? `${summary.rowCount}개 블록` : `${summary.rowCount}행`} 집계)
-                </span>
-              </span>
-            </div>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-              {cards.map((c) => (
-                <div key={c.label} className="rounded-lg bg-canvas p-3">
-                  <p className="text-[12px] text-ink-muted">{c.label}</p>
-                  <p className="mt-0.5 font-display text-[18px] font-semibold text-ink">{c.value}</p>
-                </div>
-              ))}
-            </div>
+          <div>
+            <p className="mb-2 text-[13px] text-ink-muted">
+              지표 요약 · {summary.mode === "pivot" ? `${summary.rowCount}개 블록` : `${summary.rowCount}행`} 집계
+              {viewingSaved ? " · 저장된 리포트" : sheets[activeSheet] ? ` · ${sheets[activeSheet].name}` : ""}
+            </p>
+            <KpiStrip total={toTotals(summary.totals)} totalPrev={null} daily={[]} loading={parsing} secondary />
           </div>
 
-          {/* 매체별 */}
-          {!viewingSaved && groups.length > 1 && (
-            <div className="rounded-card border border-line bg-surface p-5">
-              <p className="mb-3 text-[13px] font-medium text-ink-soft">
-                매체별 <span className="font-normal text-ink-muted">({groups.length}개 매체)</span>
-              </p>
-              <div className="overflow-x-auto rounded-lg border border-line">
-                <table className="w-full text-left text-[12px]">
-                  <thead className="bg-canvas text-ink-muted">
-                    <tr>
-                      <th className="px-3 py-2 font-medium">매체</th>
-                      <th className="px-3 py-2 text-right font-medium">노출</th>
-                      <th className="px-3 py-2 text-right font-medium">클릭</th>
-                      <th className="px-3 py-2 text-right font-medium">광고비</th>
-                      <th className="px-3 py-2 text-right font-medium">전환</th>
-                      <th className="px-3 py-2 text-right font-medium">매출</th>
-                      <th className="px-3 py-2 text-right font-medium">ROAS</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {groups.map((g) => (
-                      <tr key={g.name} className="border-t border-line">
-                        <td className="px-3 py-2 font-medium text-ink">{g.name}</td>
-                        <td className="px-3 py-2 text-right text-ink-soft">{fmt(g.summary.totals.impressions, "int")}</td>
-                        <td className="px-3 py-2 text-right text-ink-soft">{fmt(g.summary.totals.clicks, "int")}</td>
-                        <td className="px-3 py-2 text-right text-ink-soft">{fmt(g.summary.totals.cost, "won")}</td>
-                        <td className="px-3 py-2 text-right text-ink-soft">{fmt(g.summary.totals.conversions, "int")}</td>
-                        <td className="px-3 py-2 text-right text-ink-soft">{fmt(g.summary.totals.revenue, "won")}</td>
-                        <td className="px-3 py-2 text-right font-medium text-ink">{fmt(g.summary.derived.roas, "x")}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+          {/* 매체별 — 파일에 매체 컬럼이 있을 때 */}
+          {!viewingSaved && groupView && (
+            <>
+              <Card title="매체별 효율" sub={`파일에서 찾은 매체 ${groups.length}개 · 열 제목을 누르면 정렬돼요`}>
+                <MediaEfficiencyTable rows={groupView.rows} total={groupView.total} totalPrev={null} highlight={highlight} onHighlight={setHighlight} />
+              </Card>
+              <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+                <Card title="예산 비중 vs 매출 기여" sub="같은 예산으로 누가 더 많이 벌고 있나">
+                  <BudgetShareChart rows={groupView.rows} highlight={highlight} onHighlight={setHighlight} />
+                </Card>
+                <Card title="인사이트" sub="파일 수치에서 확인된 신호">
+                  <InsightPanel
+                    insights={groupView.insights}
+                    colors={Object.fromEntries(groupView.rows.map((r) => [r.series.key, r.series.color]))}
+                    onHighlight={setHighlight}
+                  />
+                </Card>
               </div>
-            </div>
+            </>
           )}
 
           {!viewingSaved && (
             <div className="rounded-card border border-line bg-surface p-5">
-              <label className="mb-2 block text-[13px] font-medium text-ink-soft">추가 컨텍스트 (선택)</label>
+              <label className="mb-2 block text-[15px] font-medium text-ink-soft">추가 컨텍스트 (선택)</label>
               <textarea
                 value={context}
                 onChange={(e) => setContext(e.target.value)}
                 rows={2}
                 placeholder="예: 7월 캠페인, 목표 ROAS 400% 이상"
-                className="mb-3 w-full resize-y rounded-lg border border-line bg-canvas p-3 text-[14px] outline-none focus:border-signal focus:ring-4 focus:ring-signal/10"
+                className="mb-3 w-full resize-y rounded-lg border border-line bg-canvas p-3 text-[15px] outline-none focus:border-signal focus:ring-4 focus:ring-signal/10"
               />
               <button onClick={generateComment} disabled={aiLoading} className="btn-signal">
-                <i className="ti ti-sparkles text-[16px]" aria-hidden />
+                <i className="ti ti-sparkles text-[17px]" aria-hidden />
                 {aiLoading ? "AI가 분석 중…" : "AI 코멘트 생성"}
               </button>
               {aiError && (
-                <p className="mt-3 rounded-lg border border-bad/20 bg-bad/5 px-3.5 py-2.5 text-[13px] text-bad">{aiError}</p>
+                <p className="mt-3 rounded-lg border border-bad/20 bg-bad/5 px-3.5 py-2.5 text-[15px] text-bad">{aiError}</p>
               )}
             </div>
           )}
@@ -406,9 +394,9 @@ export default function ReportAnalysisPage() {
             <div className="rounded-card border border-signal/15 bg-signal-soft/40 p-4">
               <div className="mb-2 flex items-center gap-1.5">
                 <span className="signal-dot" />
-                <span className="text-[13px] font-medium text-signal">AI 분석 코멘트</span>
+                <span className="text-[15px] font-medium text-signal">AI 분석 코멘트</span>
               </div>
-              <div className="whitespace-pre-wrap text-[14px] leading-relaxed text-ink-soft">{comment}</div>
+              <div className="whitespace-pre-wrap text-[15px] leading-relaxed text-ink-soft">{comment}</div>
             </div>
           )}
 
@@ -416,26 +404,26 @@ export default function ReportAnalysisPage() {
             <div className="rounded-card border border-line bg-surface p-5">
               {selected ? (
                 <>
-                  <p className="mb-3 text-[13px] font-medium text-ink-soft">
+                  <p className="mb-3 text-[15px] font-medium text-ink-soft">
                     <span className="text-signal">{selected.name}</span> 광고주로 저장
                   </p>
                   <div className="flex flex-wrap items-end gap-3">
                     <div className="min-w-[200px] flex-1">
-                      <label className="mb-1.5 block text-[12px] text-ink-muted">리포트 이름</label>
-                      <input value={title} onChange={(e) => setTitle(e.target.value)} className="field h-10 text-[14px]" />
+                      <label className="mb-1.5 block text-[13px] text-ink-muted">리포트 이름</label>
+                      <input value={title} onChange={(e) => setTitle(e.target.value)} className="field h-10 text-[15px]" />
                     </div>
                     <div>
-                      <label className="mb-1.5 block text-[12px] text-ink-muted">기준일 (선택)</label>
-                      <input type="date" value={reportDate} onChange={(e) => setReportDate(e.target.value)} className="field h-10 text-[14px]" />
+                      <label className="mb-1.5 block text-[13px] text-ink-muted">기준일 (선택)</label>
+                      <input type="date" value={reportDate} onChange={(e) => setReportDate(e.target.value)} className="field h-10 text-[15px]" />
                     </div>
                     <button onClick={handleSave} disabled={saving} className="btn-signal h-10">
                       {saving ? "저장 중…" : "이 리포트 저장"}
                     </button>
                   </div>
-                  {saveMsg && <p className="mt-2 text-[13px] text-signal">{saveMsg}</p>}
+                  {saveMsg && <p className="mt-2 text-[15px] text-signal">{saveMsg}</p>}
                 </>
               ) : (
-                <p className="text-[13px] text-ink-muted">저장하려면 먼저 상단에서 광고주를 선택하세요.</p>
+                <p className="text-[15px] text-ink-muted">저장하려면 먼저 상단에서 광고주를 선택하세요.</p>
               )}
             </div>
           )}
@@ -446,14 +434,14 @@ export default function ReportAnalysisPage() {
       {selected && (
         <div>
           <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-[15px] font-semibold text-ink">
+            <h3 className="text-[16px] font-semibold text-ink">
               저장된 리포트 <span className="font-normal text-ink-muted">· {selected.name}</span>
             </h3>
-            <span className="text-[13px] text-ink-muted">{savedList.length}건</span>
+            <span className="text-[15px] text-ink-muted">{savedList.length}건</span>
           </div>
           {savedList.length === 0 ? (
             <div className="rounded-card border border-dashed border-line bg-surface py-8 text-center">
-              <p className="text-[14px] text-ink-muted">이 광고주로 저장된 리포트가 아직 없어요.</p>
+              <p className="text-[15px] text-ink-muted">이 광고주로 저장된 리포트가 아직 없어요.</p>
             </div>
           ) : (
             <div className="space-y-2">
@@ -461,12 +449,12 @@ export default function ReportAnalysisPage() {
                 <div key={r.id} className="flex items-center gap-3 rounded-card border border-line bg-surface px-4 py-3">
                   <button onClick={() => openSaved(r)} className="min-w-0 flex-1 text-left">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-[14px] font-medium text-ink">{r.title}</span>
+                      <span className="text-[15px] font-medium text-ink">{r.title}</span>
                       {r.sheet_name && (
-                        <span className="rounded bg-canvas px-1.5 py-0.5 text-[11px] text-ink-muted">{r.sheet_name}</span>
+                        <span className="rounded bg-canvas px-1.5 py-0.5 text-[12px] text-ink-muted">{r.sheet_name}</span>
                       )}
                     </div>
-                    <p className="mt-0.5 text-[12px] text-ink-muted">
+                    <p className="mt-0.5 text-[13px] text-ink-muted">
                       {r.report_date ? `기준일 ${r.report_date} · ` : ""}
                       ROAS {fmt(r.summary?.derived?.roas ?? null, "x")} · 저장{" "}
                       {new Date(r.created_at).toLocaleDateString("ko-KR")}
@@ -477,7 +465,7 @@ export default function ReportAnalysisPage() {
                     className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg border border-line text-ink-muted transition hover:border-bad hover:text-bad"
                     title="삭제"
                   >
-                    <i className="ti ti-trash text-[15px]" aria-hidden />
+                    <i className="ti ti-trash text-[16px]" aria-hidden />
                   </button>
                 </div>
               ))}

@@ -56,7 +56,7 @@ export default function LoginPage() {
             <br />
             하나의 판단으로.
           </p>
-          <p className="mt-3 max-w-sm text-[15px] leading-relaxed text-white/55">
+          <p className="mt-3 max-w-sm text-[16px] leading-relaxed text-white/55">
             미디어믹스·UTM·AI 리포트까지. 매체마다 흩어진 퍼포먼스 데이터를
             CTCH가 한 화면에서 캐치합니다.
           </p>
@@ -69,14 +69,14 @@ export default function LoginPage() {
           <div className="mb-10">
             <Wordmark size="lg" />
             <h1 className="mt-6 text-[22px] font-semibold text-ink">다시 오셨네요</h1>
-            <p className="mt-1.5 text-[15px] text-ink-muted">
+            <p className="mt-1.5 text-[16px] text-ink-muted">
               계정으로 로그인해 대시보드를 이어가세요.
             </p>
           </div>
 
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
-              <label className="mb-1.5 block text-[13px] font-medium text-ink-soft">
+              <label className="mb-1.5 block text-[15px] font-medium text-ink-soft">
                 이메일
               </label>
               <input
@@ -89,7 +89,7 @@ export default function LoginPage() {
               />
             </div>
             <div>
-              <label className="mb-1.5 block text-[13px] font-medium text-ink-soft">
+              <label className="mb-1.5 block text-[15px] font-medium text-ink-soft">
                 비밀번호
               </label>
               <input
@@ -103,7 +103,7 @@ export default function LoginPage() {
             </div>
 
             {error && (
-              <p className="rounded-lg border border-bad/20 bg-bad/5 px-3.5 py-2.5 text-[13px] text-bad">
+              <p className="rounded-lg border border-bad/20 bg-bad/5 px-3.5 py-2.5 text-[15px] text-bad">
                 {error}
               </p>
             )}
@@ -115,16 +115,16 @@ export default function LoginPage() {
 
           <div className="my-4 flex items-center gap-3">
             <span className="h-px flex-1 bg-line" aria-hidden />
-            <span className="text-[12px] text-ink-faint">또는</span>
+            <span className="text-[13px] text-ink-faint">또는</span>
             <span className="h-px flex-1 bg-line" aria-hidden />
           </div>
 
           <button onClick={handleGoogleLogin} type="button" className="btn-ghost w-full">
-            <i className="ti ti-brand-google text-[16px]" aria-hidden />
+            <i className="ti ti-brand-google text-[17px]" aria-hidden />
             구글로 로그인
           </button>
 
-          <p className="mt-6 text-center text-[14px] text-ink-muted">
+          <p className="mt-6 text-center text-[15px] text-ink-muted">
             아직 계정이 없으신가요?{" "}
             <Link href="/signup" className="font-medium text-signal hover:underline">
               가입하기

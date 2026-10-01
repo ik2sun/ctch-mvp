@@ -1,14 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { fmt } from "@/features/ai-report/calcMetrics";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ReportRenderer } from "@/features/ai-report/ReportRenderer";
 import { TreeTable } from "@/features/ai-report/TreeTable";
-import { TrendChart } from "@/features/ai-report/TrendChart";
-import { MetricTrendGrid } from "@/features/ai-report/MetricTrendGrid";
-import { ComparisonRows } from "@/features/ai-report/DeltaBadge";
 import {
-  derive,
   metaRowsToSummary,
   TAG_META,
   type MetaHierarchy,
@@ -19,6 +14,12 @@ import { saveReport } from "@/features/ai-report/reportData";
 import { ReportConfigPanel } from "@/features/ai-report/components/ReportConfigPanel";
 import type { ReportConfig } from "@/features/ai-report/reportConfig";
 import { getSessionCache, setSessionCache } from "@/features/dashboard/sessionCache";
+import { MEDIA_COLORS, buildInsights, efficiency, rowsToSeries, type MediaSeries } from "@/features/dashboard/analysis";
+import { KpiStrip } from "@/features/dashboard/KpiStrip";
+import { BudgetShareChart } from "@/features/dashboard/BudgetShareChart";
+import { DailyRoasChart, DailySpendChart } from "@/features/dashboard/DailyMediaCharts";
+import { InsightPanel } from "@/features/dashboard/InsightPanel";
+import { Card, MediaChip, Segmented } from "@/features/dashboard/ui";
 
 function daysAgo(n: number): string {
   const d = new Date();
@@ -28,12 +29,24 @@ function daysAgo(n: number): string {
 
 type TabKey = "campaign" | "adset" | "ad" | "ai";
 
-const TABS: { key: TabKey; label: string; icon: string; color: string }[] = [
-  { key: "campaign", label: "캠페인", icon: "ti-speakerphone", color: "#2a78d6" },
-  { key: "adset", label: "광고세트", icon: "ti-layout-grid", color: "#eb6834" },
-  { key: "ad", label: "광고소재", icon: "ti-photo", color: "#1baf7a" },
-  { key: "ai", label: "AI 분석", icon: "ti-sparkles", color: "#4a3aa7" },
+const TABS: { key: TabKey; label: string; icon: string }[] = [
+  { key: "campaign", label: "캠페인", icon: "ti-speakerphone" },
+  { key: "adset", label: "광고세트", icon: "ti-layout-grid" },
+  { key: "ad", label: "광고소재", icon: "ti-photo" },
+  { key: "ai", label: "AI 분석", icon: "ti-sparkles" },
 ];
+
+const PRESETS = [
+  { key: "7", label: "7일", days: 7 },
+  { key: "14", label: "14일", days: 14 },
+  { key: "30", label: "30일", days: 30 },
+] as const;
+
+function shortDate(s?: string) {
+  if (!s) return "";
+  const d = new Date(`${s}T00:00:00`);
+  return `${d.getMonth() + 1}.${d.getDate()}`;
+}
 
 type Channel = "meta" | "naver" | "kakao" | "gfa";
 
@@ -72,6 +85,8 @@ export default function AiReportPage() {
   const handleConfigChange = useCallback((c: ReportConfig) => setReportConfig(c), []);
 
   const [activeTab, setActiveTab] = useState<TabKey>("campaign");
+  const [compareBase, setCompareBase] = useState<"prev" | "month">("prev");
+  const [highlight, setHighlight] = useState<string | null>(null);
   const [channel, setChannel] = useState<Channel>("meta");
   const channelDef = CHANNELS.find((c) => c.key === channel) ?? CHANNELS[0];
 
@@ -233,210 +248,234 @@ export default function AiReportPage() {
   }
 
   const summary = data ? metaRowsToSummary(data.campaigns) : null;
-  const prevTotals = data?.compare?.previous;
-  const monTotals = data?.compare?.lastMonth;
-  const prevDerived = prevTotals ? derive(prevTotals) : null;
-  const monDerived = monTotals ? derive(monTotals) : null;
+  const chColor = MEDIA_COLORS[channel];
+  const compareShort = compareBase === "prev" ? "직전 기간" : "전월 동기간";
+  const compareLabel = `${compareShort} 대비`;
+  const preset = PRESETS.find((p) => since === daysAgo(p.days) && until === daysAgo(1))?.key ?? null;
+  const periodText = data?.period ? `${shortDate(data.period.since)} ~ ${shortDate(data.period.until)}` : "";
 
-  const cards = summary
-    ? [
-        { label: "광고비", value: fmt(summary.totals.cost, "won"), cur: summary.totals.cost, prev: prevTotals?.cost ?? 0, mon: monTotals?.cost ?? 0, inverse: true },
-        { label: "노출수", value: fmt(summary.totals.impressions, "int"), cur: summary.totals.impressions, prev: prevTotals?.impressions ?? 0, mon: monTotals?.impressions ?? 0 },
-        { label: "클릭수", value: fmt(summary.totals.clicks, "int"), cur: summary.totals.clicks, prev: prevTotals?.clicks ?? 0, mon: monTotals?.clicks ?? 0 },
-        { label: "전환수", value: fmt(summary.totals.conversions, "int"), cur: summary.totals.conversions, prev: prevTotals?.conversions ?? 0, mon: monTotals?.conversions ?? 0 },
-        { label: "CTR", value: fmt(summary.derived.ctr, "pct"), cur: summary.derived.ctr ?? 0, prev: prevDerived?.ctr ?? 0, mon: monDerived?.ctr ?? 0 },
-        { label: "CPA", value: fmt(summary.derived.cpa, "won"), cur: summary.derived.cpa ?? 0, prev: prevDerived?.cpa ?? 0, mon: monDerived?.cpa ?? 0, inverse: true },
-        { label: "전환매출", value: fmt(summary.totals.revenue, "won"), cur: summary.totals.revenue, prev: prevTotals?.revenue ?? 0, mon: monTotals?.revenue ?? 0 },
-        { label: "ROAS", value: fmt(summary.derived.roas, "x"), cur: summary.derived.roas ?? 0, prev: prevDerived?.roas ?? 0, mon: monDerived?.roas ?? 0 },
-      ]
-    : [];
+  // 매체 단위 시리즈(비교 기간 포함) + 캠페인 단위 시리즈(상위 8 + 기타)
+  const view = useMemo(() => {
+    if (!data || !summary) return null;
+    const t = summary.totals;
+    const channelSeries: MediaSeries = {
+      key: channel,
+      label: channelDef.label,
+      color: chColor,
+      current: { impressions: t.impressions, clicks: t.clicks, cost: t.cost, conversions: t.conversions, revenue: t.revenue, reach: 0, frequency: 0 },
+      previous: (compareBase === "prev" ? data.compare?.previous : data.compare?.lastMonth) ?? null,
+      daily: data.daily ?? [],
+    };
+    const ch = efficiency([channelSeries]);
+    const camp = efficiency(rowsToSeries(data.campaigns));
+    const seen = new Set<string>();
+    const insights = [
+      ...buildInsights(ch.rows, ch.total, ch.totalPrev, compareLabel),
+      ...buildInsights(camp.rows, camp.total, null, compareLabel, "캠페인"),
+    ]
+      .filter((i) => (seen.has(i.id) ? false : (seen.add(i.id), true)))
+      .sort((a, b) => b.weight - a.weight)
+      .slice(0, 6);
+    return { channelSeries, ch, camp, insights };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, compareBase, channel]);
+
+  const pickPreset = (days: number) => {
+    const s = daysAgo(days);
+    setSince(s);
+    setUntil(daysAgo(1));
+    fetchData(s, daysAgo(1), channel);
+  };
 
   return (
-    <div className="mx-auto max-w-6xl space-y-5">
-      {/* 매체 채널 전환 */}
-      <div className="flex items-center gap-1.5">
-        {CHANNELS.map((c) => (
-          <button
-            key={c.key}
-            onClick={() => setChannel(c.key)}
-            className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[13px] transition ${
-              channel === c.key
-                ? "border-signal bg-signal-soft font-medium text-signal"
-                : "border-line text-ink-soft hover:border-ink-faint"
-            }`}
-          >
-            <i className={`ti ${c.icon} text-[15px]`} aria-hidden />
-            {c.label}
-          </button>
-        ))}
-      </div>
-
-      {/* 광고주별 리포트 설정 */}
-      {selected && (
-        <ReportConfigPanel
-          key={selected.id}
-          clientId={selected.id}
-          clientName={selected.name}
-          onChange={handleConfigChange}
-        />
-      )}
-
-      {/* 조회 컨트롤 */}
-      <div className="rounded-card border border-line bg-surface p-4">
-        {!selected ? (
-          <p className="text-[13px] text-ink-muted">먼저 상단에서 광고주를 선택해 주세요.</p>
-        ) : channel === "meta" && !selected.meta_account_id ? (
-          <p className="rounded-lg bg-warn/10 px-3.5 py-2.5 text-[13px] text-warn">
-            {selected.name}에 메타 광고계정 ID가 없어요. 광고주 관리에서 등록해 주세요.
-          </p>
-        ) : (
+    <div className="mx-auto w-full max-w-[1600px] space-y-6">
+      {/* 헤더 */}
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-[15px] text-ink-muted">실시간 리포트 · 매체 API</p>
+          <h2 className="mt-1 text-[26px] font-bold tracking-tight text-[#1A1A1A]">
+            {selected ? `${selected.name} · ${channelDef.label}` : "광고주를 선택해 주세요"}
+          </h2>
+        </div>
+        {selected && canFetch && (
           <div className="flex flex-wrap items-center gap-2">
-            <i className={`ti ${channelDef.icon} text-[18px] text-signal`} aria-hidden />
-            <span className="mr-1 text-[13px] font-medium text-ink-soft">{selected.name}</span>
-            <input type="date" value={since} onChange={(e) => setSince(e.target.value)} className="field h-9 w-auto text-[13px]" />
+            <input
+              type="date"
+              value={since}
+              onChange={(e) => setSince(e.target.value)}
+              className="field h-[34px] w-auto px-2.5 text-[15px]"
+              aria-label="시작일"
+            />
             <span className="text-ink-faint">~</span>
-            <input type="date" value={until} onChange={(e) => setUntil(e.target.value)} className="field h-9 w-auto text-[13px]" />
-            {[
-              { label: "7일", s: daysAgo(7) },
-              { label: "14일", s: daysAgo(14) },
-              { label: "30일", s: daysAgo(30) },
-            ].map((p) => (
-              <button
-                key={p.label}
-                onClick={() => {
-                  setSince(p.s);
-                  setUntil(daysAgo(1));
-                  fetchData(p.s, daysAgo(1), channel);
-                }}
-                className="rounded-lg border border-line px-2.5 py-1.5 text-[12px] text-ink-soft transition hover:border-signal hover:text-signal"
-              >
-                {p.label}
-              </button>
-            ))}
-            <button onClick={() => fetchData(since, until, channel, true)} disabled={loading} className="btn-signal h-9 px-3 text-[13px]">
+            <input
+              type="date"
+              value={until}
+              onChange={(e) => setUntil(e.target.value)}
+              className="field h-[34px] w-auto px-2.5 text-[15px]"
+              aria-label="종료일"
+            />
+            <Segmented value={preset} options={PRESETS.map((p) => ({ key: p.key, label: p.label }))} onChange={(k) => pickPreset(PRESETS.find((p) => p.key === k)!.days)} />
+            <button
+              type="button"
+              onClick={() => fetchData(since, until, channel, true)}
+              disabled={loading}
+              title="이 기간으로 불러오기"
+              className="flex h-[34px] items-center gap-1 rounded-lg border border-line bg-surface px-3 text-[15px] text-ink-soft transition hover:border-signal hover:text-signal disabled:opacity-50"
+            >
               <i className={`ti ${loading ? "ti-loader-2 animate-spin" : "ti-refresh"} text-[15px]`} aria-hidden />
-              {loading ? "불러오는 중…" : "새로고침"}
+              {loading ? "불러오는 중" : "조회"}
             </button>
           </div>
         )}
-        {loadError && (
-          <p className="mt-3 rounded-lg border border-bad/20 bg-bad/5 px-3.5 py-2.5 text-[13px] text-bad">{loadError}</p>
-        )}
       </div>
 
-      {data && summary && (
+      {/* 필터 한 줄 — 매체·비교 기준 */}
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-card border border-line bg-surface px-5 py-4">
+        <div className="flex flex-wrap items-center gap-1.5">
+          {CHANNELS.map((c) => {
+            const disabled = c.key === "meta" && !!selected && !selected.meta_account_id;
+            return (
+              <MediaChip
+                key={c.key}
+                label={c.label}
+                color={MEDIA_COLORS[c.key]}
+                on={channel === c.key}
+                disabled={disabled}
+                note={disabled ? "연동 필요" : undefined}
+                title={disabled ? "광고주 관리에서 메타 광고계정 ID를 등록하세요" : undefined}
+                onClick={() => setChannel(c.key)}
+              />
+            );
+          })}
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-[15px] text-ink-muted">비교 기준</span>
+          <Segmented
+            value={compareBase}
+            options={[
+              { key: "prev", label: "직전 기간" },
+              { key: "month", label: "전월 동기간" },
+            ]}
+            onChange={setCompareBase}
+          />
+        </div>
+      </div>
+
+      {!selected ? (
+        <div className="rounded-card border border-line bg-surface py-16 text-center text-[15px] text-ink-muted">먼저 상단에서 광고주를 선택해 주세요.</div>
+      ) : channel === "meta" && !selected.meta_account_id ? (
+        <p className="rounded-lg bg-warn/10 px-3.5 py-2.5 text-[15px] text-warn">
+          {selected.name}에 메타 광고계정 ID가 없어요. 광고주 관리에서 등록해 주세요.
+        </p>
+      ) : null}
+
+      {loadError && <p className="rounded-lg border border-bad/20 bg-bad/5 px-3.5 py-2.5 text-[15px] text-bad">{loadError}</p>}
+      {loading && !data && channel === "kakao" && <p className="text-[13px] text-ink-muted">카카오모먼트 보고서를 불러오는 중… (요청 제한 때문에 10~15초 걸려요)</p>}
+
+      {/* 광고주별 리포트 설정 */}
+      {selected && <ReportConfigPanel key={selected.id} clientId={selected.id} clientName={selected.name} onChange={handleConfigChange} />}
+
+      {data && summary && view && (
         <>
-          {/* 요약 카드 */}
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {cards.map((c) => (
-              <div key={c.label} className="rounded-card border border-line bg-surface p-3.5">
-                <p className="text-[12px] text-ink-muted">{c.label}</p>
-                <p className="mt-0.5 font-display text-[19px] font-semibold text-ink">{c.value}</p>
-                {data.compare && <ComparisonRows cur={c.cur} prev={c.prev} mon={c.mon} inverse={c.inverse} />}
+          <KpiStrip
+            total={view.channelSeries.current}
+            totalPrev={data.compare ? view.channelSeries.previous : null}
+            daily={data.daily ?? []}
+            compareLabel={data.compare ? compareShort : undefined}
+            loading={loading}
+            secondary
+          />
+
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+            <Card title="캠페인 예산 비중 vs 매출 기여" sub={`광고비 상위 8개 캠페인 · ${periodText}`}>
+              <BudgetShareChart rows={view.camp.rows} highlight={highlight} onHighlight={setHighlight} noun="캠페인" />
+            </Card>
+            <Card title="인사이트" sub={data.compare ? `데이터에서 확인된 신호 · ${compareLabel}` : "데이터에서 확인된 신호"}>
+              <InsightPanel insights={view.insights} colors={{ [channel]: chColor }} onHighlight={setHighlight} />
+            </Card>
+          </div>
+
+          <Card title="일별 추이" sub={periodText}>
+            {(data.daily?.length ?? 0) > 1 ? (
+              <div className="grid grid-cols-1 gap-8 xl:grid-cols-2">
+                <div>
+                  <p className="mb-3 text-[15px] font-semibold text-[#1A1A1A]">광고비</p>
+                  <DailySpendChart series={[view.channelSeries]} highlight={null} />
+                </div>
+                <div>
+                  <p className="mb-3 text-[15px] font-semibold text-[#1A1A1A]">ROAS</p>
+                  <DailyRoasChart series={[view.channelSeries]} highlight={null} />
+                </div>
               </div>
-            ))}
-          </div>
-
-          {/* 트렌드 차트 */}
-          <div className="rounded-card border border-line bg-surface p-5">
-            <div className="mb-2 flex items-center justify-between">
-              <span className="text-[13px] font-medium text-ink-soft">예산 소진 대비 ROAS 트렌드</span>
-              <span className="font-mono text-[11px] text-ink-muted">
-                {data.period?.since} ~ {data.period?.until}
-              </span>
-            </div>
-            <TrendChart daily={data.daily} />
-          </div>
-
-          {/* 지표별 추이 (컬러 그래프) */}
-          <div className="rounded-card border border-line bg-surface p-5">
-            <p className="mb-3 text-[13px] font-medium text-ink-soft">지표별 추이</p>
-            <MetricTrendGrid daily={data.daily} />
-          </div>
+            ) : (
+              <p className="py-8 text-center text-[15px] text-ink-muted">일별 데이터가 2일 이상일 때 추이를 보여 드려요.</p>
+            )}
+          </Card>
 
           {/* 단위 선택 탭 */}
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="flex flex-wrap items-center gap-1 rounded-card border border-line bg-surface p-1">
             {TABS.map((t) => {
               const active = activeTab === t.key;
+              const count = t.key === "campaign" ? data.campaigns.length : t.key === "adset" ? data.adsets.length : t.key === "ad" ? data.ads.length : null;
               return (
                 <button
                   key={t.key}
+                  type="button"
                   onClick={() => setActiveTab(t.key)}
-                  className={`rounded-card border bg-surface p-4 text-left transition ${
-                    active ? "border-signal bg-signal-soft" : "border-line hover:border-ink-faint"
+                  aria-pressed={active}
+                  className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-[15px] transition ${
+                    active ? "bg-signal-soft font-medium text-signal" : "text-ink-soft hover:bg-canvas"
                   }`}
                 >
-                  <i
-                    className={`ti ${t.icon} text-[20px]`}
-                    style={{ color: active ? undefined : t.color }}
-                    aria-hidden
-                  />
-                  <p className={`mt-2 text-[13px] font-medium ${active ? "text-signal" : "text-ink"}`}>{t.label}</p>
-                  {t.key !== "ai" && (
-                    <p className="mt-0.5 text-[11px] text-ink-muted">
-                      {t.key === "campaign" ? data.campaigns.length : t.key === "adset" ? data.adsets.length : data.ads.length}개
-                    </p>
-                  )}
+                  <i className={`ti ${t.icon} text-[16px]`} aria-hidden />
+                  {t.label}
+                  {count != null && <span className={`text-[12px] tabular-nums ${active ? "text-signal/70" : "text-ink-faint"}`}>{count}</span>}
                 </button>
               );
             })}
           </div>
 
           {activeTab !== "ai" ? (
-            /* 계층형 트리 테이블 */
-            <div className="rounded-card border border-line bg-surface p-5">
-              <div className="mb-3 flex items-center justify-between">
-                <span className="text-[13px] font-medium text-ink-soft">
-                  {TABS.find((t) => t.key === activeTab)?.label} 데이터{" "}
-                  <span className="font-normal text-ink-muted">
-                    캠페인 {data.campaigns.length} · 세트 {data.adsets.length} · 소재 {data.ads.length}
-                  </span>
-                </span>
-                {activeTab === "campaign" && (
-                  <span className="text-[11px] text-ink-muted">[+]를 눌러 하위로 펼쳐보세요</span>
-                )}
-              </div>
+            <Card
+              title={`${TABS.find((t) => t.key === activeTab)?.label} 데이터`}
+              sub={`캠페인 ${data.campaigns.length} · 세트 ${data.adsets.length} · 소재 ${data.ads.length}${activeTab === "campaign" ? " · [+]를 눌러 하위로 펼쳐보세요" : ""}`}
+            >
               <TreeTable data={data} statuses={smart?.statuses ?? []} view={activeTab} />
               {channel === "meta" ? (
-                <p className="mt-2 text-[11px] text-ink-muted">
+                <p className="mt-2 text-[12px] text-ink-muted">
                   빈도 3회 이상 + CTR 1% 미만은 <span className="text-warn">주황색</span>으로 표시돼요 (피로도 신호).
                   {activeTab === "campaign" && " 캠페인 행의 미니 그래프는 일별 추세입니다."}
                 </p>
               ) : (
-                data.scopeNote && <p className="mt-2 text-[11px] text-ink-muted">{data.scopeNote}</p>
+                data.scopeNote && <p className="mt-2 text-[12px] text-ink-muted">{data.scopeNote}</p>
               )}
-            </div>
+            </Card>
           ) : (
             <>
               {/* AI 진단 */}
-              <div className="rounded-card border border-line bg-surface p-5">
-                <div className="mb-3 flex items-center justify-between">
-                  <span className="text-[13px] font-medium text-ink-soft">AI 스마트 진단</span>
-                  <button onClick={runSmart} disabled={smartLoading} className="btn-signal h-9 px-3 text-[13px]">
-                    <i className={`ti ${smartLoading ? "ti-loader-2 animate-spin" : "ti-sparkles"} text-[15px]`} aria-hidden />
+              <Card
+                title="AI 스마트 진단"
+                sub="캠페인·세트·소재 상태 태그와 예산 누수 경로"
+                right={
+                  <button onClick={runSmart} disabled={smartLoading} className="btn-signal h-9 px-3 text-[15px]">
+                    <i className={`ti ${smartLoading ? "ti-loader-2 animate-spin" : "ti-sparkles"} text-[16px]`} aria-hidden />
                     {smartLoading ? "진단 중…" : smart ? "다시 진단" : "AI 진단 실행"}
                   </button>
-                </div>
-
+                }
+              >
                 <textarea
                   value={context}
                   onChange={(e) => setContext(e.target.value)}
                   rows={2}
                   placeholder="마케터 컨텍스트 (선택) — 예: 신제품 런칭으로 A캠페인에 예산 집중 중. 주말 B소재 효율 하락 의심."
-                  className="mb-3 w-full resize-y rounded-lg border border-line bg-canvas p-3 text-[13px] outline-none focus:border-signal focus:ring-4 focus:ring-signal/10"
+                  className="mb-3 w-full resize-y rounded-lg border border-line bg-canvas p-3 text-[15px] outline-none focus:border-signal focus:ring-4 focus:ring-signal/10"
                 />
 
-                {smartError && (
-                  <p className="rounded-lg border border-bad/20 bg-bad/5 px-3.5 py-2.5 text-[13px] text-bad">{smartError}</p>
-                )}
+                {smartError && <p className="rounded-lg border border-bad/20 bg-bad/5 px-3.5 py-2.5 text-[15px] text-bad">{smartError}</p>}
 
                 {smart && (
                   <div className="space-y-3">
-                    {smart.trendSummary && (
-                      <p className="rounded-lg bg-canvas px-3.5 py-2.5 text-[13px] leading-relaxed text-ink-soft">
-                        {smart.trendSummary}
-                      </p>
-                    )}
+                    {smart.trendSummary && <p className="rounded-lg bg-canvas px-3.5 py-2.5 text-[15px] leading-relaxed text-ink-soft">{smart.trendSummary}</p>}
 
                     {smart.statuses?.length > 0 && (
                       <div className="space-y-1.5">
@@ -444,12 +483,12 @@ export default function AiReportPage() {
                           const t = TAG_META[s.tag];
                           return (
                             <div key={`${s.id}-${i}`} className="flex items-start gap-2.5 rounded-lg border border-line px-3 py-2">
-                              <span className={`mt-0.5 whitespace-nowrap rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${t?.cls ?? ""}`}>
+                              <span className={`mt-0.5 whitespace-nowrap rounded-full border px-1.5 py-0.5 text-[12px] font-medium ${t?.cls ?? ""}`}>
                                 {t?.emoji} {t?.label}
                               </span>
                               <div className="min-w-0">
-                                <div className="truncate text-[13px] font-medium text-ink">{s.name}</div>
-                                <div className="text-[12px] text-ink-muted">{s.reason}</div>
+                                <div className="truncate text-[15px] font-medium text-ink">{s.name}</div>
+                                <div className="text-[13px] text-ink-muted">{s.reason}</div>
                               </div>
                             </div>
                           );
@@ -459,43 +498,40 @@ export default function AiReportPage() {
 
                     {smart.bottleneck && (
                       <div className="rounded-lg border border-bad/20 bg-bad/5 p-3.5">
-                        <p className="mb-1 text-[12px] font-medium text-bad">예산 누수 경로</p>
-                        <p className="mb-1.5 font-mono text-[12px] text-ink">
-                          {smart.bottleneck.path?.join("  ➔  ")}
+                        <p className="mb-1 flex items-center gap-1 text-[13px] font-medium text-bad">
+                          <i className="ti ti-alert-triangle text-[15px]" aria-hidden />
+                          예산 누수 경로
                         </p>
-                        <p className="text-[13px] leading-relaxed text-ink-soft">{smart.bottleneck.explanation}</p>
-                        <p className="mt-1.5 text-[13px] font-medium text-ink">→ {smart.bottleneck.action}</p>
+                        <p className="mb-1.5 font-mono text-[13px] text-ink">{smart.bottleneck.path?.join("  ➔  ")}</p>
+                        <p className="text-[15px] leading-relaxed text-ink-soft">{smart.bottleneck.explanation}</p>
+                        <p className="mt-1.5 text-[15px] font-medium text-ink">→ {smart.bottleneck.action}</p>
                       </div>
                     )}
 
-                    {smart.mermaid && (
-                      <ReportRenderer markdown={"```mermaid\n" + smart.mermaid + "\n```"} />
-                    )}
+                    {smart.mermaid && <ReportRenderer markdown={"```mermaid\n" + smart.mermaid + "\n```"} />}
                   </div>
                 )}
-              </div>
+              </Card>
 
               {/* 심층 리포트 */}
-              <div className="rounded-card border border-line bg-surface p-5">
-                <div className="mb-3 flex flex-wrap items-end gap-3">
+              <Card title="심층 최적화 리포트" sub="목표 지표를 넣으면 그 기준으로 진단해요 (약 30초)">
+                <div className="flex flex-wrap items-end gap-3">
                   <div className="min-w-[240px] flex-1">
-                    <label className="mb-1.5 block text-[12px] text-ink-muted">타겟 지표 (선택)</label>
+                    <label className="mb-1.5 block text-[13px] text-ink-muted">타겟 지표 (선택)</label>
                     <input
                       value={goal}
                       onChange={(e) => setGoal(e.target.value)}
                       placeholder="예: CPA 20,000원 이하 유지하며 ROAS 500% 달성"
-                      className="field h-10 text-[14px]"
+                      className="field h-10 text-[15px]"
                     />
                   </div>
                   <button onClick={runReport} disabled={reportLoading} className="btn-signal h-10">
-                    <i className={`ti ${reportLoading ? "ti-loader-2 animate-spin" : "ti-file-text"} text-[16px]`} aria-hidden />
-                    {reportLoading ? "작성 중… (30초)" : "심층 최적화 리포트"}
+                    <i className={`ti ${reportLoading ? "ti-loader-2 animate-spin" : "ti-file-text"} text-[17px]`} aria-hidden />
+                    {reportLoading ? "작성 중… (30초)" : "리포트 작성"}
                   </button>
                 </div>
-                {reportError && (
-                  <p className="rounded-lg border border-bad/20 bg-bad/5 px-3.5 py-2.5 text-[13px] text-bad">{reportError}</p>
-                )}
-              </div>
+                {reportError && <p className="mt-3 rounded-lg border border-bad/20 bg-bad/5 px-3.5 py-2.5 text-[15px] text-bad">{reportError}</p>}
+              </Card>
 
               {report && (
                 <div className="rounded-card border border-signal/15 bg-surface p-6">
@@ -506,17 +542,16 @@ export default function AiReportPage() {
           )}
 
           {/* 저장 */}
-          <div className="rounded-card border border-line bg-surface p-5">
-            <div className="flex flex-wrap items-end gap-3">
-              <div className="min-w-[220px] flex-1">
-                <label className="mb-1.5 block text-[12px] text-ink-muted">리포트 이름</label>
-                <input value={title} onChange={(e) => setTitle(e.target.value)} className="field h-10 text-[14px]" />
-              </div>
-              <button onClick={handleSave} disabled={saving} className="btn-signal h-10">
-                {saving ? "저장 중…" : "이 리포트 저장"}
-              </button>
+          <div className="flex flex-wrap items-end gap-3 rounded-card border border-line bg-surface px-5 py-4">
+            <div className="min-w-[220px] flex-1">
+              <label className="mb-1.5 block text-[13px] text-ink-muted">리포트 이름</label>
+              <input value={title} onChange={(e) => setTitle(e.target.value)} className="field h-10 text-[15px]" />
             </div>
-            {saveMsg && <p className="mt-2 text-[13px] text-signal">{saveMsg}</p>}
+            <button onClick={handleSave} disabled={saving} className="btn-signal h-10">
+              <i className="ti ti-device-floppy text-[17px]" aria-hidden />
+              {saving ? "저장 중…" : "이 리포트 저장"}
+            </button>
+            {saveMsg && <p className="w-full text-[15px] text-signal">{saveMsg}</p>}
           </div>
         </>
       )}

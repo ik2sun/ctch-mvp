@@ -125,17 +125,17 @@ export function SingleBuilder() {
   const urlWarning = baseUrl.length > 0 && !isValidUrl(baseUrl);
 
   return (
-    <div className="mx-auto max-w-5xl space-y-5">
+    <div className="w-full space-y-6">
       {/* 입력 카드 */}
-      <div className="rounded-card border border-line bg-surface p-5">
+      <div className="rounded-card border border-line bg-surface p-6">
         {/* 매체 프리셋 */}
-        <label className="mb-2 block text-[13px] font-medium text-ink-soft">매체 선택</label>
+        <label className="mb-2 block text-[15px] font-medium text-ink-soft">매체 선택</label>
         <div className="mb-5 flex flex-wrap gap-2">
           {MEDIA_PRESETS.map((p) => (
             <button
               key={p.key}
               onClick={() => selectPreset(p)}
-              className={`rounded-lg border px-3 py-1.5 text-[13px] transition ${
+              className={`rounded-lg border px-3 py-1.5 text-[15px] transition ${
                 preset.key === p.key
                   ? "border-signal bg-signal-soft font-medium text-signal"
                   : "border-line text-ink-soft hover:border-ink-faint"
@@ -148,17 +148,17 @@ export function SingleBuilder() {
 
         {/* 랜딩 URL */}
         <div className="mb-4">
-          <label className="mb-1.5 block text-[13px] font-medium text-ink-soft">
+          <label className="mb-1.5 block text-[15px] font-medium text-ink-soft">
             랜딩 URL
           </label>
           <input
             value={baseUrl}
             onChange={(e) => setBaseUrl(e.target.value)}
             placeholder="https://ulsan.jaseng.co.kr/disease/back/herniated-disc.do?Location_Branch_Code=10014"
-            className="field font-mono text-[13px]"
+            className="field font-mono text-[15px]"
           />
           {urlWarning && (
-            <p className="mt-1.5 text-[12px] text-warn">
+            <p className="mt-1.5 text-[13px] text-warn">
               http:// 또는 https:// 로 시작하는 전체 주소를 넣어주세요.
             </p>
           )}
@@ -177,20 +177,20 @@ export function SingleBuilder() {
         {/* 네이버 트래킹 파라미터 */}
         {preset.naverTracking && (
           <div className="mt-5 rounded-lg border border-line bg-canvas p-4">
-            <p className="mb-3 text-[13px] font-medium text-ink-soft">
+            <p className="mb-3 text-[15px] font-medium text-ink-soft">
               네이버 파워링크 트래킹 파라미터{" "}
               <span className="font-normal text-ink-muted">(값이 있는 것만 URL에 붙어요)</span>
             </p>
             <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
               {extras.map((e, i) => (
                 <div key={e.key}>
-                  <label className="mb-1 block font-mono text-[11px] text-ink-muted">
+                  <label className="mb-1 block font-mono text-[13px] text-ink-muted">
                     {e.key}
                   </label>
                   <input
                     value={e.value}
                     onChange={(ev) => updateExtra(i, ev.target.value)}
-                    className="field h-9 font-mono text-[12px]"
+                    className="field h-9 font-mono text-[13px]"
                   />
                 </div>
               ))}
@@ -200,22 +200,22 @@ export function SingleBuilder() {
       </div>
 
       {/* 미리보기 + 저장 */}
-      <div className="rounded-card border border-line bg-surface p-5">
+      <div className="rounded-card border border-line bg-surface p-6">
         <div className="mb-2 flex items-center justify-between">
-          <span className="text-[13px] font-medium text-ink-soft">완성된 URL</span>
+          <span className="text-[15px] font-medium text-ink-soft">완성된 URL</span>
           <div className="flex gap-2">
             <button
               onClick={() => copy(finalUrl, "preview")}
               disabled={!finalUrl}
-              className="btn-ghost h-9 px-3 text-[13px]"
+              className="btn-ghost h-9 px-3 text-[15px]"
             >
-              <i className="ti ti-copy text-[15px]" aria-hidden />
+              <i className="ti ti-copy text-[16px]" aria-hidden />
               {copied === "preview" ? "복사됨" : "복사"}
             </button>
             <button
               onClick={handleSave}
               disabled={!finalUrl || saving}
-              className="btn-signal h-9 px-4 text-[13px]"
+              className="btn-signal h-9 px-4 text-[15px]"
             >
               {saving ? "저장 중…" : "저장"}
             </button>
@@ -233,15 +233,15 @@ export function SingleBuilder() {
       {/* 저장된 목록 */}
       <div>
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-[15px] font-semibold text-ink">저장된 UTM</h3>
-          <span className="text-[13px] text-ink-muted">{saved.length}건</span>
+          <h3 className="text-[16px] font-semibold text-ink">저장된 UTM</h3>
+          <span className="text-[15px] text-ink-muted">{saved.length}건</span>
         </div>
 
         {loading ? (
-          <p className="py-8 text-center text-[14px] text-ink-muted">불러오는 중…</p>
+          <p className="py-8 text-center text-[15px] text-ink-muted">불러오는 중…</p>
         ) : saved.length === 0 ? (
           <div className="rounded-card border border-dashed border-line bg-surface py-10 text-center">
-            <p className="text-[14px] text-ink-muted">
+            <p className="text-[15px] text-ink-muted">
               아직 저장된 UTM이 없어요. 위에서 만들고 저장을 눌러보세요.
             </p>
           </div>
@@ -254,16 +254,16 @@ export function SingleBuilder() {
               >
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <span className="text-[13px] font-medium text-ink">
+                    <span className="text-[15px] font-medium text-ink">
                       {s.utm_campaign || s.memo || "이름 없음"}
                     </span>
                     {s.utm_source && (
-                      <span className="rounded bg-canvas px-1.5 py-0.5 font-mono text-[11px] text-ink-muted">
+                      <span className="whitespace-nowrap rounded bg-canvas px-1.5 py-0.5 font-mono text-[13px] text-ink-muted">
                         {s.utm_source}
                       </span>
                     )}
                   </div>
-                  <p className="mt-0.5 truncate font-mono text-[12px] text-ink-muted">
+                  <p className="mt-0.5 truncate font-mono text-[13px] text-ink-muted">
                     {s.final_url}
                   </p>
                 </div>
@@ -272,14 +272,14 @@ export function SingleBuilder() {
                   className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg border border-line text-ink-muted transition hover:border-ink-faint"
                   title="복사"
                 >
-                  <i className={`ti ${copied === s.id ? "ti-check text-signal" : "ti-copy"} text-[15px]`} aria-hidden />
+                  <i className={`ti ${copied === s.id ? "ti-check text-signal" : "ti-copy"} text-[16px]`} aria-hidden />
                 </button>
                 <button
                   onClick={() => handleDelete(s.id)}
                   className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg border border-line text-ink-muted transition hover:border-bad hover:text-bad"
                   title="삭제"
                 >
-                  <i className="ti ti-trash text-[15px]" aria-hidden />
+                  <i className="ti ti-trash text-[16px]" aria-hidden />
                 </button>
               </div>
             ))}
@@ -303,12 +303,12 @@ function Field({
 }) {
   return (
     <div>
-      <label className="mb-1.5 block font-mono text-[12px] text-ink-muted">{label}</label>
+      <label className="mb-1.5 block font-mono text-[13px] text-ink-muted">{label}</label>
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="field h-10 text-[14px]"
+        className="field h-10 text-[15px]"
       />
     </div>
   );

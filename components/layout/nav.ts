@@ -5,7 +5,7 @@ export type NavItem = {
   icon: string;
   desc: string;
   priority?: boolean;
-  accent?: string;        // 비활성 상태 아이콘 색 (카테고리 식별용, 은은하게 사용)
+  accent?: string;        // 카테고리 색 — 사이드바 아이콘 타일(옅은 바탕 10% + 18% 눌린 아이콘, 현재 메뉴는 꽉 찬 타일·흰 아이콘·같은 색 막대). 하위 메뉴는 부모 색. 검증된 범주 팔레트 순서 유지
   children?: NavItem[];
 };
 
@@ -21,17 +21,18 @@ export const NAV: NavItem[] = [
     children: [
       { href: "/ai-report", label: "실시간 리포트", icon: "plug-connected", desc: "매체 API 연동으로 실시간 성과 분석" },
       { href: "/report-analysis", label: "파일 분석", icon: "file-analytics", desc: "리포트 파일 업로드 후 지표·AI 코멘트" },
+      { href: "/creative-analysis", label: "소재 분석", icon: "photo-search", desc: "소재 이미지·소재명·타겟 세팅 통합 분석" },
     ],
   },
-  { href: "/media-mix", label: "미디어믹스 최적화", icon: "chart-pie", desc: "캠페인 목적별 매체 배분 제안", accent: "#eda100" },
-  { href: "/correlation", label: "상관관계 분석", icon: "chart-dots", desc: "SOV·GRP·ROAS 지표 상관관계", accent: "#e87ba4" },
+  { href: "/media-mix", label: "미디어믹스 최적화", icon: "chart-pie", desc: "목표 KPI별 매체 예산 최적 배분·예상 성과·예산 동기화", accent: "#eda100" },
+  { href: "/correlation", label: "상관관계 분석", icon: "chart-dots", desc: "영상·트래픽 캠페인이 전환·검색 성과에 준 영향(시차 상관·기여도), GRP·SOV 외부 지표", accent: "#e87ba4" },
   {
     label: "AI 마케팅 에이전트",
     icon: "message-chatbot",
     desc: "크리에이티브·미디어 방향성, 인스타·SEO 분석",
     accent: "#008300",
     children: [
-      { href: "/ai-agent", label: "AI 챗봇", icon: "message-chatbot", desc: "크리에이티브·미디어 방향성 챗봇" },
+      { href: "/ai-agent", label: "퍼포먼스 매니저", icon: "message-chatbot", desc: "퍼포먼스 핵심 정리·최신 정보 대시보드 + 전문가 챗봇" },
       { href: "/ai-agent/insta-analysis", label: "인스타 분석", icon: "brand-instagram", desc: "인스타그램 계정 분석 및 AI 진단" },
       { href: "/ai-agent/seo-analysis", label: "SEO 분석", icon: "seo", desc: "SEO·AEO·GEO 진단 — AI 검색 인용 준비도와 엔진별 처방" },
       { href: "/ai-agent/geo-citation", label: "AI 인용 추적", icon: "quote", desc: "GEO 인용 플랫폼 — ChatGPT·Gemini·Claude가 자사를 얼마나 언급·인용했는지 측정" },

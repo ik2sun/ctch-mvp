@@ -35,11 +35,11 @@ export default async function DashboardLayout({
         href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.24.0/dist/tabler-icons.min.css"
       />
       <ClientProvider>
-        <div className="flex h-screen overflow-hidden bg-canvas">
+        <div className="flex h-screen overflow-hidden bg-surface">
           <Sidebar email={user.email ?? "user"} role={role} />
           <div className="flex flex-1 flex-col overflow-hidden">
             <Header />
-            <main className="flex-1 overflow-y-auto p-6">{children}</main>
+            <main className="flex-1 overflow-y-auto p-6 2xl:px-8">{children}</main>
           </div>
         </div>
       </ClientProvider>

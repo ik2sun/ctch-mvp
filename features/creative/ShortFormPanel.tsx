@@ -171,7 +171,7 @@ export function ShortFormPanel() {
               <i className="ti ti-device-desktop" aria-hidden /> 사내 워커 렌더
             </Badge>
           </div>
-          <p className="mt-1 text-[13px] text-gray-500">
+          <p className="mt-1 text-[15px] text-gray-500">
             브리프 → AI 스크립트 → 사진 렌더($0) 또는 Veo API 자동 생성 / 클립 업로드로 세로형 숏폼을 만듭니다. 결과물은 카드를 눌러 재생·다운로드하세요.
           </p>
         </div>
@@ -181,14 +181,14 @@ export function ShortFormPanel() {
           onClick={() => setShowFinal(true)}
           className="inline-flex h-10 items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 text-[13.5px] font-medium text-gray-700 shadow-sm transition hover:border-signal/40 hover:text-signal"
         >
-          <i className="ti ti-upload text-[16px]" aria-hidden /> 완성본 업로드
+          <i className="ti ti-upload text-[17px]" aria-hidden /> 완성본 업로드
         </button>
         <button
           type="button"
           onClick={() => setShowNew(true)}
           className="inline-flex h-10 items-center gap-2 rounded-lg bg-gradient-to-r from-signal to-violet-600 px-4 text-[13.5px] font-medium text-white shadow-sm shadow-signal/25 transition hover:brightness-110"
         >
-          <i className="ti ti-plus text-[16px]" aria-hidden /> 새 숏폼 생성
+          <i className="ti ti-plus text-[17px]" aria-hidden /> 새 숏폼 생성
         </button>
         </div>
       </div>
@@ -196,13 +196,13 @@ export function ShortFormPanel() {
       {/* 생성 작업 */}
       <section>
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-[14px] font-semibold text-gray-900">
+          <h3 className="text-[15px] font-semibold text-gray-900">
             생성 작업 {selected ? <span className="font-normal text-gray-500">— {selected.name}</span> : null}
           </h3>
-          <span className="text-xs text-gray-500">{jobs.length}개</span>
+          <span className="text-[13px] text-gray-500">{jobs.length}개</span>
         </div>
         {error ? (
-          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-800">{error}</div>
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[15px] text-amber-800">{error}</div>
         ) : loading ? (
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
             {Array.from({ length: 4 }).map((_, i) => (
@@ -220,12 +220,12 @@ export function ShortFormPanel() {
             <span className="flex h-12 w-12 items-center justify-center rounded-full bg-signal-soft text-signal">
               <i className="ti ti-movie text-[22px]" aria-hidden />
             </span>
-            <p className="mt-3 text-[14px] font-medium text-gray-900">아직 생성한 숏폼이 없어요</p>
-            <p className="mt-1 text-xs text-gray-500">브리프만 넣으면 AI가 스크립트를 쓰고, 사진 또는 Veo 클립으로 합성해 드려요.</p>
+            <p className="mt-3 text-[15px] font-medium text-gray-900">아직 생성한 숏폼이 없어요</p>
+            <p className="mt-1 text-[13px] text-gray-500">브리프만 넣으면 AI가 스크립트를 쓰고, 사진 또는 Veo 클립으로 합성해 드려요.</p>
             <button
               type="button"
               onClick={() => setShowNew(true)}
-              className="mt-4 inline-flex h-9 items-center gap-1.5 rounded-lg bg-signal px-4 text-[13px] font-medium text-white transition hover:bg-signal-strong"
+              className="mt-4 inline-flex h-9 items-center gap-1.5 rounded-lg bg-signal px-4 text-[15px] font-medium text-white transition hover:bg-signal-strong"
             >
               <i className="ti ti-plus" aria-hidden /> 첫 숏폼 만들기
             </button>
@@ -255,10 +255,10 @@ export function ShortFormPanel() {
       <section>
         <div className="mb-3 flex items-center justify-between">
           <div>
-            <h3 className="text-[14px] font-semibold text-gray-900">레퍼런스 · 템플릿</h3>
-            <p className="text-xs text-gray-500">9/4·9/7 세션에서 만든 제작 환경. 재렌더 명령과 핵심 파일은 카드에서 확인.</p>
+            <h3 className="text-[15px] font-semibold text-gray-900">레퍼런스 · 템플릿</h3>
+            <p className="text-[13px] text-gray-500">9/4·9/7 세션에서 만든 제작 환경. 재렌더 명령과 핵심 파일은 카드에서 확인.</p>
           </div>
-          <span className="text-xs text-gray-500">{refItems.length}개</span>
+          <span className="text-[13px] text-gray-500">{refItems.length}개</span>
         </div>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
           {refItems.map((it) => (

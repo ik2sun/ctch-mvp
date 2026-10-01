@@ -6,7 +6,7 @@ import { PLATFORMS } from "./platforms";
 import { createJob, missingTableMessage, newJobId, uploadPoster, uploadRender, type ShortFormJob } from "./shortFormJobs";
 
 const INPUT =
-  "h-9 w-full rounded-lg border border-gray-200 bg-white px-3 text-[13px] text-gray-900 placeholder:text-gray-400 outline-none focus:border-signal focus:ring-4 focus:ring-signal/10";
+  "h-9 w-full rounded-lg border border-gray-200 bg-white px-3 text-[15px] text-gray-900 placeholder:text-gray-400 outline-none focus:border-signal focus:ring-4 focus:ring-signal/10";
 
 // 완성본을 만든 도구 — 클립 업로드형 플랫폼 + 기타 (Veo API 자동은 워커 경로라 제외)
 const TOOLS = [...PLATFORMS.filter((p) => p.mode === "upload").map((p) => ({ id: p.id as string, name: p.name, icon: p.icon })), { id: "other", name: "기타 편집기", icon: "dots" }];
@@ -147,8 +147,8 @@ export function FinalUploadForm({ onClose, onCreated }: { onClose: () => void; o
               <i className="ti ti-upload text-[18px]" aria-hidden />
             </span>
             <div>
-              <h3 className="text-[16px] font-semibold text-gray-900">완성본 업로드</h3>
-              <p className="mt-0.5 text-xs text-gray-500">Higgsfield 등에서 자막·내레이션·편집까지 끝낸 최종 영상을 올려요. 합성 없이 바로 완료로 저장됩니다.</p>
+              <h3 className="text-[17px] font-semibold text-gray-900">완성본 업로드</h3>
+              <p className="mt-0.5 text-[13px] text-gray-500">Higgsfield 등에서 자막·내레이션·편집까지 끝낸 최종 영상을 올려요. 합성 없이 바로 완료로 저장됩니다.</p>
             </div>
           </div>
           <button
@@ -182,7 +182,7 @@ export function FinalUploadForm({ onClose, onCreated }: { onClose: () => void; o
                   className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur transition hover:bg-red-600"
                   aria-label="영상 빼기"
                 >
-                  <i className="ti ti-x text-[14px]" aria-hidden />
+                  <i className="ti ti-x text-[15px]" aria-hidden />
                 </button>
               </div>
             ) : (
@@ -204,13 +204,13 @@ export function FinalUploadForm({ onClose, onCreated }: { onClose: () => void; o
                 <span className="flex h-12 w-12 items-center justify-center rounded-full bg-signal-soft text-signal">
                   <i className="ti ti-movie text-[22px]" aria-hidden />
                 </span>
-                <span className="mt-3 text-[13px] font-medium">완성본 영상 선택</span>
-                <span className="mt-1 text-[11px] text-gray-400">끌어다 놓거나 클릭 · mp4 권장 · {MAX_MB}MB 이하</span>
+                <span className="mt-3 text-[15px] font-medium">완성본 영상 선택</span>
+                <span className="mt-1 text-[13px] text-gray-400">끌어다 놓거나 클릭 · mp4 권장 · {MAX_MB}MB 이하</span>
                 <input type="file" accept="video/mp4,video/quicktime" className="hidden" onChange={(e) => (pick(e.target.files?.[0]), (e.target.value = ""))} />
               </label>
             )}
             {meta && (
-              <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[11px] text-gray-500">
+              <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[13px] text-gray-500">
                 <span>{meta.duration.toFixed(1)}s</span>
                 <span>
                   {meta.width}×{meta.height}
@@ -223,11 +223,11 @@ export function FinalUploadForm({ onClose, onCreated }: { onClose: () => void; o
           {/* 정보 */}
           <div className="space-y-4">
             <label className="block">
-              <span className="mb-1 block text-[11px] font-medium text-gray-500">제목</span>
+              <span className="mb-1 block text-[13px] font-medium text-gray-500">제목</span>
               <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="예) 르무통 위크 9월 2차 · Higgsfield 편집본" className={INPUT} />
             </label>
             <label className="block">
-              <span className="mb-1 block text-[11px] font-medium text-gray-500">광고주</span>
+              <span className="mb-1 block text-[13px] font-medium text-gray-500">광고주</span>
               <select value={clientId} onChange={(e) => setClientId(e.target.value)} className={INPUT}>
                 <option value="">미지정</option>
                 {clients.map((c) => (
@@ -238,7 +238,7 @@ export function FinalUploadForm({ onClose, onCreated }: { onClose: () => void; o
               </select>
             </label>
             <div>
-              <span className="mb-1.5 block text-[11px] font-medium text-gray-500">제작 도구</span>
+              <span className="mb-1.5 block text-[13px] font-medium text-gray-500">제작 도구</span>
               <div role="radiogroup" className="grid grid-cols-2 gap-2">
                 {TOOLS.map((t) => {
                   const on = t.id === tool;
@@ -253,7 +253,7 @@ export function FinalUploadForm({ onClose, onCreated }: { onClose: () => void; o
                         on ? "border-transparent bg-signal-soft font-medium text-signal-strong ring-2 ring-signal" : "border-gray-200 bg-white text-gray-700 hover:border-signal/30"
                       }`}
                     >
-                      <i className={`ti ti-${t.icon} text-[15px] ${on ? "text-signal" : "text-gray-400"}`} aria-hidden />
+                      <i className={`ti ti-${t.icon} text-[16px] ${on ? "text-signal" : "text-gray-400"}`} aria-hidden />
                       {t.name}
                     </button>
                   );
@@ -268,7 +268,7 @@ export function FinalUploadForm({ onClose, onCreated }: { onClose: () => void; o
         </div>
 
         <footer className="flex items-center justify-between gap-3 border-t border-gray-200 bg-gray-50 px-6 py-4">
-          <div className="min-w-0 text-xs">
+          <div className="min-w-0 text-[13px]">
             {error ? (
               <span className="text-red-600">{error}</span>
             ) : progress ? (
@@ -284,7 +284,7 @@ export function FinalUploadForm({ onClose, onCreated }: { onClose: () => void; o
               type="button"
               onClick={onClose}
               disabled={submitting}
-              className="inline-flex h-9 items-center rounded-lg border border-gray-200 bg-white px-4 text-[13px] font-medium text-gray-700 transition hover:bg-gray-100 disabled:opacity-50"
+              className="inline-flex h-9 items-center rounded-lg border border-gray-200 bg-white px-4 text-[15px] font-medium text-gray-700 transition hover:bg-gray-100 disabled:opacity-50"
             >
               취소
             </button>
@@ -292,9 +292,9 @@ export function FinalUploadForm({ onClose, onCreated }: { onClose: () => void; o
               type="button"
               onClick={submit}
               disabled={submitting || !file}
-              className="inline-flex h-9 items-center gap-2 rounded-lg bg-gradient-to-r from-signal to-violet-600 px-4 text-[13px] font-medium text-white shadow-sm shadow-signal/25 transition hover:brightness-110 disabled:opacity-50"
+              className="inline-flex h-9 items-center gap-2 rounded-lg bg-gradient-to-r from-signal to-violet-600 px-4 text-[15px] font-medium text-white shadow-sm shadow-signal/25 transition hover:brightness-110 disabled:opacity-50"
             >
-              <i className={`ti ${submitting ? "ti-loader-2 animate-spin" : "ti-upload"} text-[15px]`} aria-hidden />
+              <i className={`ti ${submitting ? "ti-loader-2 animate-spin" : "ti-upload"} text-[16px]`} aria-hidden />
               업로드
             </button>
           </div>

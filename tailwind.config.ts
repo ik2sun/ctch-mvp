@@ -9,31 +9,34 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        // Cake 스타일(2026-10-01): 차가운 남색·회색. 대비(흰 바탕) ink 17.8 · soft 10.5 · muted 7.6 · faint 2.6(비활성·장식 전용)
         ink: {
-          DEFAULT: "#15181E",
-          soft: "#3B4048",
-          muted: "#767C86",
-          faint: "#A7ACB4",
+          DEFAULT: "#101828",
+          soft: "#344054",
+          muted: "#475467", // 라벨·보조 문구 — 흰 바탕 7.6:1 (2026-10-01 "흐릿하다" 피드백으로 #667085에서 진하게)
+          faint: "#98A2B3", // 비활성·장식 전용(2.6:1) — 읽어야 하는 글자에는 쓰지 말 것
         },
-        canvas: "#F6F6F4",
+        canvas: "#F9FAFB", // 면 채움(카드 머리 띠·칩·합계 행). 페이지 바탕은 흰색
         surface: "#FFFFFF",
-        line: "#E6E6E2",
+        line: "#EAECF0",
         signal: {
           DEFAULT: "#4F46E5",
-          soft: "#EEF0FE",
+          soft: "#F4F3FF",
           strong: "#3D34C9",
         },
-        good: "#128A6B",
-        warn: "#B4690E",
-        bad: "#C0392B",
+        good: "#15803D", // 상승·긍정 — 맑은 녹색, 흰 바탕 5.0:1
+        warn: "#C2410C", // 점검·주의 — 주황, 5.2:1
+        bad: "#DC2626", // 하락·부정 — 빨강, 4.8:1
       },
       fontFamily: {
-        sans: ["Pretendard", "Inter", "system-ui", "sans-serif"],
-        display: ["'Space Grotesk'", "Pretendard", "sans-serif"],
+        // 숫자·한글 혼용 가독성 — 전부 Pretendard(display도 같은 서체, 2026-10-01)
+        // Noto Sans KR — Windows에서 가장 선명(실측 비교 2026-10-01). 폴백 Pretendard(정적)·맑은 고딕
+        sans: ["\"Noto Sans KR\"", "Pretendard", "\"Malgun Gothic\"", "system-ui", "sans-serif"],
+        display: ["\"Noto Sans KR\"", "Pretendard", "\"Malgun Gothic\"", "system-ui", "sans-serif"],
         mono: ["'JetBrains Mono'", "ui-monospace", "monospace"],
       },
       borderRadius: {
-        card: "12px",
+        card: "10px",
       },
       keyframes: {
         sweep: {

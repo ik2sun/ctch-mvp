@@ -6,20 +6,20 @@ export function KpiCard({ label, value, sub, tone }: { label: string; value: str
   const color = tone === "good" ? "text-good" : tone === "bad" ? "text-bad" : tone === "warn" ? "text-warn" : "text-ink";
   return (
     <div className="rounded-card border border-line bg-surface p-4">
-      <p className="text-[12px] text-ink-muted">{label}</p>
+      <p className="text-[13px] text-ink-muted">{label}</p>
       <p className={`mt-0.5 font-display text-[22px] font-semibold ${color}`}>{value}</p>
-      {sub && <p className="mt-0.5 text-[11px] text-ink-muted">{sub}</p>}
+      {sub && <p className="mt-0.5 text-[13px] text-ink-muted">{sub}</p>}
     </div>
   );
 }
 
 export function Section({ title, desc, children, right }: { title: string; desc?: string; children: React.ReactNode; right?: React.ReactNode }) {
   return (
-    <div className="rounded-card border border-line bg-surface p-5">
+    <div className="rounded-card border border-line bg-surface p-6">
       <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <span className="text-[13px] font-medium text-ink-soft">{title}</span>
-          {desc && <p className="text-[11px] text-ink-muted">{desc}</p>}
+          <span className="text-[15px] font-medium text-ink-soft">{title}</span>
+          {desc && <p className="text-[13px] text-ink-muted">{desc}</p>}
         </div>
         {right}
       </div>
@@ -41,5 +41,5 @@ export function EngineName({ engine, className = "" }: { engine: GeoEngine; clas
 export const pctText = (n: number | null | undefined, digits = 0) => (n === null || n === undefined ? "-" : `${(n * 100).toFixed(digits)}%`);
 
 export function ErrorBox({ children }: { children: React.ReactNode }) {
-  return <p className="rounded-lg border border-bad/20 bg-bad/5 px-3.5 py-2.5 text-[13px] text-bad">{children}</p>;
+  return <p className="rounded-lg border border-bad/20 bg-bad/5 px-3.5 py-2.5 text-[15px] text-bad">{children}</p>;
 }

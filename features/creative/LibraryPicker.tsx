@@ -58,8 +58,8 @@ export function LibraryPicker({ clientId, onAdd, remaining }: { clientId: string
         disabled={remaining <= 0}
         className="mt-3 inline-flex h-9 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3.5 text-[12.5px] font-medium text-gray-700 transition hover:border-signal/40 hover:text-signal disabled:opacity-50"
       >
-        <i className="ti ti-photo-search text-[15px] text-signal" aria-hidden /> 이미지 보관함에서 가져오기
-        <span className="text-[11px] font-normal text-gray-400">Higgsfield·Midjourney 등에서 만든 이미지</span>
+        <i className="ti ti-photo-search text-[16px] text-signal" aria-hidden /> 이미지 보관함에서 가져오기
+        <span className="text-[13px] font-normal text-gray-400">Higgsfield·Midjourney 등에서 만든 이미지</span>
       </button>
     );
   }
@@ -70,14 +70,14 @@ export function LibraryPicker({ clientId, onAdd, remaining }: { clientId: string
         <p className="text-[12.5px] font-medium text-gray-800">
           이미지 보관함 <span className="font-normal text-gray-500">· 순서대로 {remaining}장까지 선택</span>
         </p>
-        <button type="button" onClick={() => setOpen(false)} className="text-[12px] text-gray-500 hover:text-gray-900">
+        <button type="button" onClick={() => setOpen(false)} className="text-[13px] text-gray-500 hover:text-gray-900">
           닫기
         </button>
       </div>
       {items === null ? (
-        <p className="py-6 text-center text-[12px] text-gray-500">불러오는 중…</p>
+        <p className="py-6 text-center text-[13px] text-gray-500">불러오는 중…</p>
       ) : items.length === 0 ? (
-        <p className="py-6 text-center text-[12px] text-gray-500">보관함에 이미지가 없어요. 소재 생성 &gt; 이미지 생성에서 만들거나 올려 주세요.</p>
+        <p className="py-6 text-center text-[13px] text-gray-500">보관함에 이미지가 없어요. 소재 생성 &gt; 이미지 생성에서 만들거나 올려 주세요.</p>
       ) : (
         <div className="grid max-h-64 grid-cols-4 gap-2 overflow-y-auto sm:grid-cols-6 lg:grid-cols-8">
           {items.map((c) => {
@@ -94,7 +94,7 @@ export function LibraryPicker({ clientId, onAdd, remaining }: { clientId: string
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={c.image_url!} alt="" loading="lazy" className={`h-full w-full object-cover ${on ? "" : "opacity-90 group-hover:opacity-100"}`} />
                 <span
-                  className={`absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full border-2 text-[10px] font-semibold ${
+                  className={`absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full border-2 text-[12px] font-semibold ${
                     on ? "border-signal bg-signal text-white" : "border-white/80 bg-black/30 text-transparent"
                   }`}
                 >

@@ -16,10 +16,10 @@ export default function CreativePage() {
 
   return (
     <div className="-m-6 min-h-[calc(100vh-4rem)] bg-gray-50 p-6">
-      <div className="mx-auto max-w-7xl space-y-6">
+      <div className="mx-auto w-full max-w-[1600px] space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <SegmentedControl value={tab} onChange={setTab} options={TABS} />
-          <p className="text-xs text-gray-500">AI 마케팅 에이전트 · 소재 생성</p>
+          <p className="text-[13px] text-gray-500">AI 마케팅 에이전트 · 소재 생성</p>
         </div>
         {tab === "shortform" ? <ShortFormPanel /> : <ImagePanel />}
       </div>

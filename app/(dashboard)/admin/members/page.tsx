@@ -29,10 +29,10 @@ export default async function AdminMembersPage() {
   const rejected = members.filter((m) => m.status === "rejected");
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    <div className="mx-auto w-full max-w-[1600px] space-y-6">
       <div>
         <h2 className="font-display text-[23px] font-semibold text-ink">회원 관리</h2>
-        <p className="mt-1 text-[13px] text-ink-muted">가입 승인·거절과 역할을 관리해요.</p>
+        <p className="mt-1 text-[15px] text-ink-muted">가입 승인·거절과 역할을 관리해요.</p>
       </div>
 
       <MemberList pending={pending} approved={approved} rejected={rejected} currentUserId={user.id} />

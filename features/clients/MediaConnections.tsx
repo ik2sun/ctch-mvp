@@ -205,14 +205,14 @@ export function MediaConnections({
   function renderField(f: FieldDef) {
     return f.type === "textarea" ? (
       <div key={f.key}>
-        <label className="mb-1.5 block text-[13px] font-medium text-ink-soft">{f.label}</label>
+        <label className="mb-1.5 block text-[15px] font-medium text-ink-soft">{f.label}</label>
         <textarea
           value={values[f.key] ?? ""}
           onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
           placeholder={st?.connected ? "저장됨 — 변경하려면 새로 입력" : undefined}
           rows={4}
           spellCheck={false}
-          className="field w-full resize-y py-2 font-mono text-[12px]"
+          className="field w-full resize-y py-2 font-mono text-[13px]"
         />
       </div>
     ) : (
@@ -250,7 +250,7 @@ export function MediaConnections({
       {/* 연동 상태 점검표 */}
       <div className="rounded-lg border border-line">
         <div className="flex items-center justify-between border-b border-line px-3.5 py-2">
-          <span className="text-[12px] font-medium text-ink-soft">
+          <span className="text-[13px] font-medium text-ink-soft">
             연동 상태
             {checkedAt && !checking && (
               <span className="ml-1.5 font-normal text-ink-faint">{checkedAt.toLocaleTimeString("ko-KR")} 점검</span>
@@ -260,9 +260,9 @@ export function MediaConnections({
             type="button"
             onClick={check}
             disabled={checking}
-            className="inline-flex h-7 items-center gap-1 rounded-md border border-line px-2 text-[12px] text-ink-soft transition hover:border-ink-faint disabled:opacity-60"
+            className="inline-flex h-7 items-center gap-1 rounded-md border border-line px-2 text-[13px] text-ink-soft transition hover:border-ink-faint disabled:opacity-60"
           >
-            <i className={`ti ${checking ? "ti-loader-2 animate-spin" : "ti-refresh"} text-[13px]`} aria-hidden />
+            <i className={`ti ${checking ? "ti-loader-2 animate-spin" : "ti-refresh"} text-[15px]`} aria-hidden />
             {checking ? "점검 중…" : "다시 점검"}
           </button>
         </div>
@@ -282,8 +282,8 @@ export function MediaConnections({
                   className={`flex w-full items-start gap-2.5 px-3.5 py-2 text-left transition ${active ? "bg-signal-soft/60" : "hover:bg-canvas"}`}
                 >
                   <span className={`mt-[7px] h-2 w-2 flex-shrink-0 rounded-full ${style?.dot ?? "animate-pulse bg-line"}`} aria-hidden />
-                  <span className={`w-24 flex-shrink-0 text-[13px] ${active ? "font-medium text-signal" : "text-ink"}`}>{ch.label}</span>
-                  <span className="min-w-0 flex-1 text-[12px] leading-5">
+                  <span className={`w-24 flex-shrink-0 text-[15px] ${active ? "font-medium text-signal" : "text-ink"}`}>{ch.label}</span>
+                  <span className="min-w-0 flex-1 text-[13px] leading-5">
                     {s ? (
                       <>
                         <span className={`mr-1.5 font-medium ${style!.text}`}>{style!.label}</span>
@@ -299,7 +299,7 @@ export function MediaConnections({
                       <span className="text-ink-faint">확인 중…</span>
                     )}
                   </span>
-                  <i className="ti ti-chevron-right mt-1 text-[13px] text-ink-faint" aria-hidden />
+                  <i className="ti ti-chevron-right mt-1 text-[15px] text-ink-faint" aria-hidden />
                 </button>
               </li>
             );
@@ -309,10 +309,10 @@ export function MediaConnections({
 
       {/* 선택한 매체 설정 */}
       <div className="rounded-lg border border-line bg-canvas p-4" data-lpignore="true" data-1p-ignore>
-        <p className="mb-3 text-[13px] font-semibold text-ink">{def.label} 설정</p>
+        <p className="mb-3 text-[15px] font-semibold text-ink">{def.label} 설정</p>
 
         {notice && channel === "kakao" && (
-          <p className={`mb-3 rounded-lg border px-3.5 py-2.5 text-[12px] ${notice.tone === "good" ? "border-good/30 bg-good/5 text-good" : "border-bad/20 bg-bad/5 text-bad"}`}>
+          <p className={`mb-3 rounded-lg border px-3.5 py-2.5 text-[13px] ${notice.tone === "good" ? "border-good/30 bg-good/5 text-good" : "border-bad/20 bg-bad/5 text-bad"}`}>
             {notice.text}
           </p>
         )}
@@ -329,9 +329,9 @@ export function MediaConnections({
                   mono
                   hint="광고 관리자 주소의 act= 뒤 숫자예요. 주소를 통째로 붙여넣어도 숫자만 뽑아요."
                 />
-                {!metaNorm.ok && <p className="mt-1 text-[12px] text-bad">{metaNorm.error}</p>}
+                {!metaNorm.ok && <p className="mt-1 text-[13px] text-bad">{metaNorm.error}</p>}
                 {metaDupes.length > 0 && (
-                  <p className="mt-1 text-[12px] text-warn">
+                  <p className="mt-1 text-[13px] text-warn">
                     <i className="ti ti-alert-triangle mr-0.5" aria-hidden />
                     이 광고계정은 {metaDupes.map((c) => `'${clientLabel(c, clients)}'`).join(", ")}에도 연결돼 있어요.
                   </p>
@@ -347,12 +347,12 @@ export function MediaConnections({
                   type="button"
                   onClick={verifyNaver}
                   disabled={verify.busy || !(values.naver_ad_customer_id ?? "").trim()}
-                  className="btn-ghost h-8 px-3 text-[12px]"
+                  className="btn-ghost h-8 px-3 text-[13px]"
                 >
-                  <i className={`ti ${verify.busy ? "ti-loader-2 animate-spin" : "ti-search"} text-[14px]`} aria-hidden />
+                  <i className={`ti ${verify.busy ? "ti-loader-2 animate-spin" : "ti-search"} text-[15px]`} aria-hidden />
                   {verify.busy ? "확인 중…" : "이 고객 ID로 조회되는지 확인"}
                 </button>
-                {verify.text && <p className={`mt-1.5 text-[12px] ${verify.ok ? "text-good" : "text-bad"}`}>{verify.text}</p>}
+                {verify.text && <p className={`mt-1.5 text-[13px] ${verify.ok ? "text-good" : "text-bad"}`}>{verify.text}</p>}
               </div>
             )}
 
@@ -367,11 +367,11 @@ export function MediaConnections({
 
             {(def.fields.some((f) => f.advanced) || channel === "kakao") && (
               <details className="rounded-lg border border-line bg-surface px-3.5 py-2.5" open={st?.status === "error" && st.detail.includes("공용") ? true : undefined}>
-                <summary className="cursor-pointer text-[12px] font-medium text-ink-soft">
+                <summary className="cursor-pointer text-[13px] font-medium text-ink-soft">
                   {channel === "kakao" ? "개별 카카오 계정 연결 (예외)" : "개별 키 (예외)"} — 공용 키로 접근이 안 될 때만
                 </summary>
                 <div className="mt-2.5 space-y-2.5">
-                  <p className="text-[11px] text-ink-muted">{def.advancedNote}</p>
+                  <p className="text-[13px] text-ink-muted">{def.advancedNote}</p>
                   {channel === "kakao" ? (
                     <KakaoConnectPanel clientId={client.id} onChanged={check} />
                   ) : (
@@ -382,7 +382,7 @@ export function MediaConnections({
             )}
 
             <div className="flex flex-wrap items-center gap-2">
-              <button type="button" onClick={save} disabled={saving || !canSave} className="btn-signal h-9 px-4 text-[13px]">
+              <button type="button" onClick={save} disabled={saving || !canSave} className="btn-signal h-9 px-4 text-[15px]">
                 {saving ? "저장 중…" : `${def.label} 저장`}
               </button>
               {channel === "meta" && st?.ownToken && (
@@ -390,7 +390,7 @@ export function MediaConnections({
                   type="button"
                   onClick={() => clearKeys(["meta_access_token"], "개별 토큰을 지우고 공용 토큰으로 조회할까요?")}
                   disabled={saving}
-                  className="btn-ghost h-9 px-3 text-[13px]"
+                  className="btn-ghost h-9 px-3 text-[15px]"
                 >
                   개별 토큰 삭제 (공용 토큰 사용)
                 </button>
@@ -400,7 +400,7 @@ export function MediaConnections({
                   type="button"
                   onClick={() => clearKeys(def.fields.filter((f) => f.advanced).map((f) => f.key), `${def.label} 개별 키를 지우고 공용 키로 조회할까요?`)}
                   disabled={saving}
-                  className="btn-ghost h-9 px-3 text-[13px]"
+                  className="btn-ghost h-9 px-3 text-[15px]"
                 >
                   개별 키 삭제 (공용 키 사용)
                 </button>
@@ -410,7 +410,7 @@ export function MediaConnections({
                   type="button"
                   onClick={() => clearKeys(def.fields.filter((f) => f.key !== "kakao_access_token").map((f) => f.key), `${def.label} 연동을 해제할까요? ${def.fields[0].label}${channel === "kakao" ? "" : "와 개별 키"}가 지워져요.`)}
                   disabled={saving}
-                  className="btn-ghost h-9 px-3 text-[13px] hover:border-bad hover:text-bad"
+                  className="btn-ghost h-9 px-3 text-[15px] hover:border-bad hover:text-bad"
                 >
                   연동 해제
                 </button>
@@ -419,8 +419,8 @@ export function MediaConnections({
           </div>
         )}
 
-        {msg && <p className={`mt-2.5 text-[12px] ${msg.tone === "good" ? "text-good" : "text-bad"}`}>{msg.text}</p>}
-        <p className="mt-2.5 text-[11px] text-ink-muted">{def.hint}</p>
+        {msg && <p className={`mt-2.5 text-[13px] ${msg.tone === "good" ? "text-good" : "text-bad"}`}>{msg.text}</p>}
+        <p className="mt-2.5 text-[13px] text-ink-muted">{def.hint}</p>
       </div>
     </div>
   );
@@ -457,7 +457,7 @@ function KakaoAccountPicker({ clientId, onPick }: { clientId: string; onPick: (i
   return (
     <div>
       {accounts && accounts.length > 0 ? (
-        <select defaultValue="" onChange={(e) => e.target.value && onPick(e.target.value)} className="field h-9 text-[13px]">
+        <select defaultValue="" onChange={(e) => e.target.value && onPick(e.target.value)} className="field h-9 text-[15px]">
           <option value="">접근 가능한 광고계정에서 고르기 ({accounts.length}개)</option>
           {accounts.map((a) => (
             <option key={a.id} value={a.id}>
@@ -466,12 +466,12 @@ function KakaoAccountPicker({ clientId, onPick }: { clientId: string; onPick: (i
           ))}
         </select>
       ) : (
-        <button type="button" onClick={load} disabled={loading} className="btn-ghost h-8 px-3 text-[12px]">
-          <i className={`ti ${loading ? "ti-loader-2 animate-spin" : "ti-list-search"} text-[14px]`} aria-hidden />
+        <button type="button" onClick={load} disabled={loading} className="btn-ghost h-8 px-3 text-[13px]">
+          <i className={`ti ${loading ? "ti-loader-2 animate-spin" : "ti-list-search"} text-[15px]`} aria-hidden />
           {loading ? "불러오는 중…" : "접근 가능한 광고계정 목록에서 고르기"}
         </button>
       )}
-      {note && <p className="mt-1.5 text-[12px] text-ink-muted">{note}</p>}
+      {note && <p className="mt-1.5 text-[13px] text-ink-muted">{note}</p>}
     </div>
   );
 }
@@ -506,7 +506,7 @@ function GfaAccountPicker({ clientId, onPick }: { clientId: string; onPick: (id:
   return (
     <div>
       {accounts && accounts.length > 0 ? (
-        <select defaultValue="" onChange={(e) => e.target.value && onPick(e.target.value)} className="field h-9 text-[13px]">
+        <select defaultValue="" onChange={(e) => e.target.value && onPick(e.target.value)} className="field h-9 text-[15px]">
           <option value="">접근 가능한 광고계정에서 고르기 ({accounts.length}개)</option>
           {accounts.map((a) => (
             <option key={a.id} value={a.id}>
@@ -515,12 +515,12 @@ function GfaAccountPicker({ clientId, onPick }: { clientId: string; onPick: (id:
           ))}
         </select>
       ) : (
-        <button type="button" onClick={load} disabled={loading} className="btn-ghost h-8 px-3 text-[12px]">
-          <i className={`ti ${loading ? "ti-loader-2 animate-spin" : "ti-list-search"} text-[14px]`} aria-hidden />
+        <button type="button" onClick={load} disabled={loading} className="btn-ghost h-8 px-3 text-[13px]">
+          <i className={`ti ${loading ? "ti-loader-2 animate-spin" : "ti-list-search"} text-[15px]`} aria-hidden />
           {loading ? "불러오는 중…" : "접근 가능한 광고계정 목록에서 고르기"}
         </button>
       )}
-      {note && <p className="mt-1.5 text-[12px] text-ink-muted">{note}</p>}
+      {note && <p className="mt-1.5 text-[13px] text-ink-muted">{note}</p>}
     </div>
   );
 }

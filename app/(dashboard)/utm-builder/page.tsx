@@ -8,12 +8,12 @@ export default function UtmBuilderPage() {
   const [tab, setTab] = useState<"single" | "bulk">("single");
 
   return (
-    <div className="mx-auto max-w-5xl space-y-5">
+    <div className="mx-auto w-full max-w-[1600px] space-y-6">
       {/* 탭 */}
       <div className="flex gap-1 rounded-lg border border-line bg-surface p-1">
         <button
           onClick={() => setTab("single")}
-          className={`flex-1 rounded-md py-2 text-[14px] font-medium transition ${
+          className={`flex-1 rounded-md py-2 text-[15px] font-medium transition ${
             tab === "single" ? "bg-signal-soft text-signal" : "text-ink-muted hover:text-ink-soft"
           }`}
         >
@@ -21,7 +21,7 @@ export default function UtmBuilderPage() {
         </button>
         <button
           onClick={() => setTab("bulk")}
-          className={`flex-1 rounded-md py-2 text-[14px] font-medium transition ${
+          className={`flex-1 rounded-md py-2 text-[15px] font-medium transition ${
             tab === "bulk" ? "bg-signal-soft text-signal" : "text-ink-muted hover:text-ink-soft"
           }`}
         >

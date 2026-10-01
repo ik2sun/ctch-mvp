@@ -43,10 +43,10 @@ function selectValueToInterval(value: string): CheckIntervalHours {
 }
 
 function StatusBadge({ check }: { check?: BrandKeywordCheck }) {
-  if (!check) return <span className="text-[13px] text-ink-faint">-</span>;
+  if (!check) return <span className="text-[15px] text-ink-faint">-</span>;
   if (check.ads_snapshot.length === 0) {
     return (
-      <span className="inline-flex h-6 items-center gap-1 rounded-md bg-line/40 px-1.5 text-[13px] font-medium text-ink-faint">
+      <span className="inline-flex h-6 items-center gap-1 rounded-md bg-line/40 px-1.5 text-[15px] font-medium text-ink-faint">
         미노출
       </span>
     );
@@ -58,19 +58,19 @@ function StatusBadge({ check }: { check?: BrandKeywordCheck }) {
     <div className="flex flex-col items-start gap-0.5">
       <div className="flex flex-wrap items-center gap-1">
         {ownerCount > 0 && (
-          <span className="inline-flex h-6 items-center gap-1 rounded-md bg-good/10 px-1.5 text-[13px] font-semibold text-good">
-            <i className="ti ti-shield-check text-[13px]" aria-hidden />
+          <span className="inline-flex h-6 items-center gap-1 rounded-md bg-good/10 px-1.5 text-[15px] font-semibold text-good">
+            <i className="ti ti-shield-check text-[15px]" aria-hidden />
             {ownerCount} (광고주)
           </span>
         )}
         {infringingCount > 0 && (
-          <span className="inline-flex h-6 items-center gap-1 rounded-md bg-bad/10 px-1.5 text-[13px] font-semibold text-bad">
-            <i className="ti ti-alert-triangle text-[13px]" aria-hidden />
+          <span className="inline-flex h-6 items-center gap-1 rounded-md bg-bad/10 px-1.5 text-[15px] font-semibold text-bad">
+            <i className="ti ti-alert-triangle text-[15px]" aria-hidden />
             {infringingCount}
           </span>
         )}
       </div>
-      {domains.length > 0 && <span className="text-[11px] text-ink-faint">{domains.join(", ")}</span>}
+      {domains.length > 0 && <span className="text-[13px] text-ink-faint">{domains.join(", ")}</span>}
     </div>
   );
 }
@@ -315,24 +315,24 @@ export default function BrandKeywordMonitorPage() {
 
   if (!clientId) {
     return (
-      <div className="mx-auto max-w-5xl">
+      <div className="mx-auto w-full max-w-[1600px] space-y-6">
         <div className="rounded-card border border-line bg-surface p-8 text-center">
-          <p className="text-[13px] text-ink-muted">먼저 상단에서 광고주를 선택해 주세요.</p>
+          <p className="text-[15px] text-ink-muted">먼저 상단에서 광고주를 선택해 주세요.</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-5">
+    <div className="mx-auto w-full max-w-[1600px] space-y-6">
       <div className="rounded-card border border-line bg-surface p-4">
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-[15px] font-semibold text-ink">감시 브랜드 키워드 추가</h3>
+          <h3 className="text-[16px] font-semibold text-ink">감시 브랜드 키워드 추가</h3>
           <button
             onClick={() => setShowBulk((v) => !v)}
-            className="flex h-8 items-center gap-1.5 rounded-lg border border-line px-3 text-[12px] font-medium text-ink-soft transition hover:bg-canvas"
+            className="flex h-8 items-center gap-1.5 rounded-lg border border-line px-3 text-[13px] font-medium text-ink-soft transition hover:bg-canvas"
           >
-            <i className="ti ti-file-spreadsheet text-[14px]" aria-hidden />
+            <i className="ti ti-file-spreadsheet text-[15px]" aria-hidden />
             엑셀로 일괄 등록
           </button>
         </div>
@@ -373,14 +373,14 @@ export default function BrandKeywordMonitorPage() {
             ))}
           </select>
           <button onClick={handleAdd} disabled={adding} className="btn-signal h-10">
-            <i className={`ti ${adding ? "ti-loader-2 animate-spin" : "ti-plus"} text-[16px]`} aria-hidden />
+            <i className={`ti ${adding ? "ti-loader-2 animate-spin" : "ti-plus"} text-[17px]`} aria-hidden />
             추가
           </button>
         </div>
         {addError && (
-          <p className="mt-3 rounded-lg border border-bad/20 bg-bad/5 px-3.5 py-2.5 text-[13px] text-bad">{addError}</p>
+          <p className="mt-3 rounded-lg border border-bad/20 bg-bad/5 px-3.5 py-2.5 text-[15px] text-bad">{addError}</p>
         )}
-        <p className="mt-2 text-[11px] text-ink-faint">
+        <p className="mt-2 text-[13px] text-ink-faint">
           등록한 브랜드 키워드의 네이버 파워링크 상위 10위를 PC·모바일 모두 확인해서, 광고주 도메인이 아닌 타사 광고가
           노출되면 &quot;침해&quot;로 표시하고 담당자 메일로 알려드려요. 같은 타사가 계속 노출 중이면 재발송하지 않고,
           새로운 타사가 추가로 나타날 때만 다시 알려요. 자동 체크 주기를 설정하면 매시 정각에 서버가 자동으로 다시 확인해요.
@@ -399,25 +399,25 @@ export default function BrandKeywordMonitorPage() {
 
       <div>
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-[15px] font-semibold text-ink">감시 중인 브랜드 키워드 {selected ? `— ${selected.name}` : ""}</h3>
+          <h3 className="text-[16px] font-semibold text-ink">감시 중인 브랜드 키워드 {selected ? `— ${selected.name}` : ""}</h3>
           <div className="flex items-center gap-2">
-            <span className="text-[13px] text-ink-muted">{keywords.length}개</span>
+            <span className="text-[15px] text-ink-muted">{keywords.length}개</span>
             {keywords.length > 0 && (
               <>
                 <button
                   onClick={handleExport}
                   disabled={exporting}
-                  className="flex h-8 items-center gap-1.5 rounded-lg border border-line px-3 text-[12px] font-medium text-ink-soft transition hover:bg-canvas disabled:opacity-50"
+                  className="flex h-8 items-center gap-1.5 rounded-lg border border-line px-3 text-[13px] font-medium text-ink-soft transition hover:bg-canvas disabled:opacity-50"
                 >
-                  <i className={`ti ${exporting ? "ti-loader-2 animate-spin" : "ti-file-spreadsheet"} text-[14px]`} aria-hidden />
+                  <i className={`ti ${exporting ? "ti-loader-2 animate-spin" : "ti-file-spreadsheet"} text-[15px]`} aria-hidden />
                   엑셀로 내보내기
                 </button>
                 <button
                   onClick={runCheckAll}
                   disabled={checkingAll || checkingId !== null}
-                  className="flex h-8 items-center gap-1.5 rounded-lg border border-line px-3 text-[12px] font-medium text-ink-soft transition hover:bg-canvas disabled:opacity-50"
+                  className="flex h-8 items-center gap-1.5 rounded-lg border border-line px-3 text-[13px] font-medium text-ink-soft transition hover:bg-canvas disabled:opacity-50"
                 >
-                  <i className={`ti ${checkingAll ? "ti-loader-2 animate-spin" : "ti-refresh"} text-[14px]`} aria-hidden />
+                  <i className={`ti ${checkingAll ? "ti-loader-2 animate-spin" : "ti-refresh"} text-[15px]`} aria-hidden />
                   전체 확인
                 </button>
               </>
@@ -426,20 +426,20 @@ export default function BrandKeywordMonitorPage() {
         </div>
 
         {exportError && (
-          <p className="mb-3 rounded-lg border border-bad/20 bg-bad/5 px-3.5 py-2.5 text-[13px] text-bad">{exportError}</p>
+          <p className="mb-3 rounded-lg border border-bad/20 bg-bad/5 px-3.5 py-2.5 text-[15px] text-bad">{exportError}</p>
         )}
 
         {listLoading ? (
-          <p className="py-8 text-center text-[14px] text-ink-muted">불러오는 중…</p>
+          <p className="py-8 text-center text-[15px] text-ink-muted">불러오는 중…</p>
         ) : keywords.length === 0 ? (
           <div className="rounded-card border border-dashed border-line bg-surface py-10 text-center">
-            <p className="text-[14px] text-ink-muted">아직 등록된 감시 키워드가 없어요.</p>
+            <p className="text-[15px] text-ink-muted">아직 등록된 감시 키워드가 없어요.</p>
           </div>
         ) : (
           <div className="overflow-hidden rounded-card border border-line bg-surface">
-            <table className="w-full text-left text-[13px]">
+            <table className="w-full text-left text-[15px]">
               <thead>
-                <tr className="border-b border-line bg-canvas text-[11px] text-ink-muted">
+                <tr className="border-b border-line bg-canvas text-[13px] text-ink-muted">
                   <th className="px-4 py-2.5 font-medium">키워드</th>
                   <th className="px-4 py-2.5 font-medium">광고주 도메인</th>
                   <th className="px-4 py-2.5 font-medium">담당자 메일</th>
@@ -472,7 +472,7 @@ export default function BrandKeywordMonitorPage() {
                                 }}
                                 placeholder="담당자 메일 (여러 명은 콤마로 구분)"
                                 autoFocus
-                                className="field h-8 min-w-[180px] py-0 text-[12px]"
+                                className="field h-8 min-w-[180px] py-0 text-[13px]"
                               />
                               <button
                                 onClick={() => saveEditEmail(k.id)}
@@ -480,7 +480,7 @@ export default function BrandKeywordMonitorPage() {
                                 className="flex h-7 w-7 items-center justify-center rounded-md text-signal transition hover:bg-signal-soft disabled:opacity-50"
                                 title="저장"
                               >
-                                <i className={`ti ${savingEmail ? "ti-loader-2 animate-spin" : "ti-check"} text-[14px]`} aria-hidden />
+                                <i className={`ti ${savingEmail ? "ti-loader-2 animate-spin" : "ti-check"} text-[15px]`} aria-hidden />
                               </button>
                               <button
                                 onClick={cancelEditEmail}
@@ -488,7 +488,7 @@ export default function BrandKeywordMonitorPage() {
                                 className="flex h-7 w-7 items-center justify-center rounded-md text-ink-faint transition hover:bg-canvas disabled:opacity-50"
                                 title="취소"
                               >
-                                <i className="ti ti-x text-[14px]" aria-hidden />
+                                <i className="ti ti-x text-[15px]" aria-hidden />
                               </button>
                             </div>
                           ) : (
@@ -499,7 +499,7 @@ export default function BrandKeywordMonitorPage() {
                                 className="flex h-6 w-6 items-center justify-center rounded-md text-ink-faint transition hover:bg-canvas hover:text-ink-soft"
                                 title="담당자 메일 수정"
                               >
-                                <i className="ti ti-pencil text-[13px]" aria-hidden />
+                                <i className="ti ti-pencil text-[15px]" aria-hidden />
                               </button>
                             </div>
                           )}
@@ -510,12 +510,12 @@ export default function BrandKeywordMonitorPage() {
                         <td className="px-4 py-3">
                           <StatusBadge check={checks?.mobile} />
                         </td>
-                        <td className="px-4 py-3 text-[12px] text-ink-muted">{fmtTime(lastCheckedAt)}</td>
+                        <td className="px-4 py-3 text-[13px] text-ink-muted">{fmtTime(lastCheckedAt)}</td>
                         <td className="px-4 py-3">
                           <select
                             value={intervalToSelectValue(k.check_interval_hours)}
                             onChange={(e) => handleIntervalChange(k.id, selectValueToInterval(e.target.value))}
-                            className="field h-8 py-0 text-[12px]"
+                            className="field h-8 py-0 text-[13px]"
                           >
                             {INTERVAL_OPTIONS.map((opt) => (
                               <option key={opt.label} value={intervalToSelectValue(opt.value)}>
@@ -529,9 +529,9 @@ export default function BrandKeywordMonitorPage() {
                             <button
                               onClick={() => runCheck(k.id)}
                               disabled={isChecking || checkingAll}
-                              className="flex h-7 items-center gap-1 rounded-md px-2 text-[12px] font-medium text-signal transition hover:bg-signal-soft disabled:opacity-50"
+                              className="flex h-7 items-center gap-1 rounded-md px-2 text-[13px] font-medium text-signal transition hover:bg-signal-soft disabled:opacity-50"
                             >
-                              <i className={`ti ${isChecking ? "ti-loader-2 animate-spin" : "ti-search"} text-[13px]`} aria-hidden />
+                              <i className={`ti ${isChecking ? "ti-loader-2 animate-spin" : "ti-search"} text-[15px]`} aria-hidden />
                               확인
                             </button>
                             <button
@@ -539,7 +539,7 @@ export default function BrandKeywordMonitorPage() {
                               className="flex h-7 w-7 items-center justify-center rounded-md text-ink-faint transition hover:bg-bad/10 hover:text-bad"
                               title="삭제"
                             >
-                              <i className="ti ti-trash text-[14px]" aria-hidden />
+                              <i className="ti ti-trash text-[15px]" aria-hidden />
                             </button>
                           </div>
                         </td>
@@ -547,7 +547,7 @@ export default function BrandKeywordMonitorPage() {
                       {rowError[k.id] && (
                         <tr key={`${k.id}-error`}>
                           <td colSpan={8} className="px-4 pb-2">
-                            <p className="rounded-lg border border-bad/20 bg-bad/5 px-3.5 py-2 text-[12px] text-bad">
+                            <p className="rounded-lg border border-bad/20 bg-bad/5 px-3.5 py-2 text-[13px] text-bad">
                               {rowError[k.id]}
                             </p>
                           </td>
@@ -563,16 +563,16 @@ export default function BrandKeywordMonitorPage() {
       </div>
 
       <div>
-        <h3 className="mb-3 text-[15px] font-semibold text-ink">알림 발송 이력</h3>
+        <h3 className="mb-3 text-[16px] font-semibold text-ink">알림 발송 이력</h3>
         {alerts.length === 0 ? (
           <div className="rounded-card border border-dashed border-line bg-surface py-8 text-center">
-            <p className="text-[13px] text-ink-muted">아직 발송된 알림이 없어요.</p>
+            <p className="text-[15px] text-ink-muted">아직 발송된 알림이 없어요.</p>
           </div>
         ) : (
           <div className="overflow-hidden rounded-card border border-line bg-surface">
-            <table className="w-full text-left text-[13px]">
+            <table className="w-full text-left text-[15px]">
               <thead>
-                <tr className="border-b border-line bg-canvas text-[11px] text-ink-muted">
+                <tr className="border-b border-line bg-canvas text-[13px] text-ink-muted">
                   <th className="px-4 py-2.5 font-medium">발송일시</th>
                   <th className="px-4 py-2.5 font-medium">키워드</th>
                   <th className="px-4 py-2.5 font-medium">기기</th>
@@ -586,16 +586,16 @@ export default function BrandKeywordMonitorPage() {
                   const kw = keywords.find((k) => k.id === a.keyword_id);
                   return (
                     <tr key={a.id} className="border-b border-line last:border-0 hover:bg-canvas/60">
-                      <td className="px-4 py-3 text-[12px] text-ink-muted">{fmtTime(a.sent_at)}</td>
+                      <td className="px-4 py-3 text-[13px] text-ink-muted">{fmtTime(a.sent_at)}</td>
                       <td className="px-4 py-3 font-medium text-ink">{kw?.keyword ?? "-"}</td>
                       <td className="px-4 py-3 text-ink-soft">{DEVICE_LABEL[a.device]}</td>
                       <td className="px-4 py-3 text-ink-soft">{a.infringing_domains.join(", ")}</td>
                       <td className="px-4 py-3 text-ink-soft">{a.recipient}</td>
                       <td className="px-4 py-3">
                         {a.status === "sent" ? (
-                          <span className="text-[12px] font-medium text-good">발송됨</span>
+                          <span className="text-[13px] font-medium text-good">발송됨</span>
                         ) : (
-                          <span title={a.error ?? ""} className="text-[12px] font-medium text-bad">
+                          <span title={a.error ?? ""} className="text-[13px] font-medium text-bad">
                             실패
                           </span>
                         )}

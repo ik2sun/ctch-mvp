@@ -106,12 +106,12 @@ export function ReportConfigPanel({ clientId, clientName, onChange }: Props) {
         className="flex w-full items-center gap-2.5 px-5 py-3.5 text-left"
       >
         <i className="ti ti-adjustments text-[18px] text-signal" aria-hidden />
-        <span className="text-[13px] font-medium text-ink-soft">리포트 설정</span>
-        <span className="truncate text-[12px] text-ink-muted">
+        <span className="text-[15px] font-medium text-ink-soft">리포트 설정</span>
+        <span className="truncate text-[13px] text-ink-muted">
           {loading ? "불러오는 중…" : `${clientName} · ${summary}`}
         </span>
         <i
-          className={`ti ti-chevron-down ml-auto text-[16px] text-ink-muted transition ${open ? "rotate-180" : ""}`}
+          className={`ti ti-chevron-down ml-auto text-[17px] text-ink-muted transition ${open ? "rotate-180" : ""}`}
           aria-hidden
         />
       </button>
@@ -120,12 +120,12 @@ export function ReportConfigPanel({ clientId, clientName, onChange }: Props) {
         <div className="space-y-4 border-t border-line px-5 py-4">
           {/* 활성 매체 */}
           <div>
-            <p className="mb-2 text-[12px] text-ink-muted">활성 매체 (다중 선택)</p>
+            <p className="mb-2 text-[13px] text-ink-muted">활성 매체 (다중 선택)</p>
             <div className="flex flex-wrap gap-4">
               {CHANNEL_OPTIONS.map((o) => (
                 <label
                   key={o.value}
-                  className="flex cursor-pointer items-center gap-1.5 text-[13px] text-ink-soft"
+                  className="flex cursor-pointer items-center gap-1.5 text-[15px] text-ink-soft"
                 >
                   <input
                     type="checkbox"
@@ -141,12 +141,12 @@ export function ReportConfigPanel({ clientId, clientName, onChange }: Props) {
 
           {/* 주요 KPI */}
           <div>
-            <p className="mb-2 text-[12px] text-ink-muted">주요 KPI</p>
+            <p className="mb-2 text-[13px] text-ink-muted">주요 KPI</p>
             <div className="flex flex-wrap gap-4">
               {KPI_OPTIONS.map((o) => (
                 <label
                   key={o.value}
-                  className="flex cursor-pointer items-center gap-1.5 text-[13px] text-ink-soft"
+                  className="flex cursor-pointer items-center gap-1.5 text-[15px] text-ink-soft"
                 >
                   <input
                     type="radio"
@@ -163,12 +163,12 @@ export function ReportConfigPanel({ clientId, clientName, onChange }: Props) {
 
           {/* 리포트 톤 */}
           <div>
-            <p className="mb-2 text-[12px] text-ink-muted">리포트 톤</p>
+            <p className="mb-2 text-[13px] text-ink-muted">리포트 톤</p>
             <div className="flex flex-wrap gap-4">
               {TONE_OPTIONS.map((o) => (
                 <label
                   key={o.value}
-                  className="flex cursor-pointer items-center gap-1.5 text-[13px] text-ink-soft"
+                  className="flex cursor-pointer items-center gap-1.5 text-[15px] text-ink-soft"
                 >
                   <input
                     type="radio"
@@ -178,7 +178,7 @@ export function ReportConfigPanel({ clientId, clientName, onChange }: Props) {
                     className="h-4 w-4 accent-signal"
                   />
                   {o.label}
-                  <span className="text-[11px] text-ink-muted">— {o.hint}</span>
+                  <span className="text-[13px] text-ink-muted">— {o.hint}</span>
                 </label>
               ))}
             </div>
@@ -186,22 +186,22 @@ export function ReportConfigPanel({ clientId, clientName, onChange }: Props) {
 
           {/* 고유 규칙 / 특이사항 */}
           <div>
-            <p className="mb-2 text-[12px] text-ink-muted">광고주 고유 규칙 · 특이사항</p>
+            <p className="mb-2 text-[13px] text-ink-muted">광고주 고유 규칙 · 특이사항</p>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               rows={10}
               placeholder="네이밍 규칙, 특이사항 등"
-              className="w-full resize-y rounded-lg border border-line bg-canvas p-3 font-mono text-[12px] leading-relaxed outline-none focus:border-signal focus:ring-4 focus:ring-signal/10"
+              className="w-full resize-y rounded-lg border border-line bg-canvas p-3 font-mono text-[13px] leading-relaxed outline-none focus:border-signal focus:ring-4 focus:ring-signal/10"
             />
-            <p className="mt-1 text-[11px] text-ink-muted">
+            <p className="mt-1 text-[13px] text-ink-muted">
               여기 적은 내용은 AI 진단·심층 리포트의 system prompt에 그대로 주입돼요.
             </p>
           </div>
 
           <div className="flex items-center gap-3">
-            <button onClick={handleSave} disabled={saving || loading} className="btn-signal h-9 px-3 text-[13px]">
-              <i className={`ti ${saving ? "ti-loader-2 animate-spin" : "ti-device-floppy"} text-[15px]`} aria-hidden />
+            <button onClick={handleSave} disabled={saving || loading} className="btn-signal h-9 px-3 text-[15px]">
+              <i className={`ti ${saving ? "ti-loader-2 animate-spin" : "ti-device-floppy"} text-[16px]`} aria-hidden />
               {saving ? "저장 중…" : "설정 저장"}
             </button>
             <button
@@ -211,11 +211,11 @@ export function ReportConfigPanel({ clientId, clientName, onChange }: Props) {
                 setTone(defaultReportConfig.report_tone);
                 setNotes(defaultReportConfig.custom_prompt_notes);
               }}
-              className="text-[12px] text-ink-muted underline-offset-2 hover:text-ink-soft hover:underline"
+              className="text-[13px] text-ink-muted underline-offset-2 hover:text-ink-soft hover:underline"
             >
               기본값으로 되돌리기
             </button>
-            {msg && <span className="text-[12px] text-signal">{msg}</span>}
+            {msg && <span className="text-[13px] text-signal">{msg}</span>}
           </div>
         </div>
       )}

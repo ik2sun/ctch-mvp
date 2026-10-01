@@ -16,7 +16,7 @@ export type SharedChannelDef = {
   accountLabel: string; // 광고주별로 넣는 값
   fields: SharedFieldDef[];
   oauth?: boolean; // 키 입력 대신 계정 연결(카카오)
-  connect?: { href: string; label: string }; // 키 저장 후 추가로 계정 연결이 필요한 매체(GFA: 네이버 로그인)
+  connect?: { href: string; label: string; account: string; color: string }; // 키 저장 후 추가로 계정 연결이 필요한 매체(GFA: 네이버 로그인, GA4: 구글 로그인)
   testable: boolean; // 저장 전 실제 API로 확인하는지
   live: boolean; // 대시보드·리포트에서 실제로 조회하는 매체인지
   steps: string[];
@@ -76,7 +76,7 @@ export const SHARED_DEFS: SharedChannelDef[] = [
       { key: "client_secret", label: "Client Secret", secret: true },
       { key: "manager_account_no", label: "NMG 관리 계정 번호", digits: true, optional: true },
     ],
-    connect: { href: "/api/gfa/oauth/start", label: "네이버 계정 연결" },
+    connect: { href: "/api/gfa/oauth/start", label: "네이버 계정 연결", account: "네이버 계정", color: "#03C75A" },
     testable: true,
     live: true,
     steps: [
@@ -102,9 +102,19 @@ export const SHARED_DEFS: SharedChannelDef[] = [
     channel: "ga4",
     label: "GA4",
     accountLabel: "속성 ID",
-    fields: [{ key: "service_account_json", label: "서비스 계정 JSON", secret: true, textarea: true }],
-    testable: false,
+    fields: [
+      { key: "client_id", label: "OAuth Client ID (GCP)", optional: true },
+      { key: "client_secret", label: "OAuth Client Secret", secret: true, optional: true },
+      { key: "service_account_json", label: "서비스 계정 JSON (예외 · 구글 계정 연결을 안 쓸 때)", secret: true, textarea: true, optional: true },
+    ],
+    connect: { href: "/api/ga4/oauth/start", label: "구글 계정 연결", account: "구글 계정", color: "#1A73E8" },
+    testable: true,
     live: false,
-    steps: ["GCP 서비스 계정 JSON 키 — 각 GA4 속성에 이 서비스 계정 이메일을 뷰어로 추가(아직 조회 미지원)"],
+    steps: [
+      "GCP 콘솔 → API 및 서비스 → 라이브러리: 'Google Analytics Data API'·'Google Analytics Admin API' 사용 설정",
+      "OAuth 동의 화면: 사용자 유형 '내부'(nmg.co.kr 워크스페이스) 권장 — '외부 + 테스트'면 연결이 7일마다 끊기고 테스트 사용자에 본인 계정을 넣어야 해요",
+      "사용자 인증 정보 → OAuth 클라이언트 ID(웹 애플리케이션), 승인된 리디렉션 URI에 아래 주소 등록 → Client ID·Secret 저장",
+      "'구글 계정 연결' → GA4 속성에 뷰어 이상 권한이 있는 구글 계정으로 로그인, 'Google 애널리틱스 데이터 보기' 체크",
+    ],
   },
 ];

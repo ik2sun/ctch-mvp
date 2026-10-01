@@ -134,8 +134,8 @@ export function ImageEditor({
               <i className="ti ti-wand text-[18px]" aria-hidden />
             </span>
             <div>
-              <h3 className="text-[16px] font-semibold text-gray-900">이미지 수정</h3>
-              <p className="mt-0.5 text-xs text-gray-500">바꾸고 싶은 내용을 적으면 AI가 이미지를 보고 고른 도구에 맞는 수정 프롬프트를 만들어요.</p>
+              <h3 className="text-[17px] font-semibold text-gray-900">이미지 수정</h3>
+              <p className="mt-0.5 text-[13px] text-gray-500">바꾸고 싶은 내용을 적으면 AI가 이미지를 보고 고른 도구에 맞는 수정 프롬프트를 만들어요.</p>
             </div>
           </div>
           <button
@@ -153,13 +153,13 @@ export function ImageEditor({
           {/* 원본 · 결과 */}
           <div className="space-y-3 overflow-y-auto border-r border-gray-100 bg-gradient-to-b from-slate-50 to-white px-5 py-5">
             <figure>
-              <figcaption className="mb-1.5 text-[11px] font-semibold text-gray-500">원본</figcaption>
+              <figcaption className="mb-1.5 text-[13px] font-semibold text-gray-500">원본</figcaption>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={source.image_url ?? ""} alt="" className="w-full rounded-lg ring-1 ring-gray-200" />
             </figure>
             {edited?.image_url && (
               <figure>
-                <figcaption className="mb-1.5 flex items-center justify-between text-[11px] font-semibold text-signal">
+                <figcaption className="mb-1.5 flex items-center justify-between text-[13px] font-semibold text-signal">
                   수정 결과 <span className="font-normal text-gray-400">보관함에 저장됨</span>
                 </figcaption>
                 <a href={edited.image_url} target="_blank" rel="noreferrer">
@@ -174,17 +174,17 @@ export function ImageEditor({
           <div className="space-y-5 overflow-y-auto px-6 py-5">
             <section className="space-y-3">
               <label className="block">
-                <span className="mb-1 block text-[12px] font-semibold text-gray-700">수정하고 싶은 내용</span>
+                <span className="mb-1 block text-[13px] font-semibold text-gray-700">수정하고 싶은 내용</span>
                 <textarea
                   rows={3}
                   value={request}
                   onChange={(e) => setRequest(e.target.value)}
                   placeholder="예) 배경을 여름 해변으로 바꾸고 제품은 그대로. 오후 햇살, 광고 사진 느낌으로"
-                  className={`${FIELD} w-full resize-none px-3 py-2 text-[13px]`}
+                  className={`${FIELD} w-full resize-none px-3 py-2 text-[15px]`}
                 />
               </label>
               <div>
-                <span className="mb-1.5 block text-[12px] font-semibold text-gray-700">수정에 쓸 도구</span>
+                <span className="mb-1.5 block text-[13px] font-semibold text-gray-700">수정에 쓸 도구</span>
                 <div role="radiogroup" className="flex flex-wrap gap-1.5">
                   {EDIT_TOOLS.map((it) => {
                     const on = it.id === tool;
@@ -198,11 +198,11 @@ export function ImageEditor({
                           setTool(it.id);
                           if (!it.api) setUseApi(false);
                         }}
-                        className={`inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-[12px] transition ${
+                        className={`inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-[13px] transition ${
                           on ? "bg-signal-soft font-semibold text-signal-strong ring-2 ring-signal" : "bg-white text-gray-600 ring-1 ring-gray-200 hover:ring-signal/40"
                         }`}
                       >
-                        <i className={`ti ti-${it.icon} text-[14px]`} aria-hidden />
+                        <i className={`ti ti-${it.icon} text-[15px]`} aria-hidden />
                         {it.name}
                         {it.api && <span className="rounded bg-violet-100 px-1 text-[9.5px] font-semibold text-violet-700">API</span>}
                       </button>
@@ -218,7 +218,7 @@ export function ImageEditor({
                       key={r}
                       type="button"
                       onClick={() => setRatio(r)}
-                      className={`h-7 rounded-md px-2 text-[11px] transition ${
+                      className={`h-7 rounded-md px-2 text-[13px] transition ${
                         r === ratio ? "bg-signal-soft font-semibold text-signal ring-1 ring-signal/30" : "bg-white text-gray-600 ring-1 ring-gray-200 hover:ring-signal/30"
                       }`}
                     >
@@ -227,7 +227,7 @@ export function ImageEditor({
                   ))}
                 </div>
                 {t.api && (
-                  <label className={`flex items-center gap-2 text-[12px] ${keyMissing ? "cursor-not-allowed text-gray-400" : "cursor-pointer text-violet-900"}`}>
+                  <label className={`flex items-center gap-2 text-[13px] ${keyMissing ? "cursor-not-allowed text-gray-400" : "cursor-pointer text-violet-900"}`}>
                     <input
                       type="checkbox"
                       checked={useApi && !keyMissing}
@@ -236,8 +236,8 @@ export function ImageEditor({
                       className="h-4 w-4 rounded border-gray-300 accent-violet-600"
                     />
                     <span>
-                      API로 바로 수정 <span className="text-[11px] text-gray-500">({t.name} · 종량제)</span>
-                      {keyMissing && <span className="ml-1 text-[11px] text-amber-700">서버 키 없음</span>}
+                      API로 바로 수정 <span className="text-[13px] text-gray-500">({t.name} · 종량제)</span>
+                      {keyMissing && <span className="ml-1 text-[13px] text-amber-700">서버 키 없음</span>}
                     </span>
                   </label>
                 )}
@@ -245,9 +245,9 @@ export function ImageEditor({
                   type="button"
                   onClick={makePrompt}
                   disabled={Boolean(busy)}
-                  className="inline-flex h-9 items-center gap-2 rounded-lg bg-gradient-to-r from-signal to-violet-600 px-4 text-[13px] font-semibold text-white shadow-sm shadow-signal/25 transition hover:brightness-110 disabled:opacity-50"
+                  className="inline-flex h-9 items-center gap-2 rounded-lg bg-gradient-to-r from-signal to-violet-600 px-4 text-[15px] font-semibold text-white shadow-sm shadow-signal/25 transition hover:brightness-110 disabled:opacity-50"
                 >
-                  <i className={`ti ${busy ? "ti-loader-2 animate-spin" : applyOn ? "ti-wand" : "ti-sparkles"} text-[15px]`} aria-hidden />
+                  <i className={`ti ${busy ? "ti-loader-2 animate-spin" : applyOn ? "ti-wand" : "ti-sparkles"} text-[16px]`} aria-hidden />
                   {busy === "prompt"
                     ? "이미지 분석 중… (20~40초)"
                     : busy === "apply"
@@ -268,7 +268,7 @@ export function ImageEditor({
             {result && (
               <section className="space-y-4 rounded-xl border border-gray-200 p-4">
                 <div>
-                  <p className="text-[14px] font-semibold text-gray-900">{result.title}</p>
+                  <p className="text-[15px] font-semibold text-gray-900">{result.title}</p>
                   <p className="mt-1 text-[12.5px] leading-relaxed text-gray-600">{result.analysis}</p>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
@@ -276,7 +276,7 @@ export function ImageEditor({
                     <p className="mb-1.5 flex items-center gap-1 text-[11.5px] font-semibold text-emerald-800">
                       <i className="ti ti-lock" aria-hidden /> 유지
                     </p>
-                    <ul className="space-y-1 text-[12px] text-emerald-900">
+                    <ul className="space-y-1 text-[13px] text-emerald-900">
                       {result.keep.map((k) => (
                         <li key={k}>· {k}</li>
                       ))}
@@ -286,7 +286,7 @@ export function ImageEditor({
                     <p className="mb-1.5 flex items-center gap-1 text-[11.5px] font-semibold text-amber-800">
                       <i className="ti ti-arrows-exchange" aria-hidden /> 바뀌는 점
                     </p>
-                    <ul className="space-y-1 text-[12px] text-amber-900">
+                    <ul className="space-y-1 text-[13px] text-amber-900">
                       {result.changes.map((c) => (
                         <li key={c}>· {c}</li>
                       ))}
@@ -296,13 +296,13 @@ export function ImageEditor({
 
                 <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
                   <div className="mb-1.5 flex items-center justify-between">
-                    <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-500">
+                    <span className="inline-flex items-center gap-1 text-[13px] font-medium text-slate-500">
                       <i className="ti ti-file-text text-signal" aria-hidden /> {t.name} 프롬프트 · 직접 고칠 수 있어요
                     </span>
                     <button
                       type="button"
                       onClick={() => copy("all", fullText)}
-                      className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-[11px] text-slate-600 ring-1 ring-slate-200 hover:text-signal"
+                      className="whitespace-nowrap inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-[13px] text-slate-600 ring-1 ring-slate-200 hover:text-signal"
                     >
                       <i className={`ti ${copied === "all" ? "ti-check" : "ti-copy"}`} aria-hidden /> {copied === "all" ? "복사됨" : "전체 복사"}
                     </button>
@@ -314,7 +314,7 @@ export function ImageEditor({
                     className="w-full resize-y bg-transparent font-mono text-[11.5px] leading-relaxed text-slate-700 outline-none"
                   />
                   {(result.params || result.negative) && (
-                    <div className="mt-2 space-y-1 border-t border-slate-200 pt-2 font-mono text-[11px] text-slate-600">
+                    <div className="mt-2 space-y-1 border-t border-slate-200 pt-2 font-mono text-[13px] text-slate-600">
                       {result.params && (
                         <p>
                           <span className="mr-1 font-sans text-[10.5px] font-semibold text-slate-400">파라미터</span>
@@ -331,7 +331,7 @@ export function ImageEditor({
                   )}
                 </div>
                 {result.howTo && (
-                  <p className="flex items-start gap-1.5 text-[12px] leading-relaxed text-gray-600">
+                  <p className="flex items-start gap-1.5 text-[13px] leading-relaxed text-gray-600">
                     <i className="ti ti-info-circle mt-0.5 text-signal" aria-hidden /> {result.howTo}
                   </p>
                 )}
@@ -348,7 +348,7 @@ export function ImageEditor({
                       disabled={Boolean(busy) || !prompt.trim()}
                       className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-violet-600 px-3.5 text-[12.5px] font-medium text-white shadow-sm transition hover:bg-violet-700 disabled:opacity-50"
                     >
-                      <i className={`ti ${busy === "apply" ? "ti-loader-2 animate-spin" : "ti-wand"} text-[14px]`} aria-hidden />
+                      <i className={`ti ${busy === "apply" ? "ti-loader-2 animate-spin" : "ti-wand"} text-[15px]`} aria-hidden />
                       {busy === "apply" ? "수정 중…" : edited ? "다시 수정" : "이 프롬프트로 수정"}
                     </button>
                   </div>

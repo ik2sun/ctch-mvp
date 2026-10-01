@@ -12,7 +12,7 @@ import type { MediaChannel } from "@/features/clients/mediaKeys";
 
 export default function ClientsPage() {
   return (
-    <Suspense fallback={<p className="py-8 text-center text-[14px] text-ink-muted">불러오는 중…</p>}>
+    <Suspense fallback={<p className="py-8 text-center text-[15px] text-ink-muted">불러오는 중…</p>}>
       <ClientsManager />
     </Suspense>
   );
@@ -101,12 +101,12 @@ function ClientsManager() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-5">
+    <div className="mx-auto w-full max-w-[1600px] space-y-6">
       {/* 상단: 광고주 리스트 박스 + 신규 등록 */}
       <div className="rounded-card border border-line bg-surface p-4">
         <div className="flex flex-wrap items-end gap-3">
           <div className="min-w-[240px] flex-1">
-            <label htmlFor="client-pick" className="mb-1.5 block text-[12px] font-medium text-ink-soft">
+            <label htmlFor="client-pick" className="mb-1.5 block text-[13px] font-medium text-ink-soft">
               광고주 선택 <span className="font-normal text-ink-faint">· {clients.length}곳 · 고르면 현재 광고주로 바뀌어요</span>
             </label>
             <div className="relative">
@@ -115,7 +115,7 @@ function ClientsManager() {
                 value={mode === "edit" ? (managedId ?? "") : ""}
                 onChange={(e) => e.target.value && pick(e.target.value)}
                 disabled={loading || clients.length === 0}
-                className="field h-10 appearance-none pr-9 text-[14px]"
+                className="field h-10 appearance-none pr-9 text-[15px]"
               >
                 {(mode === "new" || !managedId) && <option value="">{mode === "new" ? "신규 광고주 등록 중…" : "광고주 선택"}</option>}
                 {sorted.map((c) => (
@@ -124,24 +124,24 @@ function ClientsManager() {
                   </option>
                 ))}
               </select>
-              <i className="ti ti-chevron-down pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[15px] text-ink-muted" aria-hidden />
+              <i className="ti ti-chevron-down pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[16px] text-ink-muted" aria-hidden />
             </div>
           </div>
-          <button type="button" onClick={startNew} className={`h-10 px-4 text-[14px] ${mode === "new" ? "btn-ghost" : "btn-signal"}`} disabled={mode === "new"}>
-            <i className="ti ti-plus text-[16px]" aria-hidden />
+          <button type="button" onClick={startNew} className={`h-10 px-4 text-[15px] ${mode === "new" ? "btn-ghost" : "btn-signal"}`} disabled={mode === "new"}>
+            <i className="ti ti-plus text-[17px]" aria-hidden />
             신규 광고주 등록
           </button>
         </div>
 
         {issues.length > 0 && (
           <div className="mt-3 rounded-lg border border-warn/30 bg-warn/5 px-3.5 py-2.5">
-            <p className="text-[12px] font-medium text-warn">
+            <p className="text-[13px] font-medium text-warn">
               <i className="ti ti-alert-triangle mr-1" aria-hidden />
               정리가 필요한 광고주 {new Set(issues.map((i) => i.client.id)).size}곳
             </p>
             <ul className="mt-1 space-y-0.5">
               {issues.map((i, n) => (
-                <li key={n} className="text-[12px] text-ink-soft">
+                <li key={n} className="text-[13px] text-ink-soft">
                   <button type="button" onClick={() => pick(i.client.id)} className="font-medium text-ink hover:text-signal hover:underline">
                     {clientLabel(i.client, clients)}
                   </button>{" "}
@@ -154,7 +154,7 @@ function ClientsManager() {
       </div>
 
       {notice && (
-        <p className={`rounded-lg border px-3.5 py-2.5 text-[13px] ${notice.tone === "good" ? "border-good/30 bg-good/5 text-good" : "border-bad/20 bg-bad/5 text-bad"}`}>
+        <p className={`rounded-lg border px-3.5 py-2.5 text-[15px] ${notice.tone === "good" ? "border-good/30 bg-good/5 text-good" : "border-bad/20 bg-bad/5 text-bad"}`}>
           {notice.text}
         </p>
       )}
@@ -180,12 +180,12 @@ function ClientsManager() {
           />
         </Section>
       ) : loading ? (
-        <p className="py-8 text-center text-[14px] text-ink-muted">불러오는 중…</p>
+        <p className="py-8 text-center text-[15px] text-ink-muted">불러오는 중…</p>
       ) : !managed ? (
         <div className="rounded-card border border-dashed border-line bg-surface py-12 text-center">
-          <p className="text-[14px] text-ink-muted">{clients.length ? "위에서 관리할 광고주를 선택하세요." : "아직 등록된 광고주가 없어요."}</p>
+          <p className="text-[15px] text-ink-muted">{clients.length ? "위에서 관리할 광고주를 선택하세요." : "아직 등록된 광고주가 없어요."}</p>
           {!clients.length && (
-            <button type="button" onClick={startNew} className="btn-signal mt-3 h-10 px-4 text-[14px]">
+            <button type="button" onClick={startNew} className="btn-signal mt-3 h-10 px-4 text-[15px]">
               첫 광고주 등록하기
             </button>
           )}
@@ -198,10 +198,10 @@ function ClientsManager() {
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="text-[17px] font-semibold text-ink">{managed.name}</h2>
                 {managed.id === selected?.id && (
-                  <span className="rounded-full bg-signal-soft px-2 py-0.5 text-[11px] font-medium text-signal">현재 광고주</span>
+                  <span className="whitespace-nowrap rounded-full bg-signal-soft px-2 py-0.5 text-[13px] font-medium text-signal">현재 광고주</span>
                 )}
               </div>
-              <p className="mt-0.5 text-[12px] text-ink-muted">
+              <p className="mt-0.5 text-[13px] text-ink-muted">
                 {[managed.industry, `월예산 ${fmtBudget(managed.monthly_budget)}`, managed.manager ? `담당 ${managed.manager}` : null, `${new Date(managed.created_at).toLocaleDateString("ko-KR")} 등록`]
                   .filter(Boolean)
                   .join(" · ")}
@@ -234,9 +234,9 @@ function ClientsManager() {
 
 function Section({ title, desc, children }: { title: string; desc?: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-card border border-line bg-surface p-5">
-      <h3 className="text-[15px] font-semibold text-ink">{title}</h3>
-      {desc && <p className="mb-4 mt-0.5 text-[12px] text-ink-muted">{desc}</p>}
+    <section className="rounded-card border border-line bg-surface p-6">
+      <h3 className="text-[16px] font-semibold text-ink">{title}</h3>
+      {desc && <p className="mb-4 mt-0.5 text-[13px] text-ink-muted">{desc}</p>}
       {children}
     </section>
   );
@@ -270,12 +270,12 @@ function DeleteZone({ client, onDeleted }: { client: Client; onDeleted: () => vo
     <section className="rounded-card border border-bad/25 bg-surface p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h3 className="text-[15px] font-semibold text-bad">광고주 삭제</h3>
-          <p className="mt-0.5 text-[12px] text-ink-muted">매체 연동 정보와 이 광고주에 저장된 리포트·설정이 함께 삭제되고 되돌릴 수 없어요.</p>
+          <h3 className="text-[16px] font-semibold text-bad">광고주 삭제</h3>
+          <p className="mt-0.5 text-[13px] text-ink-muted">매체 연동 정보와 이 광고주에 저장된 리포트·설정이 함께 삭제되고 되돌릴 수 없어요.</p>
         </div>
         {!open && (
-          <button type="button" onClick={() => setOpen(true)} className="btn-ghost h-9 px-3 text-[13px] hover:border-bad hover:text-bad">
-            <i className="ti ti-trash text-[15px]" aria-hidden />
+          <button type="button" onClick={() => setOpen(true)} className="btn-ghost h-9 px-3 text-[15px] hover:border-bad hover:text-bad">
+            <i className="ti ti-trash text-[16px]" aria-hidden />
             삭제하기
           </button>
         )}
@@ -287,20 +287,20 @@ function DeleteZone({ client, onDeleted }: { client: Client; onDeleted: () => vo
             onChange={(e) => setTyped(e.target.value)}
             placeholder={`확인을 위해 '${client.name}' 입력`}
             autoComplete="off"
-            className="field h-9 max-w-xs text-[13px]"
+            className="field h-9 max-w-xs text-[15px]"
           />
           <button
             type="button"
             onClick={remove}
             disabled={busy || typed.trim() !== client.name.trim()}
-            className="inline-flex h-9 items-center rounded-lg bg-bad px-4 text-[13px] font-medium text-white transition hover:brightness-95 disabled:opacity-40"
+            className="inline-flex h-9 items-center rounded-lg bg-bad px-4 text-[15px] font-medium text-white transition hover:brightness-95 disabled:opacity-40"
           >
             {busy ? "삭제 중…" : "영구 삭제"}
           </button>
-          <button type="button" onClick={() => setOpen(false)} className="btn-ghost h-9 px-3 text-[13px]">
+          <button type="button" onClick={() => setOpen(false)} className="btn-ghost h-9 px-3 text-[15px]">
             취소
           </button>
-          {error && <p className="w-full text-[12px] text-bad">{error}</p>}
+          {error && <p className="w-full text-[13px] text-bad">{error}</p>}
         </div>
       )}
     </section>

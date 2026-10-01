@@ -22,7 +22,7 @@ export function PostThumbnail({ post, index, size = "md" }: { post: InstagramPos
         className="flex h-full w-full items-center justify-center"
         style={{ background: THUMB_GRADIENTS[index % THUMB_GRADIENTS.length] }}
       >
-        <i className={`ti ${icon} ${size === "sm" ? "text-[16px]" : "text-[28px]"} text-white/85`} aria-hidden />
+        <i className={`ti ${icon} ${size === "sm" ? "text-[17px]" : "text-[28px]"} text-white/85`} aria-hidden />
       </div>
     );
   }

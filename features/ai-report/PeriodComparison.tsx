@@ -47,11 +47,11 @@ function PeriodTick(prevSub: string, curSub: string) {
     const sub = isCur ? curSub : prevSub;
     return (
       <g transform={`translate(${x},${y})`}>
-        <text x={0} y={0} dy={12} textAnchor="middle" fontSize={11} fill="#767C86">
+        <text x={0} y={0} dy={12} textAnchor="middle" fontSize={13} fill="#767C86">
           {payload?.value}
         </text>
         {sub && (
-          <text x={0} y={0} dy={26} textAnchor="middle" fontSize={10} fill="#A7ACB4">
+          <text x={0} y={0} dy={26} textAnchor="middle" fontSize={13} fill="#A7ACB4">
             ({sub})
           </text>
         )}
@@ -67,12 +67,12 @@ function delta(cur: number, prev: number): number | null {
 
 function DeltaPill({ value }: { value: number | null }) {
   if (value === null || !isFinite(value)) {
-    return <span className="rounded-full bg-ink-faint/40 px-1.5 py-0.5 text-[10px] font-semibold text-ink-muted">--</span>;
+    return <span className="whitespace-nowrap rounded-full bg-ink-faint/40 px-1.5 py-0.5 text-[12px] font-semibold text-ink-muted">--</span>;
   }
   const up = value >= 0;
   return (
     <span
-      className="whitespace-nowrap rounded-full px-1.5 py-0.5 text-[10px] font-semibold text-white"
+      className="whitespace-nowrap rounded-full px-1.5 py-0.5 text-[12px] font-semibold text-white"
       style={{ background: up ? UP_BG : DOWN_BG }}
     >
       {up ? "▲" : "▼"} {Math.abs(value).toFixed(1)}%
@@ -111,17 +111,17 @@ function MetricCard({
 
   return (
     <div className="rounded-card border border-line bg-white p-3.5">
-      <p className="text-[12px] font-medium text-[#6B7280]">{meta.label}</p>
+      <p className="text-[13px] font-medium text-[#6B7280]">{meta.label}</p>
 
       <div className="mt-2">
-        <p className="text-[10px] text-ink-faint">이전</p>
-        <p className="text-[14px] text-[#6B7280]">{prevOk ? fmt(prevVal, meta.kind) : "데이터 없음"}</p>
+        <p className="text-[12px] text-ink-faint">이전</p>
+        <p className="text-[15px] text-[#6B7280]">{prevOk ? fmt(prevVal, meta.kind) : "데이터 없음"}</p>
       </div>
 
       <div className="mt-1.5">
-        <p className="text-[10px] text-ink-faint">최근</p>
+        <p className="text-[12px] text-ink-faint">최근</p>
         <div className="flex items-center gap-1.5">
-          <span className="text-[14px] font-bold text-[#111827]">{curOk ? fmt(curVal, meta.kind) : "데이터 없음"}</span>
+          <span className="text-[15px] font-bold text-[#111827]">{curOk ? fmt(curVal, meta.kind) : "데이터 없음"}</span>
           <DeltaPill value={change} />
         </div>
       </div>
@@ -154,20 +154,20 @@ function MetricBarBox({
 
   return (
     <div className="rounded-card border border-line bg-white p-4">
-      <p className="mb-2 text-[13px] font-medium text-ink-soft">{meta.label}</p>
+      <p className="mb-2 text-[15px] font-medium text-ink-soft">{meta.label}</p>
       <div style={{ height: 200 }}>
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={chartData} margin={{ top: 8, right: 8, bottom: 4, left: 8 }}>
             <CartesianGrid stroke="#E6E6E2" vertical={false} />
             <XAxis dataKey="period" tick={tick} height={38} tickLine={false} axisLine={{ stroke: "#E6E6E2" }} />
             <YAxis
-              tick={{ fontSize: 11, fill: "#767C86" }}
+              tick={{ fontSize: 13, fill: "#767C86" }}
               tickLine={false}
               axisLine={false}
               tickFormatter={(v) => Number(v).toLocaleString("ko-KR")}
             />
             <Tooltip
-              contentStyle={{ borderRadius: 10, border: `1px solid ${curColor}`, background: "#fff", fontSize: 12, fontFamily: "Pretendard, sans-serif" }}
+              contentStyle={{ borderRadius: 10, border: `1px solid ${curColor}`, background: "#fff", fontSize: 13, fontFamily: "Pretendard, sans-serif" }}
               formatter={(value, _name, item) => [
                 item?.payload?.ok ? fmt(Number(value), meta.kind) : "데이터 없음",
                 meta.label,
@@ -211,10 +211,10 @@ export function PeriodComparison({
     <div className="space-y-5">
       {/* 기간 선택 */}
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-[13px] font-medium text-ink-soft">
+        <span className="text-[15px] font-medium text-ink-soft">
           {option.label}
           {!loading && hasRange && (
-            <span className="ml-1.5 font-mono text-[11px] font-normal text-ink-muted">
+            <span className="ml-1.5 font-mono text-[13px] font-normal text-ink-muted">
               ({curRange} vs {prevRange})
             </span>
           )}
@@ -222,7 +222,7 @@ export function PeriodComparison({
         <select
           value={window}
           onChange={(e) => onWindowChange(Number(e.target.value))}
-          className="h-8 rounded-lg border border-line bg-surface px-2 text-[12px] text-ink-soft outline-none transition hover:border-ink-faint focus:border-signal"
+          className="h-8 rounded-lg border border-line bg-surface px-2 text-[13px] text-ink-soft outline-none transition hover:border-ink-faint focus:border-signal"
         >
           {PERIOD_OPTIONS.map((o) => (
             <option key={o.value} value={o.value}>
@@ -236,17 +236,17 @@ export function PeriodComparison({
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex items-center gap-1.5">
           <span className="h-2 w-2 rounded-full" style={{ background: PREV_COLOR }} aria-hidden />
-          <span className="text-[11px] text-ink-muted">이전</span>
+          <span className="text-[13px] text-ink-muted">이전</span>
         </div>
         <div className="mr-2 flex items-center gap-1.5">
-          <span className="text-[11px] text-ink-muted">최근 (지표별 색상)</span>
+          <span className="text-[13px] text-ink-muted">최근 (지표별 색상)</span>
         </div>
         {metricKeys.map((key, i) => (
           <select
             key={i}
             value={key}
             onChange={(e) => setSlot(i, e.target.value as CompareMetricKey)}
-            className="h-8 rounded-lg border border-line bg-surface px-2 text-[12px] text-ink-soft outline-none transition hover:border-ink-faint focus:border-signal"
+            className="h-8 rounded-lg border border-line bg-surface px-2 text-[13px] text-ink-soft outline-none transition hover:border-ink-faint focus:border-signal"
           >
             {(Object.keys(METRIC_CATALOG) as CompareMetricKey[]).map((k) => (
               <option key={k} value={k}>
@@ -258,7 +258,7 @@ export function PeriodComparison({
       </div>
 
       {loading ? (
-        <p className="py-6 text-center text-[13px] text-ink-muted">불러오는 중…</p>
+        <p className="py-6 text-center text-[15px] text-ink-muted">불러오는 중…</p>
       ) : (
         <>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -272,7 +272,7 @@ export function PeriodComparison({
           </div>
 
           <div>
-            <p className="mb-2 text-[12px] text-ink-muted">지표별 비교 그래프</p>
+            <p className="mb-2 text-[13px] text-ink-muted">지표별 비교 그래프</p>
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
               {metricKeys.map((key) => (
                 <MetricBarBox

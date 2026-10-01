@@ -11,6 +11,8 @@ import { normalizeMetaAccountId } from "@/features/clients/metaAccount";
 import { getGfaCredentials, GfaAuthError } from "@/lib/gfa/auth";
 import { fetchAdAccount as fetchGfaAdAccount, fetchCampaigns as fetchGfaCampaigns } from "@/lib/gfa/aggregate";
 import { GfaApiError } from "@/lib/gfa/client";
+import { getGa4Credentials, Ga4AuthError } from "@/lib/ga4/auth";
+import { probeProperty, Ga4ApiError } from "@/lib/ga4/client";
 
 // 매체 연동 상태 점검 — 광고주별로 저장된 키를 기준으로 가벼운 호출 1회씩 유효성 확인
 // (구 app/api/meta-status를 메타 전용에서 전 매체로 확장)
@@ -170,8 +172,8 @@ export async function POST(req: Request) {
     }
   }
 
-  // 조회 API가 아직 없는 매체(구글 Ads·GA4) — 광고계정 ID + (개별 키 또는 공용 키)가 있는지만 확인
-  const [gadsShared, ga4Shared] = await Promise.all([getShared("google_ads"), getShared("ga4")]);
+  // 조회 API가 아직 없는 매체(구글 Ads) — 광고계정 ID + (개별 키 또는 공용 키)가 있는지만 확인
+  const gadsShared = await getShared("google_ads");
   const storedOnly = (key: string, label: string, accountId: string | null | undefined, ownKey: boolean, sharedKey: boolean, idLabel: string) => {
     const id = accountId?.trim();
     if (!id) {
@@ -217,7 +219,33 @@ export async function POST(req: Request) {
   }
 
   storedOnly("google_ads", "구글 Ads", client.google_ads_customer_id, !!client.google_ads_developer_token, !!gadsShared?.config.developer_token, "Customer ID");
-  storedOnly("ga4", "GA4", client.ga4_property_id, !!client.ga4_service_account_json, !!ga4Shared?.config.service_account_json, "속성 ID");
+
+  // GA4 — 속성 ID + (개별 서비스 계정 또는 공용 구글 계정 연결)로 최근 7일 세션 조회 실검증
+  if (!client.ga4_property_id?.trim()) {
+    media.push({ key: "ga4", label: "GA4", connected: false, status: "none", detail: "속성 ID 미등록" });
+  } else {
+    const pid = client.ga4_property_id.trim();
+    try {
+      const creds = await getGa4Credentials(client);
+      const p = await probeProperty(creds.accessToken, creds.propertyId);
+      const via = creds.source === "own_sa" ? "개별 서비스 계정" : creds.source === "shared_oauth" ? `공용 구글 계정${creds.account ? `(${creds.account})` : ""}` : "공용 서비스 계정";
+      media.push({ key: "ga4", label: "GA4", connected: true, status: "ok", detail: `속성 ID ${creds.propertyId} · 최근 7일 세션 ${p.sessions.toLocaleString("ko-KR")} · ${via}` });
+    } catch (e) {
+      const expired = (e instanceof Ga4AuthError && e.code === "NOT_LINKED" && /만료/.test(e.message)) || (e instanceof Ga4ApiError && e.code === "UNAUTHORIZED");
+      media.push({
+        key: "ga4",
+        label: "GA4",
+        connected: false,
+        status: expired ? "expired" : "error",
+        detail:
+          e instanceof Ga4ApiError && e.code === "FORBIDDEN"
+            ? `속성 ${pid}에 권한이 없어요 — 연결한 구글 계정(또는 서비스 계정)을 이 GA4 속성에 뷰어로 추가하세요`
+            : e instanceof Ga4ApiError && e.code === "NOT_FOUND"
+              ? `속성 ${pid}을(를) 찾을 수 없어요 — 속성 ID(숫자)를 확인하세요`
+              : `속성 ${pid} — ${e instanceof Error ? e.message : "연결 확인 실패"}`,
+      });
+    }
+  }
 
   return NextResponse.json({ media, clientName: client.name });
 }

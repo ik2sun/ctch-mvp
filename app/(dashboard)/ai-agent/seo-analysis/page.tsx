@@ -12,18 +12,18 @@ function KpiCard({ label, value, sub, tone }: { label: string; value: string; su
   const color = tone === "good" ? "text-good" : tone === "bad" ? "text-bad" : tone === "warn" ? "text-warn" : "text-ink";
   return (
     <div className="rounded-card border border-line bg-surface p-4">
-      <p className="text-[12px] text-ink-muted">{label}</p>
+      <p className="text-[13px] text-ink-muted">{label}</p>
       <p className={`mt-0.5 font-display text-[22px] font-semibold ${color}`}>{value}</p>
-      {sub && <p className="mt-0.5 text-[11px] text-ink-muted">{sub}</p>}
+      {sub && <p className="mt-0.5 text-[13px] text-ink-muted">{sub}</p>}
     </div>
   );
 }
 
 function SeverityBadge({ severity, status }: { severity?: Severity; status: Finding["status"] }) {
-  if (status === "pass") return <span className="rounded bg-good/10 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-good">PASS</span>;
-  if (status === "info") return <span className="rounded bg-canvas px-1.5 py-0.5 font-mono text-[10px] font-semibold text-ink-muted">INFO</span>;
+  if (status === "pass") return <span className="whitespace-nowrap rounded bg-good/10 px-1.5 py-0.5 font-mono text-[12px] font-semibold text-good">PASS</span>;
+  if (status === "info") return <span className="whitespace-nowrap rounded bg-canvas px-1.5 py-0.5 font-mono text-[12px] font-semibold text-ink-muted">INFO</span>;
   const cls = severity === "HIGH" ? "bg-bad/10 text-bad" : severity === "MID" ? "bg-warn/10 text-warn" : "bg-canvas text-ink-muted";
-  return <span className={`rounded px-1.5 py-0.5 font-mono text-[10px] font-semibold ${cls}`}>{severity}</span>;
+  return <span className={`whitespace-nowrap rounded px-1.5 py-0.5 font-mono text-[12px] font-semibold ${cls}`}>{severity}</span>;
 }
 
 function EngineChips({ engines }: { engines: string[] }) {
@@ -31,7 +31,7 @@ function EngineChips({ engines }: { engines: string[] }) {
   return (
     <span className="flex flex-wrap gap-1">
       {engines.map((e) => (
-        <span key={e} className="rounded-full border border-line bg-surface px-1.5 py-px text-[10px] text-ink-soft">
+        <span key={e} className="rounded-full border border-line bg-surface px-1.5 py-px text-[12px] text-ink-soft">
           {e}
         </span>
       ))}
@@ -41,11 +41,11 @@ function EngineChips({ engines }: { engines: string[] }) {
 
 function Section({ title, desc, children, right }: { title: string; desc?: string; children: React.ReactNode; right?: React.ReactNode }) {
   return (
-    <div className="rounded-card border border-line bg-surface p-5">
+    <div className="rounded-card border border-line bg-surface p-6">
       <div className="mb-3 flex items-start justify-between gap-3">
         <div>
-          <span className="text-[13px] font-medium text-ink-soft">{title}</span>
-          {desc && <p className="text-[11px] text-ink-muted">{desc}</p>}
+          <span className="text-[15px] font-medium text-ink-soft">{title}</span>
+          {desc && <p className="text-[13px] text-ink-muted">{desc}</p>}
         </div>
         {right}
       </div>
@@ -219,7 +219,7 @@ export default function SeoAnalysisPage() {
   const otherCrawlers = audit?.robots.crawlers.filter((c) => c.role !== "search") ?? [];
 
   return (
-    <div className="mx-auto max-w-6xl space-y-5">
+    <div className="mx-auto w-full max-w-[1600px] space-y-6">
       {/* URL 입력 */}
       <div className="rounded-card border border-line bg-surface p-4">
         <div className="flex flex-wrap items-center gap-2">
@@ -232,31 +232,31 @@ export default function SeoAnalysisPage() {
             className="field h-10 min-w-[280px] flex-1"
           />
           <button onClick={runAuditRequest} disabled={loading} className="btn-signal h-10">
-            <i className={`ti ${loading ? "ti-loader-2 animate-spin" : "ti-search"} text-[16px]`} aria-hidden />
+            <i className={`ti ${loading ? "ti-loader-2 animate-spin" : "ti-search"} text-[17px]`} aria-hidden />
             {loading ? "진단 중…" : "진단 시작"}
           </button>
         </div>
-        <p className="mt-2 text-[11px] text-ink-muted">
+        <p className="mt-2 text-[13px] text-ink-muted">
           AI 크롤러가 보는 방식(JS 미실행)으로 페이지를 읽어 크롤러 접근 · 렌더링 · JSON-LD · 정합성 · 온페이지 · 인용 적합도를 점검하고, 엔진별(ChatGPT · Gemini/AI Overviews · Claude · Perplexity · 네이버) 처방을 나눕니다.
         </p>
         <details className="mt-3 rounded-lg border border-line bg-canvas px-3.5 py-2.5" open={briefFilled}>
-          <summary className="cursor-pointer text-[12px] font-medium text-ink-soft">
+          <summary className="cursor-pointer text-[13px] font-medium text-ink-soft">
             브랜드 정보 (선택) — 입력하면 AI 진단의 질의 설계 · Citable Snippet · 엔티티 매핑 · JSON-LD가 더 정확해져요{briefFilled ? " · 입력됨" : ""}
           </summary>
           <div className="mt-3 grid gap-2 md:grid-cols-2">
-            <input value={brief.brandName ?? ""} onChange={(e) => setBriefField("brandName", e.target.value)} placeholder="브랜드명 (예: 에스트라)" className="field h-9 text-[13px]" />
-            <input value={brief.industry ?? ""} onChange={(e) => setBriefField("industry", e.target.value)} placeholder="타깃 업종/카테고리 (예: 더마 코스메틱 · 민감성 스킨케어)" className="field h-9 text-[13px]" />
-            <input value={brief.products ?? ""} onChange={(e) => setBriefField("products", e.target.value)} placeholder="주요 제품/서비스 2~3개 (예: 아토베리어365 크림, 세라-히알 앰플)" className="field h-9 text-[13px]" />
-            <input value={brief.competitors ?? ""} onChange={(e) => setBriefField("competitors", e.target.value)} placeholder="경쟁사/비교 대상 (예: 일리윤, 라로슈포제, 토리든)" className="field h-9 text-[13px]" />
+            <input value={brief.brandName ?? ""} onChange={(e) => setBriefField("brandName", e.target.value)} placeholder="브랜드명 (예: 에스트라)" className="field h-9 text-[15px]" />
+            <input value={brief.industry ?? ""} onChange={(e) => setBriefField("industry", e.target.value)} placeholder="타깃 업종/카테고리 (예: 더마 코스메틱 · 민감성 스킨케어)" className="field h-9 text-[15px]" />
+            <input value={brief.products ?? ""} onChange={(e) => setBriefField("products", e.target.value)} placeholder="주요 제품/서비스 2~3개 (예: 아토베리어365 크림, 세라-히알 앰플)" className="field h-9 text-[15px]" />
+            <input value={brief.competitors ?? ""} onChange={(e) => setBriefField("competitors", e.target.value)} placeholder="경쟁사/비교 대상 (예: 일리윤, 라로슈포제, 토리든)" className="field h-9 text-[15px]" />
             <textarea
               value={brief.strengths ?? ""}
               onChange={(e) => setBriefField("strengths", e.target.value)}
               placeholder="핵심 강점/데이터 — 수치 · 특허 · 수상 · 누적 실적 · 임상 결과 (예: 논문 470건, 특허 240건, 120시간 보습 임상)"
-              className="field h-20 resize-none py-2 text-[13px] md:col-span-2"
+              className="field h-20 resize-none py-2 text-[15px] md:col-span-2"
             />
           </div>
         </details>
-        {error && <p className="mt-3 rounded-lg border border-bad/20 bg-bad/5 px-3.5 py-2.5 text-[13px] text-bad">{error}</p>}
+        {error && <p className="mt-3 rounded-lg border border-bad/20 bg-bad/5 px-3.5 py-2.5 text-[15px] text-bad">{error}</p>}
       </div>
 
       {audit && (
@@ -277,27 +277,27 @@ export default function SeoAnalysisPage() {
           </div>
           {/* 메타 + 산출물 다운로드 */}
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-surface px-4 py-3">
-            <p className="text-[11px] text-ink-muted">
+            <p className="text-[13px] text-ink-muted">
               {audit.finalUrl} · HTTP {audit.status} · {(audit.page.htmlBytes / 1024).toFixed(0)}KB · {audit.ms}ms · {new Date(audit.fetchedAt).toLocaleString("ko-KR")}
               {selectedClient && <> · 광고주 {selectedClient.name}</>}
             </p>
             <div className="flex flex-wrap items-center gap-2">
-              <span className={`text-[11px] ${modulesReady ? "text-good" : "text-warn"}`}>
+              <span className={`text-[13px] ${modulesReady ? "text-good" : "text-warn"}`}>
                 {modulesReady ? "AI 진단 포함 — 실행 모듈 4종 반영" : diagnosis ? "이전 버전 진단 — 실행 모듈이 없어요. 다시 진단하세요" : "AI 진단 전 — 실행 모듈(AEO·GEO·SOV·JSON-LD) 없이 나가요"}
               </span>
-              <button onClick={() => download("xlsx")} disabled={exporting !== null || aiLoading} className="btn-ghost h-9 px-3 text-[13px]">
-                <i className={`ti ${exporting === "xlsx" ? "ti-loader-2 animate-spin" : "ti-file-spreadsheet"} text-[15px] text-good`} aria-hidden />
+              <button onClick={() => download("xlsx")} disabled={exporting !== null || aiLoading} className="btn-ghost h-9 px-3 text-[15px]">
+                <i className={`ti ${exporting === "xlsx" ? "ti-loader-2 animate-spin" : "ti-file-spreadsheet"} text-[16px] text-good`} aria-hidden />
                 별첨 엑셀 · 14시트
               </button>
-              <button onClick={() => download("pptx")} disabled={exporting !== null || aiLoading} className="btn-ghost h-9 px-3 text-[13px]">
-                <i className={`ti ${exporting === "pptx" ? "ti-loader-2 animate-spin" : "ti-presentation"} text-[15px] text-signal`} aria-hidden />
+              <button onClick={() => download("pptx")} disabled={exporting !== null || aiLoading} className="btn-ghost h-9 px-3 text-[15px]">
+                <i className={`ti ${exporting === "pptx" ? "ti-loader-2 animate-spin" : "ti-presentation"} text-[16px] text-signal`} aria-hidden />
                 리포트 PPT · {modulesReady ? "25장" : "17장"}
               </button>
             </div>
           </div>
           {askDiagnosisFor && (
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-warn/30 bg-warn/5 px-4 py-3">
-              <p className="text-[13px] text-ink">
+              <p className="text-[15px] text-ink">
                 <i className="ti ti-alert-triangle mr-1 text-warn" aria-hidden />
                 AI 진단을 아직 실행하지 않았어요. 지금 내려받으면 {askDiagnosisFor === "pptx" ? "17장짜리 리포트" : "10~13번 시트가 비어 있는 별첨"}이 나가요. AI 진단(2~4분)을 먼저 실행하면 AEO 콘텐츠 설계 · Citable Snippet · 엔티티 매핑 · SOV 프롬프트 · 의사결정 트리 · JSON-LD가 채워져요.
               </p>
@@ -309,38 +309,38 @@ export default function SeoAnalysisPage() {
                     const d = await runDiagnosis();
                     if (d) await download(type, d, true);
                   }}
-                  className="btn-signal h-9 px-3 text-[13px]"
+                  className="btn-signal h-9 px-3 text-[15px]"
                 >
-                  <i className="ti ti-sparkles text-[15px]" aria-hidden />
+                  <i className="ti ti-sparkles text-[16px]" aria-hidden />
                   AI 진단 후 내려받기
                 </button>
-                <button onClick={() => download(askDiagnosisFor, diagnosis, true)} className="btn-ghost h-9 px-3 text-[13px]">
+                <button onClick={() => download(askDiagnosisFor, diagnosis, true)} className="btn-ghost h-9 px-3 text-[15px]">
                   그대로 내려받기
                 </button>
-                <button onClick={() => setAskDiagnosisFor(null)} className="btn-ghost h-9 px-3 text-[13px]">
+                <button onClick={() => setAskDiagnosisFor(null)} className="btn-ghost h-9 px-3 text-[15px]">
                   취소
                 </button>
               </div>
             </div>
           )}
-          {exportError && <p className="rounded-lg border border-bad/20 bg-bad/5 px-3.5 py-2.5 text-[13px] text-bad">{exportError}</p>}
+          {exportError && <p className="rounded-lg border border-bad/20 bg-bad/5 px-3.5 py-2.5 text-[15px] text-bad">{exportError}</p>}
 
           {/* AI 진단 */}
           <Section
             title="AI 진단 — 엔진별 처방 · 비브랜드 질문 설계"
             desc="기술 진단 결과를 바탕으로 엔진별 후보군 진입 가능성, 이 페이지에서 뽑을 수 있는 비브랜드 질문 10개, 우선 액션과 재해석을 정리해요"
             right={
-              <button onClick={runDiagnosis} disabled={aiLoading} className="btn-signal h-9 px-3 text-[13px]">
-                <i className={`ti ${aiLoading ? "ti-loader-2 animate-spin" : "ti-sparkles"} text-[15px]`} aria-hidden />
+              <button onClick={runDiagnosis} disabled={aiLoading} className="btn-signal h-9 px-3 text-[15px]">
+                <i className={`ti ${aiLoading ? "ti-loader-2 animate-spin" : "ti-sparkles"} text-[16px]`} aria-hidden />
                 {aiLoading ? "진단 중…" : diagnosis ? "다시 진단" : "AI 진단 실행"}
               </button>
             }
           >
-            {aiError && <p className="mb-3 rounded-lg border border-bad/20 bg-bad/5 px-3.5 py-2.5 text-[13px] text-bad">{aiError}</p>}
+            {aiError && <p className="mb-3 rounded-lg border border-bad/20 bg-bad/5 px-3.5 py-2.5 text-[15px] text-bad">{aiError}</p>}
             {diagnosis ? (
               <div className="space-y-4">
-                <p className="text-[13px] leading-relaxed text-ink">{diagnosis.summary}</p>
-                <div className="rounded-lg border border-line bg-canvas px-3.5 py-2.5 text-[12px] text-ink-soft">
+                <p className="text-[15px] leading-relaxed text-ink">{diagnosis.summary}</p>
+                <div className="rounded-lg border border-line bg-canvas px-3.5 py-2.5 text-[13px] text-ink-soft">
                   <span className="font-semibold text-ink">이 페이지의 역할</span> · {diagnosis.siteRole}
                 </div>
 
@@ -351,22 +351,22 @@ export default function SeoAnalysisPage() {
                     return (
                       <div key={e.engine} className={`rounded-lg border p-3.5 ${tone}`}>
                         <div className="mb-1 flex items-center justify-between">
-                          <span className="text-[13px] font-semibold text-ink">{e.engine}</span>
-                          <span className={`font-mono text-[11px] font-semibold ${tcolor}`}>{e.readiness}</span>
+                          <span className="text-[15px] font-semibold text-ink">{e.engine}</span>
+                          <span className={`font-mono text-[13px] font-semibold ${tcolor}`}>{e.readiness}</span>
                         </div>
-                        <p className="text-[12px] leading-relaxed text-ink-soft">{e.evidence}</p>
+                        <p className="text-[13px] leading-relaxed text-ink-soft">{e.evidence}</p>
                         {e.blockers.length > 0 && (
-                          <ul className="mt-2 space-y-0.5 text-[12px] text-bad">
+                          <ul className="mt-2 space-y-0.5 text-[13px] text-bad">
                             {e.blockers.map((b, i) => (
                               <li key={i}>· {b}</li>
                             ))}
                           </ul>
                         )}
                         {e.actions.length > 0 && (
-                          <ul className="mt-2 space-y-0.5 text-[12px] text-ink">
+                          <ul className="mt-2 space-y-0.5 text-[13px] text-ink">
                             {e.actions.map((a, i) => (
                               <li key={i} className="flex gap-1.5">
-                                <i className="ti ti-arrow-right mt-0.5 text-[12px] text-signal" aria-hidden />
+                                <i className="ti ti-arrow-right mt-0.5 text-[13px] text-signal" aria-hidden />
                                 <span>{a}</span>
                               </li>
                             ))}
@@ -379,11 +379,11 @@ export default function SeoAnalysisPage() {
 
                 <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_360px]">
                   <div className="rounded-lg border border-line bg-canvas p-3.5">
-                    <p className="mb-1.5 text-[12px] font-semibold text-ink">우선 액션</p>
-                    <ol className="space-y-1.5 text-[13px] leading-relaxed text-ink-soft">
+                    <p className="mb-1.5 text-[13px] font-semibold text-ink">우선 액션</p>
+                    <ol className="space-y-1.5 text-[15px] leading-relaxed text-ink-soft">
                       {diagnosis.priorities.map((p) => (
                         <li key={p.rank} className="flex gap-2">
-                          <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-signal/15 text-[11px] font-semibold text-signal">{p.rank}</span>
+                          <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-signal/15 text-[13px] font-semibold text-signal">{p.rank}</span>
                           <span>
                             <span className="text-ink">{p.action}</span> <span className="text-ink-muted">— {p.why}</span>
                             <span className="ml-1 inline-flex gap-1 align-middle">
@@ -397,25 +397,25 @@ export default function SeoAnalysisPage() {
                   </div>
                   <div className="space-y-3">
                     <div className="rounded-lg border border-line bg-canvas p-3.5">
-                      <p className="mb-1.5 text-[12px] font-semibold text-ink">
+                      <p className="mb-1.5 text-[13px] font-semibold text-ink">
                         <i className="ti ti-share mr-1 text-signal" aria-hidden />
                         외부 채널(Path B)
                       </p>
-                      <ul className="space-y-1 text-[12px] leading-relaxed text-ink-soft">
+                      <ul className="space-y-1 text-[13px] leading-relaxed text-ink-soft">
                         {diagnosis.offsite.map((o, i) => (
                           <li key={i}>· {o}</li>
                         ))}
                       </ul>
                     </div>
                     <div className="rounded-lg border border-signal/20 bg-signal-soft/40 p-3.5">
-                      <p className="mb-1 text-[12px] font-semibold text-signal-strong">재해석</p>
-                      <p className="text-[12px] leading-relaxed text-ink-soft">{diagnosis.reinterpretation}</p>
+                      <p className="mb-1 text-[13px] font-semibold text-signal-strong">재해석</p>
+                      <p className="text-[13px] leading-relaxed text-ink-soft">{diagnosis.reinterpretation}</p>
                     </div>
                   </div>
                 </div>
 
                 <div className="overflow-x-auto rounded-lg border border-line">
-                  <table className="w-full text-[12px]">
+                  <table className="w-full text-[13px]">
                     <thead className="bg-canvas text-left text-ink-muted">
                       <tr>
                         <th className="px-3 py-2 font-medium">#</th>
@@ -438,7 +438,7 @@ export default function SeoAnalysisPage() {
                     </tbody>
                   </table>
                 </div>
-                <p className="text-[11px] text-ink-muted">
+                <p className="text-[13px] text-ink-muted">
                   위 질문을 ChatGPT · Gemini · Perplexity · Claude · 네이버 AI 브리핑에 세션 초기화 상태로 던져 언급 여부·순위·인용 URL을 기록하면 실측 단계가 됩니다. 아래 ③ 실측 가이드에 프롬프트와 기록 체크리스트가 있어요.
                 </p>
 
@@ -446,8 +446,8 @@ export default function SeoAnalysisPage() {
 
                 {diagnosis.caveats.length > 0 && (
                   <div className="rounded-lg border border-dashed border-line p-3.5">
-                    <p className="mb-1 text-[12px] font-semibold text-ink-muted">이 진단의 한계</p>
-                    <ul className="space-y-0.5 text-[12px] text-ink-muted">
+                    <p className="mb-1 text-[13px] font-semibold text-ink-muted">이 진단의 한계</p>
+                    <ul className="space-y-0.5 text-[13px] text-ink-muted">
                       {diagnosis.caveats.map((c, i) => (
                         <li key={i}>· {c}</li>
                       ))}
@@ -456,9 +456,9 @@ export default function SeoAnalysisPage() {
                 )}
               </div>
             ) : (
-              <div className="rounded-lg border border-dashed border-line bg-canvas p-4 text-[13px] text-ink-muted">
+              <div className="rounded-lg border border-dashed border-line bg-canvas p-4 text-[15px] text-ink-muted">
                 아래 기술 진단은 이미 끝났어요. AI 진단을 실행하면 엔진별로 &quot;왜 후보군에 못 드는가&quot;와 처방을 나누고, 다음 네 모듈을 만들어요. 2~4분 걸려요.
-                <ul className="mt-2 space-y-0.5 text-[12px]">
+                <ul className="mt-2 space-y-0.5 text-[13px]">
                   <li>① AEO 콘텐츠 구조화 — 여정 4단계 비브랜드 질의 10선, 질문형 H2 + 첫 100~200자 Direct Answer, FAQ 스니펫 · 요약 표</li>
                   <li>② GEO 전략 — Citable Snippet 5선, Two Paths(Path A/B) 실행안, 브랜드 엔티티 키워드 매핑</li>
                   <li>③ SOV 실측 가이드 — 5대 엔진 프롬프트 세트, 기록 체크리스트 5항목, 노출 미흡 원인 의사결정 트리</li>
@@ -473,7 +473,7 @@ export default function SeoAnalysisPage() {
             title="기술 진단 항목"
             desc="확인된 것만 기재해요. 사이트 단위 항목(전 페이지 title 중복, 스키마 적용률, IP 차단)은 단일 페이지 진단으로는 판정하지 않아요"
             right={
-              <div className="inline-flex rounded-lg border border-line bg-canvas p-0.5 text-[12px]">
+              <div className="inline-flex rounded-lg border border-line bg-canvas p-0.5 text-[13px]">
                 {(["fix", "pass", "all"] as const).map((k) => (
                   <button key={k} onClick={() => setFilter(k)} className={`rounded-md px-2.5 py-1 ${filter === k ? "bg-surface font-medium text-ink shadow-sm" : "text-ink-muted"}`}>
                     {k === "fix" ? `FIX ${fixes.length}` : k === "pass" ? `PASS·INFO ${audit.findings.length - fixes.length}` : "전체"}
@@ -490,17 +490,17 @@ export default function SeoAnalysisPage() {
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-[13px] font-medium text-ink">{f.title}</span>
-                      <span className="rounded bg-canvas px-1.5 py-px text-[10px] text-ink-muted">{f.area}</span>
+                      <span className="text-[15px] font-medium text-ink">{f.title}</span>
+                      <span className="rounded bg-canvas px-1.5 py-px text-[12px] text-ink-muted">{f.area}</span>
                     </div>
-                    <p className="mt-0.5 break-words text-[12px] leading-relaxed text-ink-soft">{f.detail}</p>
+                    <p className="mt-0.5 break-words text-[13px] leading-relaxed text-ink-soft">{f.detail}</p>
                     <div className="mt-1">
                       <EngineChips engines={f.engines} />
                     </div>
                   </div>
                 </li>
               ))}
-              {shown.length === 0 && <li className="py-3 text-[13px] text-ink-muted">해당 항목이 없어요.</li>}
+              {shown.length === 0 && <li className="py-3 text-[15px] text-ink-muted">해당 항목이 없어요.</li>}
             </ul>
           </Section>
 
@@ -511,7 +511,7 @@ export default function SeoAnalysisPage() {
               <div className="mt-3">
                 <CrawlerTable title="학습용 (인용과 무관)" rows={otherCrawlers.filter((c) => c.role === "training")} muted />
               </div>
-              <p className="mt-2 text-[11px] text-ink-muted">
+              <p className="mt-2 text-[13px] text-ink-muted">
                 IP 단위 차단·CDN(WAF) 차단은 서버 로그 없이는 확인할 수 없어요. robots.txt 판정만 반영돼 있어요.
                 {audit.robots.sitemaps.length > 0 && <> Sitemap 선언: {audit.robots.sitemaps.length}건</>}
               </p>
@@ -520,25 +520,25 @@ export default function SeoAnalysisPage() {
             {/* 스키마 */}
             <Section title="구조화 데이터 (JSON-LD)" desc={`${audit.schema.blocks}블록 · 파싱 오류 ${audit.schema.parseErrors}건`}>
               {audit.schema.nodes.length === 0 ? (
-                <p className="text-[13px] text-ink-muted">감지된 노드가 없어요.</p>
+                <p className="text-[15px] text-ink-muted">감지된 노드가 없어요.</p>
               ) : (
                 <ul className="space-y-2">
                   {audit.schema.nodes.map((n, i) => (
                     <li key={i} className="rounded-lg border border-line bg-canvas p-3">
                       <div className="flex items-center gap-2">
-                        <span className="font-mono text-[12px] font-semibold text-ink">{n.type}</span>
-                        {n.name && <span className="truncate text-[12px] text-ink-muted">{n.name}</span>}
+                        <span className="font-mono text-[13px] font-semibold text-ink">{n.type}</span>
+                        {n.name && <span className="truncate text-[13px] text-ink-muted">{n.name}</span>}
                       </div>
-                      {n.ok.length > 0 && <p className="mt-1 text-[11px] text-good">✓ {n.ok.join(" · ")}</p>}
-                      {n.issues.length > 0 && <p className="mt-0.5 text-[11px] text-bad">✕ {n.issues.join(" · ")}</p>}
+                      {n.ok.length > 0 && <p className="mt-1 text-[13px] text-good">✓ {n.ok.join(" · ")}</p>}
+                      {n.issues.length > 0 && <p className="mt-0.5 text-[13px] text-bad">✕ {n.issues.join(" · ")}</p>}
                     </li>
                   ))}
                 </ul>
               )}
               {audit.schema.faqQuestions.length > 0 && (
                 <details className="mt-3">
-                  <summary className="cursor-pointer text-[12px] text-ink-soft">FAQ 문항 {audit.schema.faqQuestions.length}개 보기</summary>
-                  <ul className="mt-1.5 space-y-0.5 text-[12px] text-ink-muted">
+                  <summary className="cursor-pointer text-[13px] text-ink-soft">FAQ 문항 {audit.schema.faqQuestions.length}개 보기</summary>
+                  <ul className="mt-1.5 space-y-0.5 text-[13px] text-ink-muted">
                     {audit.schema.faqQuestions.map((q, i) => (
                       <li key={i}>· {q}</li>
                     ))}
@@ -549,7 +549,7 @@ export default function SeoAnalysisPage() {
 
             {/* 온페이지 */}
             <Section title="온페이지 기본">
-              <dl className="grid grid-cols-[110px_minmax(0,1fr)] gap-y-1.5 text-[12px]">
+              <dl className="grid grid-cols-[110px_minmax(0,1fr)] gap-y-1.5 text-[13px]">
                 <Row k="title" v={audit.page.title ?? "—"} />
                 <Row k="description" v={audit.page.metaDescription ?? "—"} />
                 <Row k="h1" v={audit.page.h1.join(" | ") || "—"} />
@@ -566,7 +566,7 @@ export default function SeoAnalysisPage() {
 
             {/* 인용 적합도 */}
             <Section title="인용 적합도 (휴리스틱)" desc="엔진이 단락 단위로 인용한다는 전제에서 본 구조 신호예요">
-              <dl className="grid grid-cols-[110px_minmax(0,1fr)] gap-y-1.5 text-[12px]">
+              <dl className="grid grid-cols-[110px_minmax(0,1fr)] gap-y-1.5 text-[13px]">
                 <Row k="정의문 패턴" v={audit.citability.definitionPattern ? "초반 1,200자 안에 있음" : "없음"} />
                 <Row k="질문형 헤딩" v={audit.citability.questionHeadings.length ? audit.citability.questionHeadings.slice(0, 5).join(" / ") : "없음"} />
                 <Row k="후보 단락" v={`${audit.citability.candidatePassages}개 (180~700자)`} />
@@ -575,8 +575,8 @@ export default function SeoAnalysisPage() {
               </dl>
               {audit.citability.firstParagraph && (
                 <div className="mt-3 rounded-lg border border-line bg-canvas p-3">
-                  <p className="mb-1 text-[11px] font-medium text-ink-muted">첫 단락 (AI가 가장 먼저 읽는 부분)</p>
-                  <p className="text-[12px] leading-relaxed text-ink-soft">{audit.citability.firstParagraph}</p>
+                  <p className="mb-1 text-[13px] font-medium text-ink-muted">첫 단락 (AI가 가장 먼저 읽는 부분)</p>
+                  <p className="text-[13px] leading-relaxed text-ink-soft">{audit.citability.firstParagraph}</p>
                 </div>
               )}
             </Section>
@@ -599,20 +599,20 @@ function Row({ k, v }: { k: string; v: string }) {
 function CrawlerTable({ title, rows, muted }: { title: string; rows: CrawlerStatus[]; muted?: boolean }) {
   return (
     <div>
-      <p className="mb-1 text-[11px] font-medium text-ink-muted">{title}</p>
+      <p className="mb-1 text-[13px] font-medium text-ink-muted">{title}</p>
       <div className="overflow-x-auto rounded-lg border border-line">
-        <table className="w-full text-[12px]">
+        <table className="w-full text-[15px]">
           <tbody>
             {rows.map((c) => (
               <tr key={c.ua} className="border-t border-line first:border-t-0">
-                <td className={`px-3 py-1.5 font-mono ${muted ? "text-ink-muted" : "text-ink"}`}>{c.ua}</td>
-                <td className="px-3 py-1.5 text-ink-muted">{c.owner}</td>
-                <td className="px-3 py-1.5">
-                  <span className={`rounded px-1.5 py-0.5 font-mono text-[10px] font-semibold ${c.status === "allowed" ? "bg-good/10 text-good" : muted ? "bg-canvas text-ink-muted" : "bg-bad/10 text-bad"}`}>
+                <td className={`whitespace-nowrap px-3 py-2 font-mono ${muted ? "text-ink-muted" : "text-ink"}`}>{c.ua}</td>
+                <td className="whitespace-nowrap px-3 py-2 text-ink-muted">{c.owner}</td>
+                <td className="w-px px-3 py-2">
+                  <span className={`whitespace-nowrap rounded px-1.5 py-0.5 font-mono text-[12px] font-semibold ${c.status === "allowed" ? "bg-good/10 text-good" : muted ? "bg-canvas text-ink-muted" : "bg-bad/10 text-bad"}`}>
                     {c.status === "allowed" ? "허용" : "차단"}
                   </span>
                 </td>
-                <td className="hidden px-3 py-1.5 text-ink-muted md:table-cell">{c.governs}</td>
+                <td className="hidden min-w-[260px] px-3 py-2 text-ink-muted md:table-cell">{c.governs}</td>
               </tr>
             ))}
           </tbody>

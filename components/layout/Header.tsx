@@ -18,10 +18,10 @@ export function Header() {
   }
 
   return (
-    <header className="flex h-16 flex-shrink-0 items-center justify-between border-b border-line bg-surface px-6">
-      <div>
-        <h1 className="text-[15px] font-semibold text-ink">{current.label}</h1>
-        <p className="text-[12px] text-ink-muted">{current.desc}</p>
+    <header className="flex h-16 flex-shrink-0 items-center justify-between border-b border-line bg-surface px-6 2xl:px-8">
+      <div className="min-w-0">
+        <h1 className="truncate text-[17px] font-bold text-ink">{current.label}</h1>
+        <p className="truncate text-[13px] text-ink-muted">{current.desc}</p>
       </div>
 
       <div className="flex items-center gap-2.5">
@@ -30,9 +30,9 @@ export function Header() {
 
         <button
           onClick={signOut}
-          className="flex h-9 items-center gap-1.5 rounded-lg border border-line px-3 text-[13px] text-ink-soft transition hover:border-ink-faint"
+          className="flex h-9 items-center gap-1.5 rounded-lg border border-line bg-surface px-3 text-[15px] text-ink-soft shadow-[0_1px_2px_rgba(16,24,40,0.05)] transition hover:bg-canvas"
         >
-          <i className="ti ti-logout text-[16px]" aria-hidden />
+          <i className="ti ti-logout text-[17px]" aria-hidden />
           로그아웃
         </button>
       </div>

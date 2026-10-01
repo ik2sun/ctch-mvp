@@ -45,8 +45,8 @@ export function StatusScreen({ kind }: { kind: "pending" | "rejected" }) {
               aria-hidden
             />
           </div>
-          <p className="text-[16px] font-semibold text-ink">{copy.title}</p>
-          <p className="mt-2 text-[14px] leading-relaxed text-ink-muted">{copy.desc}</p>
+          <p className="text-[17px] font-semibold text-ink">{copy.title}</p>
+          <p className="mt-2 text-[15px] leading-relaxed text-ink-muted">{copy.desc}</p>
           <button onClick={signOut} className="btn-ghost mt-6 w-full">
             로그아웃
           </button>

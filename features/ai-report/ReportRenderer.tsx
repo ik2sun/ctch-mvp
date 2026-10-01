@@ -34,14 +34,14 @@ function MermaidBlock({ chart }: { chart: string }) {
 
   if (failed) {
     return (
-      <pre className="overflow-x-auto rounded-lg bg-canvas p-3 font-mono text-[12px] text-ink-soft">
+      <pre className="overflow-x-auto rounded-lg bg-canvas p-3 font-mono text-[13px] text-ink-soft">
         {chart}
       </pre>
     );
   }
   if (!svg) {
     return (
-      <div className="rounded-lg bg-canvas p-6 text-center text-[13px] text-ink-muted">
+      <div className="rounded-lg bg-canvas p-6 text-center text-[15px] text-ink-muted">
         다이어그램 그리는 중…
       </div>
     );
@@ -56,7 +56,7 @@ function MermaidBlock({ chart }: { chart: string }) {
 
 export function ReportRenderer({ markdown }: { markdown: string }) {
   return (
-    <div className="space-y-3 text-[14px] leading-relaxed text-ink-soft">
+    <div className="space-y-3 text-[15px] leading-relaxed text-ink-soft">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
@@ -72,7 +72,7 @@ export function ReportRenderer({ markdown }: { markdown: string }) {
             </h2>
           ),
           h3: ({ children }) => (
-            <h3 className="mt-4 text-[15px] font-semibold text-ink">{children}</h3>
+            <h3 className="mt-4 text-[16px] font-semibold text-ink">{children}</h3>
           ),
           p: ({ children }) => <p className="my-2">{children}</p>,
           ul: ({ children }) => <ul className="my-2 space-y-1.5 pl-1">{children}</ul>,
@@ -113,7 +113,7 @@ export function ReportRenderer({ markdown }: { markdown: string }) {
             }
             if (className?.includes("language-")) {
               return (
-                <pre className="my-3 overflow-x-auto rounded-lg bg-canvas p-3 font-mono text-[12px]">
+                <pre className="my-3 overflow-x-auto rounded-lg bg-canvas p-3 font-mono text-[13px]">
                   {text}
                 </pre>
               );

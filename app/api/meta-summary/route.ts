@@ -68,7 +68,10 @@ type Totals = {
   revenue: number;
   reach: number;
   frequency: number;
+  addToCart: number;
 };
+
+const CART_TYPES = ["add_to_cart", "omni_add_to_cart", "offsite_conversion.fb_pixel_add_to_cart"];
 
 function agg(rows: Record<string, unknown>[]): Totals {
   return rows.reduce(
@@ -80,9 +83,23 @@ function agg(rows: Record<string, unknown>[]): Totals {
       revenue: a.revenue + pickAction(r.action_values as ActionItem[] | undefined, PURCHASE_TYPES),
       reach: a.reach + n(r.reach),
       frequency: a.frequency + n(r.frequency),
+      addToCart: a.addToCart + pickAction(r.actions as ActionItem[] | undefined, CART_TYPES),
     }),
-    { impressions: 0, clicks: 0, cost: 0, conversions: 0, revenue: 0, reach: 0, frequency: 0 },
+    { impressions: 0, clicks: 0, cost: 0, conversions: 0, revenue: 0, reach: 0, frequency: 0, addToCart: 0 },
   );
+}
+
+
+// 서버 캐시(10분) — 같은 광고주·기간·옵션은 새로고침·다른 탭에서도 바로. 같은 서버 프로세스 안에서만.
+const SUMMARY_TTL_MS = 10 * 60 * 1000;
+const summaryCache = new Map<string, { at: number; body: unknown }>();
+function cachedSummary(key: string) {
+  const hit = summaryCache.get(key);
+  return hit && Date.now() - hit.at < SUMMARY_TTL_MS ? hit.body : null;
+}
+function saveSummary(key: string, body: unknown) {
+  if (summaryCache.size > 200) summaryCache.clear();
+  summaryCache.set(key, { at: Date.now(), body });
 }
 
 export async function POST(req: Request) {
@@ -92,7 +109,7 @@ export async function POST(req: Request) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
 
-  const { clientId, since, until } = await req.json();
+  const { clientId, since, until, withYear, withMonth = true } = await req.json();
   if (!clientId || !since || !until) {
     return NextResponse.json({ error: "필수 값이 없어요." }, { status: 400 });
   }
@@ -121,12 +138,20 @@ export async function POST(req: Request) {
   const prevUntil = shift(until, -days);
   const monthSince = shiftMonth(since, -1);
   const monthUntil = shiftMonth(until, -1);
+  // 전년 동기 — 요청할 때만(withYear)
+  const yearSince = shiftMonth(since, -12);
+  const yearUntil = shiftMonth(until, -12);
 
   try {
-    const [curDaily, prevRows, monthRows] = await Promise.all([
+    const cacheKey = `meta|${clientId}|${since}|${until}|${withMonth ? 1 : 0}|${withYear ? 1 : 0}`;
+    const hit = cachedSummary(cacheKey);
+    if (hit) return NextResponse.json(hit);
+    const [curDaily, prevRows, monthRows, yearRows] = await Promise.all([
       fetchAccount(act, token, since, until, true),
       fetchAccount(act, token, prevSince, prevUntil, false),
-      fetchAccount(act, token, monthSince, monthUntil, false),
+      // 전월 동기 — 기본 포함, 대시보드는 그 비교를 고를 때만(withMonth=false면 생략)
+      withMonth ? fetchAccount(act, token, monthSince, monthUntil, false) : Promise.resolve([] as Record<string, unknown>[]),
+      withYear ? fetchAccount(act, token, yearSince, yearUntil, false).catch(() => null) : Promise.resolve(null),
     ]);
 
     const daily = curDaily
@@ -140,16 +165,19 @@ export async function POST(req: Request) {
       }))
       .sort((a, b) => a.date.localeCompare(b.date));
 
-    return NextResponse.json({
+    const body = {
       current: agg(curDaily),
       previous: agg(prevRows),
-      lastMonth: agg(monthRows),
+      ...(withMonth ? { lastMonth: agg(monthRows) } : {}),
+      ...(yearRows ? { lastYear: agg(yearRows), yearPeriod: { since: yearSince, until: yearUntil } } : {}),
       daily,
       period: { since, until },
       prevPeriod: { since: prevSince, until: prevUntil },
       monthPeriod: { since: monthSince, until: monthUntil },
       clientName: client.name,
-    });
+    };
+    saveSummary(cacheKey, body);
+    return NextResponse.json(body);
   } catch (e) {
     const err = e as Error & { code?: number };
     const isLimit =

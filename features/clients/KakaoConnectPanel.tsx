@@ -83,7 +83,7 @@ export function KakaoConnectPanel({ clientId, onChanged }: { clientId: string | 
 
   if (!clientId) {
     return (
-      <div className="rounded-lg border border-dashed border-line bg-surface p-3.5 text-[12px] text-ink-muted">
+      <div className="rounded-lg border border-dashed border-line bg-surface p-3.5 text-[13px] text-ink-muted">
         광고주를 먼저 등록한 뒤, 목록에서 <span className="font-medium text-ink">수정</span>을 눌러 카카오 계정을 연결할 수 있어요. (연결 과정에서 카카오 로그인 페이지로 이동해요)
       </div>
     );
@@ -96,13 +96,13 @@ export function KakaoConnectPanel({ clientId, onChanged }: { clientId: string | 
   return (
     <div className="space-y-3">
       {status && !status.configured && (
-        <p className="rounded-lg border border-warn/30 bg-warn/5 px-3.5 py-2.5 text-[12px] text-warn">
+        <p className="rounded-lg border border-warn/30 bg-warn/5 px-3.5 py-2.5 text-[13px] text-warn">
           서버에 KAKAO_REST_API_KEY가 없어요. 카카오디벨로퍼스 앱의 REST API 키·Client Secret을 .env.local에 넣고 Redirect URI를 등록해야 연결할 수 있어요.
         </p>
       )}
 
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line bg-surface px-3.5 py-3">
-        <div className="text-[12px]">
+        <div className="text-[13px]">
           {loading && !status ? (
             <span className="text-ink-muted">상태 확인 중…</span>
           ) : linked ? (
@@ -131,12 +131,12 @@ export function KakaoConnectPanel({ clientId, onChanged }: { clientId: string | 
           )}
         </div>
         <div className="flex gap-2">
-          <a href={connectHref} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#FEE500] px-3 text-[12px] font-medium text-[#191919] hover:brightness-95">
-            <i className="ti ti-message-circle text-[14px]" aria-hidden />
+          <a href={connectHref} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#FEE500] px-3 text-[13px] font-medium text-[#191919] hover:brightness-95">
+            <i className="ti ti-message-circle text-[15px]" aria-hidden />
             {linked ? "다시 연결" : "카카오 계정으로 연결"}
           </a>
           {linked && (
-            <button type="button" onClick={unlink} disabled={saving} className="inline-flex h-8 items-center rounded-lg border border-line px-3 text-[12px] text-ink-soft hover:border-ink-faint">
+            <button type="button" onClick={unlink} disabled={saving} className="inline-flex h-8 items-center rounded-lg border border-line px-3 text-[13px] text-ink-soft hover:border-ink-faint">
               연결 해제
             </button>
           )}
@@ -144,15 +144,15 @@ export function KakaoConnectPanel({ clientId, onChanged }: { clientId: string | 
       </div>
 
       {status?.error && (
-        <p className={`rounded-lg border px-3.5 py-2.5 text-[12px] ${status.expired ? "border-warn/30 bg-warn/5 text-warn" : "border-bad/20 bg-bad/5 text-bad"}`}>{status.error}</p>
+        <p className={`rounded-lg border px-3.5 py-2.5 text-[13px] ${status.expired ? "border-warn/30 bg-warn/5 text-warn" : "border-bad/20 bg-bad/5 text-bad"}`}>{status.error}</p>
       )}
 
       {linked && (
         <div className="rounded-lg border border-line bg-surface p-3.5">
-          <label className="mb-1.5 block text-[12px] font-medium text-ink-soft">카카오모먼트 광고계정 {status?.accounts.length ? `(${status.accounts.length}개 접근 가능)` : ""}</label>
+          <label className="mb-1.5 block text-[13px] font-medium text-ink-soft">카카오모먼트 광고계정 {status?.accounts.length ? `(${status.accounts.length}개 접근 가능)` : ""}</label>
           <div className="flex flex-wrap items-center gap-2">
             {status?.accounts.length ? (
-              <select value={pick} onChange={(e) => setPick(e.target.value)} className="field h-9 min-w-[260px] flex-1 text-[13px]">
+              <select value={pick} onChange={(e) => setPick(e.target.value)} className="field h-9 min-w-[260px] flex-1 text-[15px]">
                 <option value="">광고계정 선택</option>
                 {status.accounts.map((a) => (
                   <option key={a.id} value={a.id}>
@@ -162,24 +162,24 @@ export function KakaoConnectPanel({ clientId, onChanged }: { clientId: string | 
                 ))}
               </select>
             ) : (
-              <input value={pick} onChange={(e) => setPick(e.target.value.replace(/\D/g, ""))} placeholder="광고계정 번호 직접 입력 (카카오모먼트 관리자 URL의 숫자)" className="field h-9 min-w-[260px] flex-1 font-mono text-[13px]" />
+              <input value={pick} onChange={(e) => setPick(e.target.value.replace(/\D/g, ""))} placeholder="광고계정 번호 직접 입력 (카카오모먼트 관리자 URL의 숫자)" className="field h-9 min-w-[260px] flex-1 font-mono text-[15px]" />
             )}
-            <button type="button" onClick={saveAccount} disabled={saving || !pick} className="btn-signal h-9 px-3 text-[13px]">
+            <button type="button" onClick={saveAccount} disabled={saving || !pick} className="btn-signal h-9 px-3 text-[15px]">
               {saving ? "저장 중…" : "광고계정 저장"}
             </button>
-            <button type="button" onClick={load} disabled={loading} className="btn-ghost h-9 px-3 text-[13px]">
-              <i className={`ti ${loading ? "ti-loader-2 animate-spin" : "ti-refresh"} text-[14px]`} aria-hidden />
+            <button type="button" onClick={load} disabled={loading} className="btn-ghost h-9 px-3 text-[15px]">
+              <i className={`ti ${loading ? "ti-loader-2 animate-spin" : "ti-refresh"} text-[15px]`} aria-hidden />
             </button>
           </div>
           {!status?.accounts.length && !status?.error && (
-            <p className="mt-1.5 text-[11px] text-ink-muted">접근 가능한 광고계정 목록이 비어 있어요. 연결한 카카오계정이 카카오모먼트 광고계정의 멤버(마스터/멤버)인지 확인하세요.</p>
+            <p className="mt-1.5 text-[13px] text-ink-muted">접근 가능한 광고계정 목록이 비어 있어요. 연결한 카카오계정이 카카오모먼트 광고계정의 멤버(마스터/멤버)인지 확인하세요.</p>
           )}
         </div>
       )}
 
-      {msg && <p className="text-[12px] text-ink-soft">{msg}</p>}
+      {msg && <p className="text-[13px] text-ink-soft">{msg}</p>}
 
-      <details className="rounded-lg border border-line bg-surface px-3.5 py-2.5 text-[12px] text-ink-soft">
+      <details className="rounded-lg border border-line bg-surface px-3.5 py-2.5 text-[13px] text-ink-soft">
         <summary className="cursor-pointer font-medium text-ink-soft">연동 방법 (처음 한 번)</summary>
         <ol className="mt-2 list-decimal space-y-1 pl-5">
           <li>

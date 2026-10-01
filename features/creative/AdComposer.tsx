@@ -188,8 +188,8 @@ export function AdComposer({
               <i className="ti ti-layout-grid text-[18px]" aria-hidden />
             </span>
             <div>
-              <h3 className="text-[16px] font-semibold text-gray-900">광고 소재 만들기</h3>
-              <p className="mt-0.5 text-xs text-gray-500">매체 규격별로 자르고 카피·로고·CTA를 입혀요. 카피를 여러 줄 쓰면 A/B 버전이 한 번에 만들어져요.</p>
+              <h3 className="text-[17px] font-semibold text-gray-900">광고 소재 만들기</h3>
+              <p className="mt-0.5 text-[13px] text-gray-500">매체 규격별로 자르고 카피·로고·CTA를 입혀요. 카피를 여러 줄 쓰면 A/B 버전이 한 번에 만들어져요.</p>
             </div>
           </div>
           <button
@@ -207,9 +207,9 @@ export function AdComposer({
           {/* 설정 */}
           <div className="space-y-5 overflow-y-auto border-r border-gray-100 px-5 py-5">
             <section>
-              <p className="mb-2 text-[12px] font-semibold text-gray-700">원본 · 초점 위치</p>
+              <p className="mb-2 text-[13px] font-semibold text-gray-700">원본 · 초점 위치</p>
               {loadError ? (
-                <p className="rounded-lg bg-red-50 px-3 py-2 text-[12px] text-red-700">{loadError}</p>
+                <p className="rounded-lg bg-red-50 px-3 py-2 text-[13px] text-red-700">{loadError}</p>
               ) : img ? (
                 <div
                   className="relative cursor-crosshair overflow-hidden rounded-lg ring-1 ring-gray-200"
@@ -230,7 +230,7 @@ export function AdComposer({
                   <i className="ti ti-loader-2 animate-spin text-[20px]" aria-hidden />
                 </div>
               )}
-              <p className="mt-1.5 text-[11px] text-gray-500">사진에서 꼭 보여야 할 곳(제품·얼굴)을 누르면 모든 규격이 그 지점을 기준으로 잘리고, 카피가 있으면 글자 없는 쪽으로 비켜 놓아요.</p>
+              <p className="mt-1.5 text-[13px] text-gray-500">사진에서 꼭 보여야 할 곳(제품·얼굴)을 누르면 모든 규격이 그 지점을 기준으로 잘리고, 카피가 있으면 글자 없는 쪽으로 비켜 놓아요.</p>
               <label className="mt-2 flex items-center gap-2 text-[11.5px] text-gray-600">
                 <i className="ti ti-zoom-in text-signal" aria-hidden /> 확대
                 <input
@@ -242,13 +242,13 @@ export function AdComposer({
                   onChange={(e) => setFocal((f) => ({ ...f, zoom: Number(e.target.value) }))}
                   className="flex-1 accent-[#4F46E5]"
                 />
-                <span className="w-9 text-right font-mono text-[10.5px] text-gray-400">{focal.zoom.toFixed(2)}×</span>
+                <span className="w-9 text-right tabular-nums text-[10.5px] text-gray-400">{focal.zoom.toFixed(2)}×</span>
               </label>
               <p className="text-[10.5px] text-gray-400">원본 비율이 규격과 비슷하면 자를 여유가 없어요. 조금 확대하면 제품이 문구에 가려지지 않게 옮길 수 있어요.</p>
             </section>
 
             <section>
-              <p className="mb-2 text-[12px] font-semibold text-gray-700">규격</p>
+              <p className="mb-2 text-[13px] font-semibold text-gray-700">규격</p>
               <div className="space-y-1.5">
                 {AD_FORMATS.map((f) => {
                   const on = formats.has(f.id);
@@ -264,7 +264,7 @@ export function AdComposer({
                       }`}
                     >
                       <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border-2 ${on ? "border-signal bg-signal text-white" : "border-gray-300"}`}>
-                        {on && <i className="ti ti-check text-[10px]" aria-hidden />}
+                        {on && <i className="ti ti-check text-[12px]" aria-hidden />}
                       </span>
                       <span className="text-[12.5px] font-medium text-gray-900">{f.label}</span>
                       <span className="font-mono text-[10.5px] text-gray-400">
@@ -279,7 +279,7 @@ export function AdComposer({
 
             <section className="space-y-2.5">
               <div className="flex items-center justify-between">
-                <p className="text-[12px] font-semibold text-gray-700">카피 입히기</p>
+                <p className="text-[13px] font-semibold text-gray-700">카피 입히기</p>
                 <button
                   type="button"
                   role="switch"
@@ -293,19 +293,19 @@ export function AdComposer({
               {showCopy && (
                 <>
                   <label className="block">
-                    <span className="mb-1 block text-[11px] font-medium text-gray-500">헤드라인 · 한 줄에 하나씩 (최대 5안 → A/B 버전)</span>
+                    <span className="mb-1 block text-[13px] font-medium text-gray-500">헤드라인 · 한 줄에 하나씩 (최대 5안 → A/B 버전)</span>
                     <textarea
                       rows={3}
                       value={headlines}
                       onChange={(e) => setHeadlines(e.target.value)}
                       placeholder={"퇴근길에도 발이 안 아파요\n맨발로 신어도 되는 운동화"}
-                      className={`${FIELD} w-full resize-none px-3 py-2 text-[13px]`}
+                      className={`${FIELD} w-full resize-none px-3 py-2 text-[15px]`}
                     />
                   </label>
-                  <input value={sub} onChange={(e) => setSub(e.target.value)} placeholder="보조 문구 (선택)" className={`${FIELD} h-9 w-full px-3 text-[13px]`} />
+                  <input value={sub} onChange={(e) => setSub(e.target.value)} placeholder="보조 문구 (선택)" className={`${FIELD} h-9 w-full px-3 text-[15px]`} />
                   <div className="grid grid-cols-2 gap-2">
-                    <input value={badge} onChange={(e) => setBadge(e.target.value)} placeholder="뱃지 예) 최대 40%" className={`${FIELD} h-9 px-3 text-[13px]`} />
-                    <input value={cta} onChange={(e) => setCta(e.target.value)} placeholder="버튼 예) 지금 구매" className={`${FIELD} h-9 px-3 text-[13px]`} />
+                    <input value={badge} onChange={(e) => setBadge(e.target.value)} placeholder="뱃지 예) 최대 40%" className={`${FIELD} h-9 px-3 text-[15px]`} />
+                    <input value={cta} onChange={(e) => setCta(e.target.value)} placeholder="버튼 예) 지금 구매" className={`${FIELD} h-9 px-3 text-[15px]`} />
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <select value={theme} onChange={(e) => setTheme(e.target.value as AdTheme)} className={`${FIELD} h-9 px-2.5 text-[12.5px]`}>
@@ -321,7 +321,7 @@ export function AdComposer({
                           key={p}
                           type="button"
                           onClick={() => setPosition(p)}
-                          className={`flex-1 rounded-md text-[12px] transition ${position === p ? "bg-white font-medium text-signal shadow-sm" : "text-gray-600"}`}
+                          className={`flex-1 rounded-md text-[13px] transition ${position === p ? "bg-white font-medium text-signal shadow-sm" : "text-gray-600"}`}
                         >
                           {p === "top" ? "위" : "아래"}
                         </button>
@@ -337,11 +337,11 @@ export function AdComposer({
                   <input type="file" accept="image/png,image/webp,image/jpeg" className="hidden" onChange={(e) => (pickLogo(e.target.files?.[0]), (e.target.value = ""))} />
                 </label>
                 {logo && (
-                  <button type="button" onClick={() => setLogo(null)} className="h-9 rounded-lg px-2 text-[12px] text-gray-500 hover:text-red-600">
+                  <button type="button" onClick={() => setLogo(null)} className="h-9 rounded-lg px-2 text-[13px] text-gray-500 hover:text-red-600">
                     빼기
                   </button>
                 )}
-                <label className="flex h-9 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2 text-[11px] text-gray-500" title="강조색 (뱃지·버튼·패널)">
+                <label className="flex h-9 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2 text-[13px] text-gray-500" title="강조색 (뱃지·버튼·패널)">
                   <input type="color" value={accent} onChange={(e) => setAccent(e.target.value)} className="h-6 w-6 cursor-pointer rounded border-0 bg-transparent p-0" />
                   강조색
                 </label>
@@ -352,10 +352,10 @@ export function AdComposer({
           {/* 미리보기 */}
           <div className="overflow-y-auto bg-gradient-to-b from-slate-50 to-white px-5 py-5">
             <div className="mb-3 flex items-center justify-between">
-              <p className="text-[12px] font-semibold text-gray-700">
+              <p className="text-[13px] font-semibold text-gray-700">
                 미리보기 <span className="font-normal text-gray-500">· {variants.length}종</span>
               </p>
-              <p className="text-[11px] text-gray-400">9:16은 상단 14%·하단 20% 안전 영역을 비워 둬요</p>
+              <p className="text-[13px] text-gray-400">9:16은 상단 14%·하단 20% 안전 영역을 비워 둬요</p>
             </div>
             <div className="flex flex-wrap items-start gap-4">
               {variants.map((v) => (
@@ -377,7 +377,7 @@ export function AdComposer({
         </div>
 
         <footer className="flex items-center justify-between gap-3 border-t border-gray-200 bg-gray-50 px-6 py-4">
-          <div className="min-w-0 text-xs">
+          <div className="min-w-0 text-[13px]">
             {error ? (
               <span className="text-red-600">{error}</span>
             ) : busy ? (
@@ -393,17 +393,17 @@ export function AdComposer({
               type="button"
               onClick={downloadZip}
               disabled={!img || Boolean(busy)}
-              className="inline-flex h-9 items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 text-[13px] font-medium text-gray-700 transition hover:border-signal/40 hover:text-signal disabled:opacity-50"
+              className="inline-flex h-9 items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 text-[15px] font-medium text-gray-700 transition hover:border-signal/40 hover:text-signal disabled:opacity-50"
             >
-              <i className="ti ti-file-zip text-[15px]" aria-hidden /> ZIP 다운로드
+              <i className="ti ti-file-zip text-[16px]" aria-hidden /> ZIP 다운로드
             </button>
             <button
               type="button"
               onClick={saveAll}
               disabled={!img || Boolean(busy)}
-              className="inline-flex h-9 items-center gap-2 rounded-lg bg-gradient-to-r from-signal to-violet-600 px-4 text-[13px] font-medium text-white shadow-sm shadow-signal/25 transition hover:brightness-110 disabled:opacity-50"
+              className="inline-flex h-9 items-center gap-2 rounded-lg bg-gradient-to-r from-signal to-violet-600 px-4 text-[15px] font-medium text-white shadow-sm shadow-signal/25 transition hover:brightness-110 disabled:opacity-50"
             >
-              <i className="ti ti-device-floppy text-[15px]" aria-hidden /> 보관함에 {variants.length}장 저장
+              <i className="ti ti-device-floppy text-[16px]" aria-hidden /> 보관함에 {variants.length}장 저장
             </button>
           </div>
         </footer>

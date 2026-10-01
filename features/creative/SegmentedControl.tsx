@@ -21,16 +21,16 @@ export function SegmentedControl<T extends string>({
             role="tab"
             aria-selected={on}
             onClick={() => onChange(o.id)}
-            className={`flex items-center gap-2 rounded-md px-3.5 py-1.5 text-[13px] transition-all duration-150 ${
+            className={`flex items-center gap-2 rounded-md px-3.5 py-1.5 text-[15px] transition-all duration-150 ${
               on
                 ? "bg-white font-medium text-signal shadow-sm ring-1 ring-signal/15"
                 : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
             }`}
           >
-            {o.icon && <i className={`ti ti-${o.icon} text-[15px]`} aria-hidden />}
+            {o.icon && <i className={`ti ti-${o.icon} text-[16px]`} aria-hidden />}
             {o.label}
             {o.hint && (
-              <span className={`font-mono text-[10px] ${on ? "text-signal/60" : "text-gray-400"}`}>{o.hint}</span>
+              <span className={`font-mono text-[12px] ${on ? "text-signal/60" : "text-gray-400"}`}>{o.hint}</span>
             )}
           </button>
         );

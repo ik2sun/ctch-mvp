@@ -7,6 +7,8 @@ import { probeNaverCustomer } from "@/lib/naver-ad/probe";
 import { fetchAdAccounts } from "@/lib/kakao-moment/aggregate";
 import { getGfaCredentials, gfaRedirectUri } from "@/lib/gfa/auth";
 import { fetchManagerChildAdAccounts, fetchMyAdAccounts as fetchGfaMyAdAccounts, fetchMyManagerAccounts } from "@/lib/gfa/aggregate";
+import { getGa4Credentials, ga4RedirectUri, parseServiceAccount } from "@/lib/ga4/auth";
+import { fetchAccessibleProperties, probeProperty } from "@/lib/ga4/client";
 
 // API 공용 키 관리 (관리자·최고관리자) — 키 값은 응답에 마스킹해서만 내려준다.
 // GET: 매체별 등록 상태 / POST {channel, action:"test"|"save"|"import", config?}: 테스트(+저장), import = 지금 쓰는 .env.local 값을 테스트 후 DB로 옮김 / DELETE ?channel=: DB 공용 키 삭제
@@ -21,6 +23,8 @@ type ClientRow = {
   kakao_ad_account_id: string | null;
   kakao_access_token: string | null;
   gfa_customer_id: string | null;
+  ga4_property_id: string | null;
+  ga4_service_account_json: string | null;
 };
 type ClientCheck = { clientName: string; accountId: string; ownKey: boolean; ok: boolean; detail: string };
 type TestResult = { ok: boolean; message: string; clients: ClientCheck[] };
@@ -28,7 +32,7 @@ type TestResult = { ok: boolean; message: string; clients: ClientCheck[] };
 async function allClients(): Promise<ClientRow[]> {
   const { data } = await createAdminClient()
     .from("clients")
-    .select("name, meta_account_id, meta_access_token, naver_ad_customer_id, naver_ad_api_key, kakao_ad_account_id, kakao_access_token, gfa_customer_id")
+    .select("name, meta_account_id, meta_access_token, naver_ad_customer_id, naver_ad_api_key, kakao_ad_account_id, kakao_access_token, gfa_customer_id, ga4_property_id, ga4_service_account_json")
     .order("name");
   return (data ?? []) as ClientRow[];
 }
@@ -149,6 +153,52 @@ async function testGfa(cfg: SharedConfig): Promise<TestResult> {
   return { ok: true, message, clients };
 }
 
+// GA4 — 저장된 config를 유지한 채 입력한 값만 바꾼다. OAuth Client ID가 바뀌면 이전 구글 연결 토큰은 무효라 버린다.
+const GA4_TOKEN_KEYS = ["access_token", "refresh_token", "expires_at", "linked_at", "linked_email"];
+function ga4Merge(stored: SharedConfig | undefined, input: SharedConfig): SharedConfig {
+  const base = { ...(stored ?? {}) };
+  if (input.client_id && base.client_id && base.client_id !== input.client_id) GA4_TOKEN_KEYS.forEach((k) => delete base[k]);
+  return { ...base, ...input };
+}
+
+async function testGa4(cfg: SharedConfig): Promise<TestResult> {
+  const err = validateStatic("ga4", cfg);
+  if (err) return { ok: false, message: err, clients: [] };
+  const linked = !!(cfg.refresh_token || cfg.access_token);
+  if (!linked && !cfg.service_account_json) {
+    return { ok: true, message: "형식 확인 완료 — 저장한 뒤 '구글 계정 연결'을 눌러야 조회할 수 있어요.", clients: [] };
+  }
+  let token: string;
+  let account: string;
+  try {
+    // 연결 토큰은 저장된 값(자동 갱신 포함)으로, 서비스 계정만 있으면 입력한 JSON으로
+    const c = linked ? await getGa4Credentials(null, false) : await getGa4Credentials({ ga4_service_account_json: cfg.service_account_json }, false);
+    token = c.accessToken;
+    account = c.account;
+  } catch (e) {
+    return { ok: false, message: `구글 인증 실패 — ${e instanceof Error ? e.message : "오류"}`, clients: [] };
+  }
+  let message = `연결 정상 — ${account || "구글 계정"}`;
+  try {
+    const props = await fetchAccessibleProperties(token);
+    message += ` · 접근 가능한 GA4 속성 ${props.length}개`;
+  } catch {
+    message += " (속성 목록은 'Google Analytics Admin API'를 켜면 보여요)";
+  }
+  const clients: ClientCheck[] = [];
+  for (const c of await allClients()) {
+    const pid = c.ga4_property_id?.trim();
+    if (!pid) continue;
+    try {
+      const p = await probeProperty(token, pid);
+      clients.push({ clientName: c.name, accountId: pid, ownKey: !!c.ga4_service_account_json, ok: true, detail: `최근 7일 세션 ${p.sessions.toLocaleString("ko-KR")}` });
+    } catch (e) {
+      clients.push({ clientName: c.name, accountId: pid, ownKey: !!c.ga4_service_account_json, ok: false, detail: e instanceof Error ? e.message : "조회 실패" });
+    }
+  }
+  return { ok: true, message, clients };
+}
+
 function validateStatic(channel: SharedChannel, cfg: SharedConfig): string | null {
   const def = SHARED_DEFS.find((d) => d.channel === channel)!;
   for (const f of def.fields) {
@@ -156,12 +206,9 @@ function validateStatic(channel: SharedChannel, cfg: SharedConfig): string | nul
     if (f.digits && cfg[f.key] && !/^\d+$/.test(cfg[f.key].replace(/-/g, ""))) return `${f.label}은(는) 숫자만 입력하세요.`;
   }
   if (channel === "ga4") {
-    try {
-      const j = JSON.parse(cfg.service_account_json);
-      if (!j.client_email || !j.private_key) return "서비스 계정 JSON에 client_email·private_key가 없어요.";
-    } catch {
-      return "서비스 계정 JSON 형식이 아니에요.";
-    }
+    if (!!cfg.client_id !== !!cfg.client_secret) return "OAuth Client ID와 Secret을 함께 넣어 주세요.";
+    if (!cfg.client_id && !cfg.service_account_json) return "OAuth Client ID·Secret(구글 계정 연결용)을 넣어 주세요.";
+    if (cfg.service_account_json && !parseServiceAccount(cfg.service_account_json)) return "서비스 계정 JSON 형식이 아니에요(client_email·private_key 필요).";
   }
   return null;
 }
@@ -171,6 +218,7 @@ async function runTest(channel: SharedChannel, cfg: SharedConfig): Promise<TestR
   if (channel === "naver") return testNaver(cfg);
   if (channel === "kakao") return testKakao(cfg.access_token);
   if (channel === "gfa") return testGfa(cfg);
+  if (channel === "ga4") return testGa4(cfg);
   const err = validateStatic(channel, cfg);
   return err ? { ok: false, message: err, clients: [] } : { ok: true, message: "형식 확인 완료 (이 매체는 아직 실제 조회를 지원하지 않아요)", clients: [] };
 }
@@ -187,19 +235,20 @@ export async function GET() {
         const v = entry.config[f.key];
         if (v) display[f.key] = f.secret ? maskKey(f.textarea ? (safeEmail(v) ?? v) : v) : v;
       }
-      if ((ch === "kakao" || ch === "gfa") && entry.config.linked_at) display.linked_at = entry.config.linked_at;
+      if ((ch === "kakao" || ch === "gfa" || ch === "ga4") && entry.config.linked_at) display.linked_at = entry.config.linked_at;
+      if (ch === "ga4" && entry.config.refresh_token && entry.config.linked_email) display.linked_email = entry.config.linked_email;
     }
     channels[ch] = entry
       ? {
           configured: ch === "kakao" ? !!entry.config.access_token : true,
-          ...(ch === "gfa" ? { linked: !!entry.config.refresh_token } : {}),
+          ...(ch === "gfa" || ch === "ga4" ? { linked: !!entry.config.refresh_token } : {}),
           source: entry.source,
           updatedAt: entry.updatedAt,
           display,
         }
       : { configured: false, source: null, updatedAt: null, display: {} };
   }
-  return NextResponse.json({ tableReady: await sharedTableReady(), kakaoConfigured: !!process.env.KAKAO_REST_API_KEY, gfaRedirectUri: gfaRedirectUri(), channels });
+  return NextResponse.json({ tableReady: await sharedTableReady(), kakaoConfigured: !!process.env.KAKAO_REST_API_KEY, gfaRedirectUri: gfaRedirectUri(), ga4RedirectUri: ga4RedirectUri(), channels });
 }
 
 function safeEmail(json: string): string | null {
@@ -224,7 +273,9 @@ export async function POST(req: Request) {
   const cfg: SharedConfig = body.config
     ? channel === "gfa"
       ? { ...gfaTokensOf(stored?.config, input.client_id), ...input }
-      : input
+      : channel === "ga4"
+        ? ga4Merge(stored?.source === "db" ? stored.config : undefined, input)
+        : input
     : (stored?.config ?? {});
   if (channel === "kakao" && body.action === "save") return NextResponse.json({ error: "카카오는 '공용 카카오 계정 연결'로 등록해요." }, { status: 400 });
   if (!body.config && !stored) return NextResponse.json({ ok: false, message: "등록된 공용 키가 없어요.", clients: [] });

@@ -1,5 +1,8 @@
+/* 본문 서체 Noto Sans KR(구글 폰트 — Windows용 힌팅판을 받아 작은 글자도 선명, GA 등 구글 제품과 같은 한글 서체).
+   2026-10-01 Windows 실측 비교: Pretendard Variable은 힌팅이 없어 가늘고 흐릿했음. 정적 Pretendard는 폴백 */
+@import url("https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800&display=swap");
 @import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css");
-@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap");
 
 @tailwind base;
 @tailwind components;
@@ -11,8 +14,11 @@
 
 html,
 body {
-  background: #f6f6f4;
-  color: #15181e;
+  font-family: "Noto Sans KR", Pretendard, "Malgun Gothic", system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.55;
+  background: #ffffff;
+  color: #101828;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }

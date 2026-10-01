@@ -33,9 +33,9 @@ import {
 } from "./shortFormJobs";
 
 const INPUT =
-  "h-9 w-full rounded-lg border border-gray-200 bg-white px-3 text-[13px] text-gray-900 placeholder:text-gray-400 outline-none focus:border-signal focus:ring-4 focus:ring-signal/10";
+  "h-9 w-full rounded-lg border border-gray-200 bg-white px-3 text-[15px] text-gray-900 placeholder:text-gray-400 outline-none focus:border-signal focus:ring-4 focus:ring-signal/10";
 const TEXTAREA =
-  "w-full resize-none rounded-lg border border-gray-200 bg-white px-3 py-2 text-[13px] leading-relaxed text-gray-900 placeholder:text-gray-400 outline-none focus:border-signal focus:ring-4 focus:ring-signal/10";
+  "w-full resize-none rounded-lg border border-gray-200 bg-white px-3 py-2 text-[15px] leading-relaxed text-gray-900 placeholder:text-gray-400 outline-none focus:border-signal focus:ring-4 focus:ring-signal/10";
 
 // 장면 역할 색 — 스토리 흐름(후킹→공감·해결→증명→혜택)이 한눈에 보이도록. 채도는 낮게, 배경은 50톤.
 const ROLE_TONE: Record<SceneRole, { chip: string; dot: string; bar: string }> = {
@@ -241,8 +241,8 @@ export function NewShortFormForm({ onClose, onCreated }: { onClose: () => void; 
               <i className="ti ti-sparkles text-[18px]" aria-hidden />
             </span>
             <div>
-            <h3 className="text-[16px] font-semibold text-gray-900">새 숏폼 생성</h3>
-            <p className="mt-0.5 text-xs text-gray-500">브리프를 넣으면 AI가 스크립트를 쓰고, 사진 또는 클립으로 세로형 숏폼을 합성합니다.</p>
+            <h3 className="text-[17px] font-semibold text-gray-900">새 숏폼 생성</h3>
+            <p className="mt-0.5 text-[13px] text-gray-500">브리프를 넣으면 AI가 스크립트를 쓰고, 사진 또는 클립으로 세로형 숏폼을 합성합니다.</p>
             </div>
           </div>
           <button
@@ -339,12 +339,12 @@ export function NewShortFormForm({ onClose, onCreated }: { onClose: () => void; 
                     type="button"
                     onClick={runGenerate}
                     disabled={generating || submitting}
-                    className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-signal to-violet-600 text-[13px] font-semibold text-white shadow-md shadow-signal/25 transition hover:brightness-110 disabled:opacity-50"
+                    className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-signal to-violet-600 text-[15px] font-semibold text-white shadow-md shadow-signal/25 transition hover:brightness-110 disabled:opacity-50"
                   >
-                    <i className={`ti ${generating ? "ti-loader-2 animate-spin" : "ti-sparkles"} text-[15px]`} aria-hidden />
+                    <i className={`ti ${generating ? "ti-loader-2 animate-spin" : "ti-sparkles"} text-[16px]`} aria-hidden />
                     {generating ? "스크립트 쓰는 중… (30초~1분)" : script ? `${durationSec}초로 다시 생성` : `${durationSec}초 AI 스크립트 생성`}
                   </button>
-                  <p className="text-[11px] text-gray-500">Claude API(텍스트) 호출 1회. 수치·할인율은 브리프에 적은 값만 씁니다.</p>
+                  <p className="text-[13px] text-gray-500">Claude API(텍스트) 호출 1회. 수치·할인율은 브리프에 적은 값만 씁니다.</p>
                 </div>
 
                 <div className="min-h-[200px] rounded-xl border border-gray-200 bg-white">
@@ -353,20 +353,20 @@ export function NewShortFormForm({ onClose, onCreated }: { onClose: () => void; 
                       <span className="flex h-12 w-12 items-center justify-center rounded-full bg-signal-soft text-signal">
                         <i className="ti ti-script text-[22px]" aria-hidden />
                       </span>
-                      <p className="mt-2 text-[13px]">브리프를 채우고 생성 버튼을 누르면 여기에 장면별 스크립트가 나옵니다.</p>
+                      <p className="mt-2 text-[15px]">브리프를 채우고 생성 버튼을 누르면 여기에 장면별 스크립트가 나옵니다.</p>
                     </div>
                   ) : (
                     <div className="divide-y divide-gray-100">
                       <div className="flex items-center justify-between px-4 py-2.5">
-                        <p className="text-[12px] text-gray-600">
+                        <p className="text-[13px] text-gray-600">
                           <span className="font-semibold text-gray-900">{script.brand}</span> · {script.scenes.length}장면 + 엔드카드 · 약 {Math.round(scriptDurationSec(script))}초
                           {script.targetSeconds ? <span className="ml-1.5 rounded-full bg-signal-soft px-2 py-0.5 text-[10.5px] font-medium text-signal">{script.targetSeconds}초 기획</span> : null}
                         </p>
-                        <span className="text-[11px] text-gray-400">직접 편집 가능</span>
+                        <span className="text-[13px] text-gray-400">직접 편집 가능</span>
                       </div>
                       <div className="space-y-1.5 bg-gradient-to-r from-signal-soft to-violet-50/60 px-4 py-3">
                         <p className="flex items-center gap-1.5 text-[11.5px] font-semibold text-signal-strong">
-                          <i className="ti ti-bulb text-[14px]" aria-hidden /> 기획 의도 · 스토리라인
+                          <i className="ti ti-bulb text-[15px]" aria-hidden /> 기획 의도 · 스토리라인
                         </p>
                         <textarea
                           rows={3}
@@ -380,7 +380,7 @@ export function NewShortFormForm({ onClose, onCreated }: { onClose: () => void; 
                       {script.scenes.map((sc, i) => (
                         <div key={sc.id} className="space-y-2 px-4 py-3">
                           <div className="flex items-center gap-2">
-                            <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold text-white ${ROLE_TONE[sc.role].dot}`}>{i + 1}</span>
+                            <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[13px] font-semibold text-white ${ROLE_TONE[sc.role].dot}`}>{i + 1}</span>
                             <select
                               value={sc.role}
                               onChange={(e) => updateScene(i, { role: e.target.value as ScriptScene["role"] })}
@@ -396,28 +396,28 @@ export function NewShortFormForm({ onClose, onCreated }: { onClose: () => void; 
                               value={sc.kicker}
                               onChange={(e) => updateScene(i, { kicker: e.target.value })}
                               placeholder="라벨"
-                              className="h-7 w-32 rounded-md border border-gray-200 bg-white px-2 font-mono text-[11px] uppercase text-gray-700"
+                              className="h-7 w-32 rounded-md border border-gray-200 bg-white px-2 font-mono text-[13px] uppercase text-gray-700"
                             />
                             <span className="ml-auto font-mono text-[10.5px] text-gray-400">{sc.id} · {sc.seconds}s</span>
                             <button type="button" onClick={() => removeScene(i)} className="text-gray-400 hover:text-red-600" title="장면 삭제" aria-label="장면 삭제">
-                              <i className="ti ti-trash text-[14px]" aria-hidden />
+                              <i className="ti ti-trash text-[15px]" aria-hidden />
                             </button>
                           </div>
                           <div className="flex items-start gap-2">
-                            <i className="ti ti-movie mt-2 text-[14px] text-gray-400" aria-hidden />
+                            <i className="ti ti-movie mt-2 text-[15px] text-gray-400" aria-hidden />
                             <textarea rows={2} value={sc.visual ?? ""} onChange={(e) => updateScene(i, { visual: e.target.value })} placeholder="화면 묘사 (어떤 상황·컷을 보여줄지)" className={TEXTAREA} />
                           </div>
                           <textarea rows={2} value={sc.headline} onChange={(e) => updateScene(i, { headline: e.target.value })} placeholder="자막 헤드라인 (줄바꿈 가능)" className={`${TEXTAREA} font-semibold`} />
                           <input value={sc.sub} onChange={(e) => updateScene(i, { sub: e.target.value })} placeholder="보조 자막" className={INPUT} />
                           <div className="flex items-start gap-2">
-                            <i className="ti ti-microphone mt-2 text-[14px] text-gray-400" aria-hidden />
+                            <i className="ti ti-microphone mt-2 text-[15px] text-gray-400" aria-hidden />
                             <textarea rows={2} value={sc.narration} onChange={(e) => updateScene(i, { narration: e.target.value })} placeholder="내레이션" className={TEXTAREA} />
                           </div>
                           {isClips && (
                             <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5">
                               <div className="mb-1.5 flex items-center justify-between">
                                 <span className="inline-flex items-center gap-1 text-[10.5px] font-medium text-slate-500">
-                                  <i className="ti ti-video text-[12px] text-signal" aria-hidden /> 영상 프롬프트 (영문 · {veoClipSeconds(sc.seconds, resolution)}초 클립 · 9:16)
+                                  <i className="ti ti-video text-[13px] text-signal" aria-hidden /> 영상 프롬프트 (영문 · {veoClipSeconds(sc.seconds, resolution)}초 클립 · 9:16)
                                 </span>
                                 <button type="button" onClick={() => copyText(sc.id, sc.prompt)} className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-[10.5px] text-slate-600 ring-1 ring-slate-200 hover:text-signal">
                                   <i className={`ti ${copied === sc.id ? "ti-check" : "ti-copy"}`} aria-hidden /> {copied === sc.id ? "복사됨" : "복사"}
@@ -427,7 +427,7 @@ export function NewShortFormForm({ onClose, onCreated }: { onClose: () => void; 
                                 rows={3}
                                 value={sc.prompt}
                                 onChange={(e) => updateScene(i, { prompt: e.target.value })}
-                                className="w-full resize-none bg-transparent font-mono text-[11px] leading-relaxed text-slate-700 outline-none"
+                                className="w-full resize-none bg-transparent font-mono text-[13px] leading-relaxed text-slate-700 outline-none"
                               />
                             </div>
                           )}
@@ -474,16 +474,16 @@ export function NewShortFormForm({ onClose, onCreated }: { onClose: () => void; 
                   <div key={`${f.name}-${i}`} className="group relative aspect-[3/4] overflow-hidden rounded-lg border border-gray-200 bg-gray-100">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={URL.createObjectURL(f)} alt="" className="h-full w-full object-cover" />
-                    <span className="absolute left-1.5 top-1.5 rounded-full bg-black/60 px-1.5 text-[10px] font-semibold text-white">{i + 1}</span>
+                    <span className="absolute left-1.5 top-1.5 rounded-full bg-black/60 px-1.5 text-[12px] font-semibold text-white">{i + 1}</span>
                     <div className="absolute inset-x-0 bottom-0 flex justify-between bg-black/50 p-1 opacity-0 transition group-hover:opacity-100">
                       <button type="button" onClick={() => i > 0 && setPhotos((p) => { const n = [...p]; [n[i - 1], n[i]] = [n[i], n[i - 1]]; return n; })} className="text-white" aria-label="앞으로">
-                        <i className="ti ti-arrow-left text-[14px]" aria-hidden />
+                        <i className="ti ti-arrow-left text-[15px]" aria-hidden />
                       </button>
                       <button type="button" onClick={() => setPhotos((p) => p.filter((_, j) => j !== i))} className="text-white" aria-label="삭제">
-                        <i className="ti ti-trash text-[14px]" aria-hidden />
+                        <i className="ti ti-trash text-[15px]" aria-hidden />
                       </button>
                       <button type="button" onClick={() => i < photos.length - 1 && setPhotos((p) => { const n = [...p]; [n[i + 1], n[i]] = [n[i], n[i + 1]]; return n; })} className="text-white" aria-label="뒤로">
-                        <i className="ti ti-arrow-right text-[14px]" aria-hidden />
+                        <i className="ti ti-arrow-right text-[15px]" aria-hidden />
                       </button>
                     </div>
                   </div>
@@ -491,7 +491,7 @@ export function NewShortFormForm({ onClose, onCreated }: { onClose: () => void; 
                 {photos.length < (template.maxAssets ?? 12) && (
                   <label className="flex aspect-[3/4] cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-gray-300 text-gray-500 transition hover:border-signal/50 hover:text-signal">
                     <i className="ti ti-plus text-[20px]" aria-hidden />
-                    <span className="mt-1 text-[11px]">사진 추가</span>
+                    <span className="mt-1 text-[13px]">사진 추가</span>
                     <input
                       type="file"
                       accept="image/jpeg,image/png,image/webp"
@@ -511,7 +511,7 @@ export function NewShortFormForm({ onClose, onCreated }: { onClose: () => void; 
             <section>
               <StepTitle n={template.scripted ? 3 : 2} title="클립 소스" desc="Veo API로 자동 생성하거나, 다른 플랫폼에서 만든 클립을 샷별로 올려요." />
               <PlatformSelector value={platform} onChange={setPlatform} compact />
-              <p className="mt-2 flex items-center gap-1.5 text-xs text-gray-500">
+              <p className="mt-2 flex items-center gap-1.5 text-[13px] text-gray-500">
                 <i className="ti ti-info-circle" aria-hidden /> {p.detail} <span className="text-gray-400">· {p.hint}</span>
               </p>
 
@@ -536,7 +536,7 @@ export function NewShortFormForm({ onClose, onCreated }: { onClose: () => void; 
                     </select>
                   </Field>
                   <div className="flex flex-col justify-end">
-                    <span className="text-[11px] font-medium text-gray-500">예상 비용</span>
+                    <span className="text-[13px] font-medium text-gray-500">예상 비용</span>
                     <span className="font-mono text-[20px] font-semibold text-violet-900">
                       {costIsEstimate ? "약 " : ""}${estCost.toFixed(2)}
                     </span>
@@ -559,7 +559,7 @@ export function NewShortFormForm({ onClose, onCreated }: { onClose: () => void; 
                       <button
                         type="button"
                         onClick={() => copyText("all", shots.map((s, i) => `[${i + 1}. ${s.id}]\n${s.prompt}`).join("\n\n"))}
-                        className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 text-[12px] font-medium text-gray-700 transition hover:bg-gray-50"
+                        className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 text-[13px] font-medium text-gray-700 transition hover:bg-gray-50"
                       >
                         <i className={`ti ${copied === "all" ? "ti-check text-emerald-600" : "ti-copy"}`} aria-hidden />
                         {copied === "all" ? "복사됨" : "프롬프트 전체 복사"}
@@ -576,19 +576,19 @@ export function NewShortFormForm({ onClose, onCreated }: { onClose: () => void; 
                         return (
                           <li key={s.id} className={`px-4 py-3 transition-colors ${f ? "bg-emerald-50/40" : "bg-white"}`}>
                             <div className="flex items-center gap-3">
-                              <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ${f ? "bg-emerald-500 text-white" : "bg-gray-100 text-gray-500"}`}>
+                              <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[13px] font-semibold ${f ? "bg-emerald-500 text-white" : "bg-gray-100 text-gray-500"}`}>
                                 {f ? <i className="ti ti-check" aria-hidden /> : i + 1}
                               </span>
                               <div className="min-w-0 flex-1">
-                                <p className="truncate text-[13px] font-semibold text-gray-900">
-                                  {s.label} <span className="ml-1 font-mono text-[11px] font-normal text-gray-400">{s.id} · {s.seconds}s</span>
+                                <p className="truncate text-[15px] font-semibold text-gray-900">
+                                  {s.label} <span className="ml-1 font-mono text-[13px] font-normal text-gray-400">{s.id} · {s.seconds}s</span>
                                 </p>
-                                <p className="truncate text-xs text-gray-500">{f ? `${f.name} · ${(f.size / 1048576).toFixed(1)}MB` : "클립 없음"}</p>
+                                <p className="truncate text-[13px] text-gray-500">{f ? `${f.name} · ${(f.size / 1048576).toFixed(1)}MB` : "클립 없음"}</p>
                               </div>
-                              <button type="button" onClick={() => setOpenPrompt(open ? null : s.id)} className="inline-flex h-8 items-center gap-1 rounded-lg px-2.5 text-[12px] text-gray-600 transition hover:bg-gray-100">
+                              <button type="button" onClick={() => setOpenPrompt(open ? null : s.id)} className="inline-flex h-8 items-center gap-1 rounded-lg px-2.5 text-[13px] text-gray-600 transition hover:bg-gray-100">
                                 <i className={`ti ${open ? "ti-chevron-up" : "ti-file-text"}`} aria-hidden /> 프롬프트
                               </button>
-                              <label className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 text-[12px] font-medium text-gray-700 transition hover:border-signal/50 hover:text-signal">
+                              <label className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 text-[13px] font-medium text-gray-700 transition hover:border-signal/50 hover:text-signal">
                                 <i className="ti ti-upload" aria-hidden /> {f ? "교체" : "mp4 선택"}
                                 <input
                                   type="file"
@@ -605,8 +605,8 @@ export function NewShortFormForm({ onClose, onCreated }: { onClose: () => void; 
                             {open && (
                               <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
                                 <div className="mb-2 flex items-center justify-between">
-                                  <span className="text-[11px] text-slate-500">레퍼런스 자산: {s.refs.length ? s.refs.map((r) => `${r}.jpg`).join(", ") : "없음"}</span>
-                                  <button type="button" onClick={() => copyText(s.id, s.prompt)} className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-1 text-[11px] text-slate-600 ring-1 ring-slate-200 transition hover:text-signal">
+                                  <span className="text-[13px] text-slate-500">레퍼런스 자산: {s.refs.length ? s.refs.map((r) => `${r}.jpg`).join(", ") : "없음"}</span>
+                                  <button type="button" onClick={() => copyText(s.id, s.prompt)} className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-1 text-[13px] text-slate-600 ring-1 ring-slate-200 transition hover:text-signal">
                                     <i className={`ti ${copied === s.id ? "ti-check" : "ti-copy"}`} aria-hidden /> {copied === s.id ? "복사됨" : "복사"}
                                   </button>
                                 </div>
@@ -625,7 +625,7 @@ export function NewShortFormForm({ onClose, onCreated }: { onClose: () => void; 
         </div>
 
         <footer className="flex items-center justify-between gap-3 border-t border-gray-200 bg-gray-50 px-6 py-4">
-          <div className="min-w-0 text-xs text-gray-500">
+          <div className="min-w-0 text-[13px] text-gray-500">
             {error ? (
               <span className="text-red-600">{error}</span>
             ) : progress ? (
@@ -637,11 +637,11 @@ export function NewShortFormForm({ onClose, onCreated }: { onClose: () => void; 
             )}
           </div>
           <div className="flex shrink-0 gap-2">
-            <button type="button" onClick={onClose} disabled={submitting} className="inline-flex h-9 items-center rounded-lg border border-gray-200 bg-white px-4 text-[13px] font-medium text-gray-700 transition hover:bg-gray-100 disabled:opacity-50">
+            <button type="button" onClick={onClose} disabled={submitting} className="inline-flex h-9 items-center rounded-lg border border-gray-200 bg-white px-4 text-[15px] font-medium text-gray-700 transition hover:bg-gray-100 disabled:opacity-50">
               취소
             </button>
-            <button type="button" onClick={submit} disabled={submitting || generating} className="inline-flex h-9 items-center gap-2 rounded-lg bg-gradient-to-r from-signal to-violet-600 px-4 text-[13px] font-medium text-white shadow-sm shadow-signal/25 transition hover:brightness-110 disabled:opacity-50">
-              <i className={`ti ${submitting ? "ti-loader-2 animate-spin" : "ti-wand"} text-[15px]`} aria-hidden />
+            <button type="button" onClick={submit} disabled={submitting || generating} className="inline-flex h-9 items-center gap-2 rounded-lg bg-gradient-to-r from-signal to-violet-600 px-4 text-[15px] font-medium text-white shadow-sm shadow-signal/25 transition hover:brightness-110 disabled:opacity-50">
+              <i className={`ti ${submitting ? "ti-loader-2 animate-spin" : "ti-wand"} text-[16px]`} aria-hidden />
               {generate ? `제작 요청 (${costIsEstimate ? "약 " : ""}$${estCost.toFixed(2)})` : "제작 요청"}
             </button>
           </div>
@@ -654,11 +654,11 @@ export function NewShortFormForm({ onClose, onCreated }: { onClose: () => void; 
 function StepTitle({ n, title, desc }: { n: number; title: string; desc: string }) {
   return (
     <div className="mb-3">
-      <h4 className="flex items-center gap-2 text-[14px] font-semibold text-gray-900">
-        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-signal-soft text-[11px] font-semibold text-signal ring-1 ring-signal/20">{n}</span>
+      <h4 className="flex items-center gap-2 text-[15px] font-semibold text-gray-900">
+        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-signal-soft text-[13px] font-semibold text-signal ring-1 ring-signal/20">{n}</span>
         {title}
       </h4>
-      <p className="mt-1 text-xs text-gray-500">{desc}</p>
+      <p className="mt-1 text-[13px] text-gray-500">{desc}</p>
     </div>
   );
 }
@@ -666,7 +666,7 @@ function StepTitle({ n, title, desc }: { n: number; title: string; desc: string 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-[11px] font-medium text-gray-500">{label}</span>
+      <span className="mb-1 block text-[13px] font-medium text-gray-500">{label}</span>
       {children}
     </label>
   );
@@ -677,8 +677,8 @@ function DurationPicker({ value, onChange, locked }: { value: DurationPreset["se
   return (
     <div className="mb-4">
       <div className="mb-2 flex items-center justify-between">
-        <span className="text-[12px] font-semibold text-gray-700">숏폼 길이</span>
-        {locked && <span className="text-[11px] text-gray-400">길이를 바꾸면 다시 생성해야 반영돼요</span>}
+        <span className="text-[13px] font-semibold text-gray-700">숏폼 길이</span>
+        {locked && <span className="text-[13px] text-gray-400">길이를 바꾸면 다시 생성해야 반영돼요</span>}
       </div>
       <div role="radiogroup" aria-label="숏폼 길이" className="grid gap-3 sm:grid-cols-3">
         {DURATION_PRESETS.map((d) => {
@@ -701,11 +701,11 @@ function DurationPicker({ value, onChange, locked }: { value: DurationPreset["se
                 </span>
                 <span className={`font-display text-[20px] font-semibold leading-none ${on ? "text-signal-strong" : "text-gray-900"}`}>
                   {d.seconds}
-                  <span className="ml-0.5 text-[12px] font-medium">초</span>
+                  <span className="ml-0.5 text-[13px] font-medium">초</span>
                 </span>
                 <span className={`text-[12.5px] font-semibold ${on ? "text-signal" : "text-gray-700"}`}>{d.name}</span>
                 {d.recommended && (
-                  <span className="ml-auto rounded-full bg-gradient-to-r from-signal to-violet-500 px-2 py-0.5 text-[10px] font-semibold text-white">추천</span>
+                  <span className="whitespace-nowrap ml-auto rounded-full bg-gradient-to-r from-signal to-violet-500 px-2 py-0.5 text-[12px] font-semibold text-white">추천</span>
                 )}
               </div>
               <p className={`mt-2 text-[11.5px] leading-snug ${on ? "text-signal-strong/80" : "text-gray-500"}`}>{d.fit}</p>
@@ -767,11 +767,11 @@ function SceneTimeline({ scenes, endSeconds }: { scenes: ScriptScene[]; endSecon
             </span>
           );
         })}
-        <span className="flex items-center justify-center bg-slate-300 text-[10px] font-medium text-white" style={{ width: `${(endSeconds / total) * 100}%` }}>
+        <span className="flex items-center justify-center bg-slate-300 text-[12px] font-medium text-white" style={{ width: `${(endSeconds / total) * 100}%` }}>
           END
         </span>
       </div>
-      <div className="mt-1 flex justify-between font-mono text-[10px] text-gray-400">
+      <div className="mt-1 flex justify-between font-mono text-[12px] text-gray-400">
         <span>0s</span>
         <span>{total}s</span>
       </div>
