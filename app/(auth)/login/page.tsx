@@ -1,42 +1,41 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import Link from "next/link";
+import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Wordmark } from "@/components/ui/Wordmark";
 
+// 로그인 — 회사 구글 계정(@nmg.co.kr)만. hd 파라미터는 계정 선택 화면을 좁히는 힌트이고,
+// 실제 차단은 /auth/callback·미들웨어가 이메일 도메인으로 한다.
+const ERRORS: Record<string, string> = {
+  domain: "@nmg.co.kr 회사 구글 계정으로만 로그인할 수 있어요.",
+  auth: "로그인에 실패했어요. 다시 시도해 주세요.",
+};
+
 export default function LoginPage() {
-  const router = useRouter();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  async function handleLogin(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setLoading(true);
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) {
-      setError("이메일 또는 비밀번호를 확인해 주세요.");
-      setLoading(false);
-      return;
-    }
-    router.push("/");
-    router.refresh();
-  }
+  useEffect(() => {
+    const code = new URLSearchParams(window.location.search).get("error");
+    if (code) setError(ERRORS[code] ?? code);
+  }, []);
 
   async function handleGoogleLogin() {
     setError(null);
+    setLoading(true);
     const supabase = createClient();
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? window.location.origin;
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${siteUrl}/auth/callback` },
+      options: {
+        redirectTo: `${siteUrl}/auth/callback`,
+        queryParams: { hd: "nmg.co.kr", prompt: "select_account" },
+      },
     });
-    if (error) setError("구글 로그인에 실패했어요. 잠시 후 다시 시도해 주세요.");
+    if (error) {
+      setError("구글 로그인에 실패했어요. 잠시 후 다시 시도해 주세요.");
+      setLoading(false);
+    }
   }
 
   return (
@@ -63,72 +62,38 @@ export default function LoginPage() {
         </div>
       </section>
 
-      {/* 우측 — 로그인 폼 */}
+      {/* 우측 — 구글 로그인 */}
       <section className="flex items-center justify-center bg-canvas px-6 py-16">
         <div className="w-full max-w-[380px]">
           <div className="mb-10">
             <Wordmark size="lg" />
-            <h1 className="mt-6 text-[22px] font-semibold text-ink">다시 오셨네요</h1>
+            <h1 className="mt-6 text-[22px] font-semibold text-ink">NMG 계정으로 로그인</h1>
             <p className="mt-1.5 text-[16px] text-ink-muted">
-              계정으로 로그인해 대시보드를 이어가세요.
+              @nmg.co.kr 회사 구글 계정으로 로그인해 주세요.
             </p>
           </div>
 
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <label className="mb-1.5 block text-[15px] font-medium text-ink-soft">
-                이메일
-              </label>
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="marketer@nmg.co.kr"
-                className="field font-mono"
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-[15px] font-medium text-ink-soft">
-                비밀번호
-              </label>
-              <input
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="field"
-              />
-            </div>
+          {error && (
+            <p className="mb-4 rounded-lg border border-bad/20 bg-bad/5 px-3.5 py-2.5 text-[15px] text-bad">{error}</p>
+          )}
 
-            {error && (
-              <p className="rounded-lg border border-bad/20 bg-bad/5 px-3.5 py-2.5 text-[15px] text-bad">
-                {error}
-              </p>
-            )}
-
-            <button type="submit" disabled={loading} className="btn-signal w-full">
-              {loading ? "확인 중…" : "로그인"}
-            </button>
-          </form>
-
-          <div className="my-4 flex items-center gap-3">
-            <span className="h-px flex-1 bg-line" aria-hidden />
-            <span className="text-[13px] text-ink-faint">또는</span>
-            <span className="h-px flex-1 bg-line" aria-hidden />
-          </div>
-
-          <button onClick={handleGoogleLogin} type="button" className="btn-ghost w-full">
-            <i className="ti ti-brand-google text-[17px]" aria-hidden />
-            구글로 로그인
+          <button
+            onClick={handleGoogleLogin}
+            disabled={loading}
+            type="button"
+            className="flex h-12 w-full items-center justify-center gap-3 rounded-lg border border-line bg-surface text-[16px] font-medium text-ink shadow-[0_1px_2px_rgba(16,24,40,0.05)] transition hover:bg-canvas disabled:opacity-60"
+          >
+            <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden>
+              <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z" />
+              <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z" />
+              <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z" />
+              <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z" />
+            </svg>
+            {loading ? "구글로 이동 중…" : "Google 계정으로 로그인"}
           </button>
 
-          <p className="mt-6 text-center text-[15px] text-ink-muted">
-            아직 계정이 없으신가요?{" "}
-            <Link href="/signup" className="font-medium text-signal hover:underline">
-              가입하기
-            </Link>
+          <p className="mt-6 text-center text-[13px] leading-relaxed text-ink-muted">
+            로그인하면 공유 대시보드를 볼 수 있어요. 저장·수정·삭제는 관리자만 할 수 있어요.
           </p>
         </div>
       </section>

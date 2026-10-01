@@ -161,7 +161,7 @@ export function Sidebar({ email, role }: { email: string; role: Role }) {
       </nav>
 
       {/* 관리 메뉴 — API 공용 키: 관리자·최고관리자 / 회원 관리: 최고관리자 */}
-      {(role === "superadmin" || role === "admin") && (
+      {role === "superadmin" && (
         <div className="space-y-0.5 border-t border-line px-3 py-2">
           {renderLeaf(API_KEYS_NAV, 0)}
           {role === "superadmin" && renderLeaf(ADMIN_NAV, 0)}

@@ -4,6 +4,8 @@ import { ensureProfile } from "@/lib/supabase/ensureProfile";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { ClientProvider } from "@/features/clients/ClientContext";
+import { WorkspaceProvider } from "@/features/workspace/WorkspaceContext";
+import { isOwnerEmail } from "@/lib/workspaceEmail";
 
 // 승인 상태를 매 요청마다 반드시 새로 확인 — 정적/캐시 렌더링을 절대 허용하지 않음
 export const dynamic = "force-dynamic";
@@ -27,6 +29,7 @@ export default async function DashboardLayout({
   if (profile.status === "rejected") redirect("/rejected");
 
   const role = profile.role;
+  const canEdit = isOwnerEmail(user.email); // 저장·수정·삭제는 워크스페이스 소유자만
 
   return (
     <>
@@ -34,6 +37,7 @@ export default async function DashboardLayout({
         rel="stylesheet"
         href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.24.0/dist/tabler-icons.min.css"
       />
+      <WorkspaceProvider canEdit={canEdit}>
       <ClientProvider>
         <div className="flex h-screen overflow-hidden bg-surface">
           <Sidebar email={user.email ?? "user"} role={role} />
@@ -43,6 +47,7 @@ export default async function DashboardLayout({
           </div>
         </div>
       </ClientProvider>
+      </WorkspaceProvider>
     </>
   );
 }

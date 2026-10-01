@@ -4,11 +4,13 @@ import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { navByPath } from "./nav";
 import { ClientSwitcher } from "./ClientSwitcher";
+import { useCanEdit } from "@/features/workspace/WorkspaceContext";
 
 export function Header() {
   const pathname = usePathname();
   const router = useRouter();
   const current = navByPath(pathname);
+  const canEdit = useCanEdit();
 
   async function signOut() {
     const supabase = createClient();
@@ -25,6 +27,15 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-2.5">
+        {!canEdit && (
+          <span
+            className="flex h-9 items-center gap-1.5 whitespace-nowrap rounded-lg bg-canvas px-3 text-[13px] font-medium text-ink-soft"
+            title="저장·수정·삭제는 관리자(k2s)만 할 수 있어요"
+          >
+            <i className="ti ti-eye text-[16px]" aria-hidden />
+            보기 전용
+          </span>
+        )}
         {/* 광고주 전환 · 광고주 관리 */}
         <ClientSwitcher />
 

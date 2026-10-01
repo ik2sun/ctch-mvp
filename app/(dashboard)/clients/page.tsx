@@ -9,8 +9,20 @@ import { clientLabel, deleteClientRow, fmtBudget, normalizeMetaAccountId, type C
 import { ClientInfoForm } from "@/features/clients/ClientInfoForm";
 import { MediaConnections } from "@/features/clients/MediaConnections";
 import type { MediaChannel } from "@/features/clients/mediaKeys";
+import { useCanEdit } from "@/features/workspace/WorkspaceContext";
 
 export default function ClientsPage() {
+  const canEdit = useCanEdit();
+  if (!canEdit) {
+    return (
+      <div className="mx-auto w-full max-w-[1600px]">
+        <p className="flex items-center gap-2 rounded-card border border-line bg-canvas px-5 py-4 text-[15px] text-ink-soft">
+          <i className="ti ti-eye text-[17px] text-ink-muted" aria-hidden />
+          광고주 관리는 관리자(k2s)만 쓸 수 있어요. 광고주 전환은 우측 상단 광고주 메뉴에서 할 수 있어요.
+        </p>
+      </div>
+    );
+  }
   return (
     <Suspense fallback={<p className="py-8 text-center text-[15px] text-ink-muted">불러오는 중…</p>}>
       <ClientsManager />

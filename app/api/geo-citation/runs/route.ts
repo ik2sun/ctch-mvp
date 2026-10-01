@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { ownerOnly } from "@/lib/workspace";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { canAccessClient, requireUser } from "@/features/geo-citation/auth";
 import { createRun } from "@/features/geo-citation/runner";
@@ -8,6 +9,8 @@ import { API_ENGINES, type ApiEngine } from "@/features/geo-citation/types";
 export async function POST(req: Request) {
   const auth = await requireUser();
   if (!auth) return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
+  const denied = ownerOnly(auth.user);
+  if (denied) return denied;
   const { clientId, engines } = (await req.json().catch(() => ({}))) as { clientId?: string; engines?: string[] };
   if (!clientId || !(await canAccessClient(auth.supabase, clientId))) {
     return NextResponse.json({ error: "광고주를 찾지 못했어요." }, { status: 404 });

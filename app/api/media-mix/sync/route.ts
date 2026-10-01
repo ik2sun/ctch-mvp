@@ -1,10 +1,10 @@
+import { dataOwnerId, ownerOnly } from "@/lib/workspace";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { resolveMetaToken } from "@/lib/meta/token";
 import { resolveNaverAdCredentials } from "@/lib/naver-ad/auth";
 import { metaApply, metaPlan, naverApply, naverPlan, unsupportedPlan } from "@/features/media-mix/sync";
 import type { MediaSyncPlan, MediaSyncResult } from "@/features/media-mix/syncTypes";
-import type { Role } from "@/lib/supabase/profile";
 
 // 미디어믹스 예산 동기화
 //  action=plan  : 매체 일 예산 목표 → 실제 캠페인(광고세트)별 새 일 예산 계획(읽기 전용)
@@ -13,7 +13,6 @@ import type { Role } from "@/lib/supabase/profile";
 export const maxDuration = 120;
 
 const LABEL: Record<string, string> = { meta: "메타", naver: "네이버 SA", gfa: "GFA", kakao: "카카오모먼트" };
-const APPLY_ROLES: Role[] = ["superadmin", "admin", "manager"];
 
 type Body = {
   action: "plan" | "apply";
@@ -40,17 +39,16 @@ export async function POST(req: Request) {
   if (!Object.keys(targets).length) return NextResponse.json({ error: "동기화할 매체가 없어요." }, { status: 400 });
 
   if (body.action === "apply") {
-    const { data: prof } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
-    if (!APPLY_ROLES.includes(prof?.role as Role)) {
-      return NextResponse.json({ error: "뷰어 권한으로는 실제 예산을 바꿀 수 없어요." }, { status: 403 });
-    }
+    // 실제 예산 변경은 워크스페이스 소유자만
+    const denied = ownerOnly(user);
+    if (denied) return denied;
   }
 
   const { data: client } = await supabase
     .from("clients")
     .select("id, name, meta_account_id, meta_access_token, naver_ad_api_key, naver_ad_secret, naver_ad_customer_id")
     .eq("id", body.clientId)
-    .eq("user_id", user.id)
+    .eq("user_id", await dataOwnerId(user))
     .maybeSingle();
   if (!client) return NextResponse.json({ error: "광고주를 찾을 수 없어요." }, { status: 403 });
 
@@ -107,7 +105,7 @@ export async function POST(req: Request) {
 
   const { error: logError } = await supabase.from("media_mix_syncs").insert({
     client_id: client.id,
-    user_id: user.id,
+    user_id: await dataOwnerId(user),
     targets,
     context: body.context ?? {},
     results,

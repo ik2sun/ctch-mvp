@@ -1,3 +1,4 @@
+import { dataOwnerId, ownerOnly } from "@/lib/workspace";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getGfaCredentials } from "@/lib/gfa/auth";
@@ -38,7 +39,7 @@ export async function GET(req: Request) {
   if (!clientId) return NextResponse.json({ error: "clientId가 필요해요." }, { status: 400 });
   if (!since || !until) return NextResponse.json({ error: "since, until 쿼리 파라미터가 필요해요." }, { status: 400 });
 
-  const { data: client } = await supabase.from("clients").select("name, gfa_customer_id").eq("id", clientId).eq("user_id", user.id).maybeSingle();
+  const { data: client } = await supabase.from("clients").select("name, gfa_customer_id").eq("id", clientId).eq("user_id", await dataOwnerId(user)).maybeSingle();
   if (!client) return NextResponse.json({ error: "광고주를 찾을 수 없어요." }, { status: 403 });
 
   const days = daysBetween(since, until);

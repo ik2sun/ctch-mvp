@@ -1,3 +1,4 @@
+import { dataOwnerId, ownerOnly } from "@/lib/workspace";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { exchangeAuthorizationCode, KakaoAuthError, STATE_COOKIE } from "@/lib/kakao-moment/auth";
@@ -75,8 +76,10 @@ export async function GET(req: Request) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.redirect(`${origin}/login`);
+  const denied = ownerOnly(user);
+  if (denied) return denied;
 
-  const { data: client } = await supabase.from("clients").select("id, kakao_ad_account_id").eq("id", clientId).eq("user_id", user.id).maybeSingle();
+  const { data: client } = await supabase.from("clients").select("id, kakao_ad_account_id").eq("id", clientId).eq("user_id", await dataOwnerId(user)).maybeSingle();
   if (!client) return finish({ kakao: "error", msg: "광고주를 찾을 수 없어요." });
 
   try {
@@ -104,7 +107,7 @@ export async function GET(req: Request) {
       /* 광고계정 조회 실패는 연결 자체를 막지 않는다 — 화면에서 재조회 */
     }
 
-    const { error } = await supabase.from("clients").update(update).eq("id", clientId).eq("user_id", user.id);
+    const { error } = await supabase.from("clients").update(update).eq("id", clientId).eq("user_id", await dataOwnerId(user));
     if (error) return finish({ kakao: "error", clientId, msg: "토큰 저장에 실패했어요. supabase/migrations/0013_kakao_moment.sql을 실행했는지 확인해 주세요." });
 
     return finish({ kakao: "linked", clientId, accounts: String(accountCount), ...(autoSelected ? { selected: autoSelected } : {}) });

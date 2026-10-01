@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { ownerOnly } from "@/lib/workspace";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { canAccessRun, requireUser } from "@/features/geo-citation/auth";
 import { detectMentions, finalizeCitations, normalizeDomain } from "@/features/geo-citation/analyze";
@@ -8,6 +9,8 @@ import { detectMentions, finalizeCitations, normalizeDomain } from "@/features/g
 export async function POST(req: Request) {
   const auth = await requireUser();
   if (!auth) return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
+  const denied = ownerOnly(auth.user);
+  if (denied) return denied;
   const body = (await req.json().catch(() => ({}))) as { runId?: string; promptId?: string; answer?: string; urls?: string };
   if (!body.runId || !body.promptId) return NextResponse.json({ error: "회차와 질문을 지정해 주세요." }, { status: 400 });
   const run = await canAccessRun(auth.supabase, body.runId);

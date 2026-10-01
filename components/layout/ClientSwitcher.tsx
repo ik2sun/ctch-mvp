@@ -5,10 +5,12 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useClients } from "@/features/clients/ClientContext";
 import { clientLabel, brandColorOf, onColor } from "@/features/clients/clientData";
+import { useCanEdit } from "@/features/workspace/WorkspaceContext";
 
 export function ClientSwitcher() {
   const router = useRouter();
   const { clients, selected, selectClient, loading } = useClients();
+  const canEdit = useCanEdit();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const boxRef = useRef<HTMLDivElement>(null);
@@ -116,6 +118,7 @@ export function ClientSwitcher() {
               );
             })}
           </ul>
+          {canEdit && (
           <div className="border-t border-line p-1.5">
             <button type="button" onClick={() => go("/clients")} className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[15px] text-ink-soft hover:bg-canvas">
               <i className="ti ti-settings w-4 text-[16px]" aria-hidden />
@@ -126,6 +129,7 @@ export function ClientSwitcher() {
               신규 광고주 등록
             </button>
           </div>
+          )}
         </div>
       )}
     </div>

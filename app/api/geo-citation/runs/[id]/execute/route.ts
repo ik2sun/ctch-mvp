@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { ownerOnly } from "@/lib/workspace";
 import { canAccessRun, requireUser } from "@/features/geo-citation/auth";
 import { executeRun } from "@/features/geo-citation/runner";
 
@@ -9,6 +10,8 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   const startedAt = Date.now();
   const auth = await requireUser();
   if (!auth) return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
+  const denied = ownerOnly(auth.user);
+  if (denied) return denied;
   const { id } = await params;
   if (!(await canAccessRun(auth.supabase, id))) return NextResponse.json({ error: "측정 회차를 찾지 못했어요." }, { status: 404 });
   try {

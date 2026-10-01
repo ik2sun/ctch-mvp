@@ -1,3 +1,4 @@
+import { dataOwnerId, ownerOnly } from "@/lib/workspace";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { ensureKakaoAccessToken, KAKAO_TOKEN_COLUMNS } from "@/lib/kakao-moment/auth";
@@ -17,7 +18,7 @@ async function loadClient(clientId: string) {
     .from("clients")
     .select(`id, name, ${KAKAO_TOKEN_COLUMNS}`)
     .eq("id", clientId)
-    .eq("user_id", user.id)
+    .eq("user_id", await dataOwnerId(user))
     .maybeSingle();
   return { supabase, user, client };
 }
@@ -61,9 +62,11 @@ export async function POST(req: Request) {
   if (!adAccountId || !/^\d+$/.test(String(adAccountId).trim())) return NextResponse.json({ error: "광고계정 번호는 숫자여야 해요." }, { status: 400 });
   const { supabase, user, client } = await loadClient(clientId);
   if (!user) return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
+  const denied = ownerOnly(user);
+  if (denied) return denied;
   if (!client) return NextResponse.json({ error: "광고주를 찾을 수 없어요." }, { status: 403 });
   try {
-    const { error } = await supabase.from("clients").update({ kakao_ad_account_id: String(adAccountId).trim() }).eq("id", clientId).eq("user_id", user.id);
+    const { error } = await supabase.from("clients").update({ kakao_ad_account_id: String(adAccountId).trim() }).eq("id", clientId).eq("user_id", await dataOwnerId(user));
     if (error) throw new Error("저장 중 오류가 발생했어요.");
     return NextResponse.json({ ok: true });
   } catch (e) {
@@ -77,12 +80,14 @@ export async function DELETE(req: Request) {
   if (!clientId) return NextResponse.json({ error: "clientId가 필요해요." }, { status: 400 });
   const { supabase, user, client } = await loadClient(clientId);
   if (!user) return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
+  const denied = ownerOnly(user);
+  if (denied) return denied;
   if (!client) return NextResponse.json({ error: "광고주를 찾을 수 없어요." }, { status: 403 });
   const { error } = await supabase
     .from("clients")
     .update({ kakao_access_token: null, kakao_token_expires_at: null, kakao_refresh_token: null, kakao_refresh_expires_at: null, kakao_linked_at: null })
     .eq("id", clientId)
-    .eq("user_id", user.id);
+    .eq("user_id", await dataOwnerId(user));
   if (error) return NextResponse.json({ error: "연결 해제 중 오류가 발생했어요." }, { status: 500 });
   return NextResponse.json({ ok: true });
 }

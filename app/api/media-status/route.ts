@@ -1,3 +1,4 @@
+import { dataOwnerId, ownerOnly } from "@/lib/workspace";
 import { NextResponse } from "next/server";
 import { resolveMetaToken } from "@/lib/meta/token";
 import { getShared } from "@/lib/sharedKeys";
@@ -44,7 +45,7 @@ export async function POST(req: Request) {
       "name, meta_account_id, meta_access_token, naver_ad_api_key, naver_ad_secret, naver_ad_customer_id, gfa_customer_id, kakao_ad_account_id, kakao_access_token, kakao_token_expires_at, kakao_refresh_token, kakao_refresh_expires_at, kakao_linked_at, google_ads_customer_id, google_ads_developer_token, ga4_property_id, ga4_service_account_json",
     )
     .eq("id", clientId)
-    .eq("user_id", user.id)
+    .eq("user_id", await dataOwnerId(user))
     .maybeSingle();
   if (!client) return NextResponse.json({ error: "광고주를 찾을 수 없어요." }, { status: 403 });
 

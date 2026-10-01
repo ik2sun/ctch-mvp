@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { ownerOnly } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 import { listBriefs, refreshBriefs } from "@/features/perf-manager/briefs";
 import type { Role } from "@/lib/supabase/profile";
@@ -13,7 +14,7 @@ async function currentUser() {
   } = await supabase.auth.getUser();
   if (!user) return null;
   const { data } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
-  return { id: user.id, role: (data?.role ?? "viewer") as Role };
+  return { id: user.id, email: user.email, role: (data?.role ?? "viewer") as Role };
 }
 
 export async function GET() {
@@ -24,7 +25,8 @@ export async function GET() {
 export async function POST() {
   const me = await currentUser();
   if (!me) return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
-  if (me.role === "viewer") return NextResponse.json({ error: "뷰어 권한으로는 업데이트할 수 없어요." }, { status: 403 });
+  const denied = ownerOnly(me);
+  if (denied) return denied;
   try {
     const r = await refreshBriefs();
     return NextResponse.json({ ...r, ...(await listBriefs()) });

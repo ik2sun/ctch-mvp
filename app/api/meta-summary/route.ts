@@ -1,3 +1,4 @@
+import { dataOwnerId, ownerOnly } from "@/lib/workspace";
 import { NextResponse } from "next/server";
 import { resolveMetaToken } from "@/lib/meta/token";
 import { createClient } from "@/lib/supabase/server";
@@ -118,7 +119,7 @@ export async function POST(req: Request) {
     .from("clients")
     .select("name, meta_account_id, meta_access_token")
     .eq("id", clientId)
-    .eq("user_id", user.id)
+    .eq("user_id", await dataOwnerId(user))
     .maybeSingle();
   if (!client?.meta_account_id) {
     return NextResponse.json({ error: "메타 계정이 연결되지 않았어요." }, { status: 400 });

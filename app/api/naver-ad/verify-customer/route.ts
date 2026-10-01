@@ -1,3 +1,4 @@
+import { dataOwnerId, ownerOnly } from "@/lib/workspace";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { resolveNaverAdCredentials, NaverAdNotConfiguredError } from "@/lib/naver-ad/auth";
@@ -22,7 +23,7 @@ export async function POST(req: Request) {
       .from("clients")
       .select("naver_ad_api_key, naver_ad_secret")
       .eq("id", clientId)
-      .eq("user_id", user.id)
+      .eq("user_id", await dataOwnerId(user))
       .maybeSingle();
     row = data;
   }

@@ -1,3 +1,4 @@
+import { dataOwnerId, ownerOnly } from "@/lib/workspace";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { resolveMetaToken } from "@/lib/meta/token";
@@ -28,7 +29,7 @@ export async function POST(req: Request) {
     .from("clients")
     .select(`name, meta_account_id, meta_access_token, naver_ad_api_key, naver_ad_secret, naver_ad_customer_id, gfa_customer_id, ${KAKAO_TOKEN_COLUMNS}`)
     .eq("id", clientId)
-    .eq("user_id", user.id)
+    .eq("user_id", await dataOwnerId(user))
     .maybeSingle();
   if (!client) return NextResponse.json({ error: "광고주를 찾을 수 없어요." }, { status: 403 });
   const c = client as Record<string, string | null>;

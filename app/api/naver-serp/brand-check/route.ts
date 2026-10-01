@@ -1,3 +1,4 @@
+import { dataOwnerId, ownerOnly } from "@/lib/workspace";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { runBrandKeywordCheck } from "@/lib/naver-serp/runBrandCheck";
@@ -10,6 +11,8 @@ export async function POST(req: Request) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
+  const denied = ownerOnly(user);
+  if (denied) return denied;
 
   const { keywordId } = await req.json();
   if (!keywordId) return NextResponse.json({ error: "keywordId가 필요해요." }, { status: 400 });
@@ -18,12 +21,12 @@ export async function POST(req: Request) {
     .from("brand_keywords")
     .select("id, client_id, keyword, owner_domain, alert_email")
     .eq("id", keywordId)
-    .eq("user_id", user.id)
+    .eq("user_id", await dataOwnerId(user))
     .maybeSingle();
   if (!kw) return NextResponse.json({ error: "키워드를 찾을 수 없어요." }, { status: 403 });
 
   try {
-    const { pc, mobile } = await runBrandKeywordCheck(supabase, { ...kw, user_id: user.id });
+    const { pc, mobile } = await runBrandKeywordCheck(supabase, { ...kw, user_id: await dataOwnerId(user) });
     return NextResponse.json({ pc, mobile });
   } catch (e) {
     const message = e instanceof Error ? e.message : "순위 확인 중 오류가 발생했어요.";

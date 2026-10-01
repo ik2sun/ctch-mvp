@@ -3,6 +3,7 @@
 // 사이드바 "현재 광고주" 카드를 누르면 열리는 팝업 — 현재 광고주의 연동 상태 점검과 정보 수정만 한다.
 // 광고주 전환·등록·삭제는 우측 상단 광고주 메뉴 / 광고주 관리 화면에서.
 import { useEffect, useState } from "react";
+import { EditGate, useCanEdit } from "@/features/workspace/WorkspaceContext";
 import Link from "next/link";
 import { useClients } from "./ClientContext";
 import { ClientInfoForm } from "./ClientInfoForm";
@@ -11,6 +12,7 @@ import { fmtBudget } from "./clientData";
 
 export function CurrentClientDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { selected, refresh } = useClients();
+  const canEdit = useCanEdit();
   const [tab, setTab] = useState<"status" | "info">("status");
   const [dirty, setDirty] = useState(false);
 
@@ -64,7 +66,7 @@ export function CurrentClientDialog({ open, onClose }: { open: boolean; onClose:
               ["status", "연동 상태 · 매체 설정", "plug-connected"],
               ["info", "기본 정보 수정", "pencil"],
             ] as const
-          ).map(([k, label, icon]) => (
+          ).filter(([k]) => canEdit || k === "status").map(([k, label, icon]) => (
             <button
               key={k}
               type="button"
@@ -85,18 +87,22 @@ export function CurrentClientDialog({ open, onClose }: { open: boolean; onClose:
         </div>
 
         <div className="max-h-[65vh] overflow-y-auto p-5">
-          {tab === "status" ? (
-            <MediaConnections client={selected} />
-          ) : (
-            <ClientInfoForm client={selected} onSaved={() => refresh()} onDirtyChange={setDirty} />
-          )}
+          <EditGate>
+            {tab === "status" || !canEdit ? (
+              <MediaConnections client={selected} />
+            ) : (
+              <ClientInfoForm client={selected} onSaved={() => refresh()} onDirtyChange={setDirty} />
+            )}
+          </EditGate>
         </div>
 
         <div className="flex items-center justify-between border-t border-line px-5 py-3 text-[13px] text-ink-muted">
           <span>다른 광고주로 바꾸려면 우측 상단 광고주 메뉴를 쓰세요.</span>
-          <Link href="/clients" onClick={close} className="text-signal hover:underline">
-            광고주 관리 →
-          </Link>
+          {canEdit && (
+            <Link href="/clients" onClick={close} className="text-signal hover:underline">
+              광고주 관리 →
+            </Link>
+          )}
         </div>
       </div>
     </div>

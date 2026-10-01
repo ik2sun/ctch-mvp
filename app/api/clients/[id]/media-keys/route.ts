@@ -1,3 +1,4 @@
+import { dataOwnerId, ownerOnly } from "@/lib/workspace";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import type { MediaChannel } from "@/features/clients/mediaKeys";
@@ -23,6 +24,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
+  const denied = ownerOnly(user);
+  if (denied) return denied;
 
   const { channel, keys, clear } = (await req.json()) as {
     channel?: MediaChannel;
@@ -38,7 +41,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     .from("clients")
     .select("id")
     .eq("id", clientId)
-    .eq("user_id", user.id)
+    .eq("user_id", await dataOwnerId(user))
     .maybeSingle();
   if (!client) return NextResponse.json({ error: "광고주를 찾을 수 없어요." }, { status: 403 });
 
@@ -70,7 +73,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ ok: true });
   }
 
-  const { error } = await supabase.from("clients").update(update).eq("id", clientId).eq("user_id", user.id);
+  const { error } = await supabase.from("clients").update(update).eq("id", clientId).eq("user_id", await dataOwnerId(user));
   if (error) return NextResponse.json({ error: "저장 중 오류가 발생했어요." }, { status: 500 });
 
   return NextResponse.json({ ok: true });

@@ -1,3 +1,4 @@
+import { dataOwnerId, ownerOnly } from "@/lib/workspace";
 import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
@@ -38,9 +39,11 @@ export async function GET(req: Request) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.redirect(`${origin}/login`);
+  const denied = ownerOnly(user);
+  if (denied) return denied;
   if (!clientId) return back({ kakao: "error", msg: "광고주를 먼저 선택해 주세요." });
 
-  const { data: client } = await supabase.from("clients").select("id").eq("id", clientId).eq("user_id", user.id).maybeSingle();
+  const { data: client } = await supabase.from("clients").select("id").eq("id", clientId).eq("user_id", await dataOwnerId(user)).maybeSingle();
   if (!client) return back({ kakao: "error", msg: "광고주를 찾을 수 없어요." });
 
   try {
