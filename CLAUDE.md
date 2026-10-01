@@ -163,3 +163,4 @@ NMG(넥스트미디어그룹) 내부용 AI 기반 퍼포먼스 마케팅 대시�
 - 서버: `lib/workspace.ts` — 읽기 라우트는 `.eq("user_id", await dataOwnerId(user))`, 쓰기 라우트는 첫 줄 `ownerOnly(user)`(403). 미들웨어용 순수 판정은 `lib/workspaceEmail.ts`(edge에서 admin 클라이언트 import 금지)
 - 화면: `features/workspace/WorkspaceContext.tsx` `useCanEdit()`·`EditGate`(fieldset disabled). 헤더에 "보기 전용" 표시. 그 외 화면의 저장 버튼은 RLS가 막는다(오류 문구로 표시)
 - 미들웨어는 `/api/cron/*`을 로그인 없이 통과시킨다(라우트가 `CRON_SECRET` 검증)
+- **Vercel Hobby 요금제는 크론을 하루 1회까지만 허용**(시간 단위 스케줄이 있으면 Git 배포가 'Deployment failed'로 거절됨). `vercel.json`은 매일 09:00·09:10·09:30 KST(경쟁사·브랜드 키워드·AI 인용) + 월 10:00 KST(최신 정보). 1·3·6·12시간 점검 주기는 Pro 전환 전까지 사실상 하루 1회. Vercel 프로젝트는 GitHub `ik2sun/ctch-mvp` main에 연결(2026-10-01), push = 운영 배포
