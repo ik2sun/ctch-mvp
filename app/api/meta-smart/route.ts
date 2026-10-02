@@ -127,7 +127,9 @@ async function anthropicCall(
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
   const msg = await anthropic.messages.create({
     model: "claude-sonnet-5-5",
-    max_tokens: 2500,
+    // claude-sonnet-5-5는 항상 생각(adaptive thinking)한 뒤 답한다 — 생각도 max_tokens에 포함되므로 여유 있게, 정형 작업이라 effort low
+    max_tokens: 16000,
+    output_config: { effort: "low" },
     system: buildSystemPrompt(channel) + buildConfigPrompt(config),
     messages: [{ role: "user", content: userMsg }],
   });

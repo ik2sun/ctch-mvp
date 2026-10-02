@@ -43,6 +43,18 @@ const SYSTEM = `당신은 퍼포먼스 마케팅 대시보드용 AI 어시스턴
 - 데이터로 확인할 수 없는 원인은 추측하지 말 것
 - 매체가 1개뿐이면 매체 간 비교는 하지 말 것`;
 
+// 구조화 출력 — 응답이 항상 이 모양의 JSON(코드펜스·설명 문장 없음)
+const PLAN_SCHEMA = {
+  type: "object",
+  properties: {
+    issues: { type: "array", items: { type: "string" } },
+    urgentActions: { type: "array", items: { type: "string" } },
+    nextWeekActions: { type: "array", items: { type: "string" } },
+  },
+  required: ["issues", "urgentActions", "nextWeekActions"],
+  additionalProperties: false,
+};
+
 export async function POST(req: Request) {
   const supabase = await createClient();
   const {
@@ -87,10 +99,14 @@ export async function POST(req: Request) {
     const anthropic = new Anthropic({ apiKey });
     const msg = await anthropic.messages.create({
       model: "claude-sonnet-5-5",
-      max_tokens: 1200,
+      // claude-sonnet-5-5는 항상 생각(adaptive thinking)한 뒤 답한다 — 생각도 max_tokens에 포함되므로 여유 있게, 정형 작업이라 effort low
+      max_tokens: 16000,
+      output_config: { effort: "low", format: { type: "json_schema", schema: PLAN_SCHEMA } },
       system: SYSTEM,
       messages: [{ role: "user", content: userMsg }],
     });
+    if (msg.stop_reason === "refusal") throw new Error("AI가 이 데이터에 대한 분석을 거절했어요. 다시 시도해 주세요.");
+    if (msg.stop_reason === "max_tokens") throw new Error("AI 응답이 길이 한도에 걸려 잘렸어요. 다시 시도해 주세요.");
 
     const text = msg.content
       .filter((b) => b.type === "text")

@@ -116,7 +116,9 @@ async function anthropicCall(payload: unknown): Promise<Diagnosis> {
   const msg = await anthropic.messages
     .stream({
       model: "claude-sonnet-5-5",
-      max_tokens: 8000,
+      // claude-sonnet-5-5는 항상 생각(adaptive thinking)한 뒤 답한다 — 생각도 max_tokens에 포함되므로 여유 있게
+      max_tokens: 32000,
+      output_config: { effort: "medium" },
       system: SYSTEM,
       messages: [{ role: "user", content: `${JSON.stringify(payload, null, 1)}\n\n위 스키마의 JSON만 출력하세요.` }],
     })

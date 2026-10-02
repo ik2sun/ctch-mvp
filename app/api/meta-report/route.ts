@@ -136,7 +136,9 @@ ${hasContext ? `[마케터의 추가 컨텍스트]\n${context.trim()}` : "[마�
   try {
     const msg = await anthropic.messages.create({
       model: "claude-sonnet-5-5",
-      max_tokens: 4000,
+      // claude-sonnet-5-5는 항상 생각(adaptive thinking)한 뒤 답한다 — 생각도 max_tokens에 포함되므로 여유 있게
+      max_tokens: 16000,
+      output_config: { effort: "medium" },
       system:
         buildSystemPrompt(channelLabel) +
         (hasContext ? CONTEXT_GUIDE : "") +

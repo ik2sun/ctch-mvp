@@ -41,7 +41,9 @@ ${context ? `[추가 컨텍스트]\n${context}\n` : ""}
   try {
     const msg = await anthropic.messages.create({
       model: "claude-sonnet-5-5",
-      max_tokens: 1200,
+      // claude-sonnet-5-5는 항상 생각(adaptive thinking)한 뒤 답한다 — 생각도 max_tokens에 포함되므로 여유 있게, 정형 작업이라 effort low
+      max_tokens: 16000,
+      output_config: { effort: "low" },
       messages: [{ role: "user", content: prompt }],
     });
 

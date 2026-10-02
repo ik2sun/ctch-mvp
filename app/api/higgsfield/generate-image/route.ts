@@ -18,7 +18,9 @@ async function buildImagePromptFromSlide(params: {
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   const msg = await anthropic.messages.create({
     model: "claude-sonnet-5-5",
-    max_tokens: 300,
+    // claude-sonnet-5-5는 항상 생각(adaptive thinking)한 뒤 답한다 — 생각도 max_tokens에 포함되므로 여유 있게, 짧은 변환이라 effort low
+    max_tokens: 4000,
+    output_config: { effort: "low" },
     messages: [
       {
         role: "user",
