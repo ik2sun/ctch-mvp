@@ -126,7 +126,7 @@ async function anthropicCall(
 ) {
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
   const msg = await anthropic.messages.create({
-    model: "claude-sonnet-4-5",
+    model: "claude-sonnet-5-5",
     max_tokens: 2500,
     system: buildSystemPrompt(channel) + buildConfigPrompt(config),
     messages: [{ role: "user", content: userMsg }],

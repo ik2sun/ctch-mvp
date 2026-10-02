@@ -40,7 +40,7 @@ ${context ? `[추가 컨텍스트]\n${context}\n` : ""}
 
   try {
     const msg = await anthropic.messages.create({
-      model: "claude-sonnet-4-5",
+      model: "claude-sonnet-5-5",
       max_tokens: 1200,
       messages: [{ role: "user", content: prompt }],
     });

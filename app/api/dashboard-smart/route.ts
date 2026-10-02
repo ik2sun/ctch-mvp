@@ -82,9 +82,11 @@ export async function POST(req: Request) {
 위 스키마의 JSON만 출력하세요.`;
 
   try {
-    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    // Vercel 환경변수에 붙여 넣을 때 따라온 공백·따옴표 제거
+    const apiKey = process.env.ANTHROPIC_API_KEY.trim().replace(/^["']|["']$/g, "");
+    const anthropic = new Anthropic({ apiKey });
     const msg = await anthropic.messages.create({
-      model: "claude-sonnet-4-5",
+      model: "claude-sonnet-5-5",
       max_tokens: 1200,
       system: SYSTEM,
       messages: [{ role: "user", content: userMsg }],
@@ -109,6 +111,12 @@ export async function POST(req: Request) {
 
     return NextResponse.json(parsed);
   } catch (e) {
+    if (e instanceof Anthropic.AuthenticationError) {
+      return NextResponse.json(
+        { error: "AI 키(ANTHROPIC_API_KEY)가 유효하지 않아요. 서버 환경변수를 확인해 주세요." },
+        { status: 500 },
+      );
+    }
     const message = e instanceof Error ? e.message : "AI 분석 중 오류가 발생했어요.";
     return NextResponse.json({ error: message }, { status: 500 });
   }

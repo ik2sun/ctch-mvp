@@ -17,7 +17,7 @@ async function buildImagePromptFromSlide(params: {
 
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   const msg = await anthropic.messages.create({
-    model: "claude-sonnet-4-5",
+    model: "claude-sonnet-5-5",
     max_tokens: 300,
     messages: [
       {

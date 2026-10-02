@@ -135,7 +135,7 @@ ${hasContext ? `[마케터의 추가 컨텍스트]\n${context.trim()}` : "[마�
 
   try {
     const msg = await anthropic.messages.create({
-      model: "claude-sonnet-4-5",
+      model: "claude-sonnet-5-5",
       max_tokens: 4000,
       system:
         buildSystemPrompt(channelLabel) +

@@ -115,7 +115,7 @@ async function anthropicCall(payload: unknown): Promise<Diagnosis> {
   // 게시물이 최대 50개라 출력이 길어질 수 있어 스트리밍으로 타임아웃을 피함
   const msg = await anthropic.messages
     .stream({
-      model: "claude-sonnet-4-5",
+      model: "claude-sonnet-5-5",
       max_tokens: 8000,
       system: SYSTEM,
       messages: [{ role: "user", content: `${JSON.stringify(payload, null, 1)}\n\n위 스키마의 JSON만 출력하세요.` }],
