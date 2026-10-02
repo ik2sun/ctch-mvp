@@ -1,19 +1,13 @@
 "use client";
 
-// 퍼포먼스 매니저 — 정리된 퍼포먼스 지식·최신 정보 대시보드 + 세계 최고 수준 퍼포먼스 전문가 챗봇(스킬·웹 검색·광고주 성과)
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+// 퍼포먼스 매니저 → 현재 광고주의 캠페인 매니저.
+// 왼쪽: 메일 연결·수집, 메일 AI 정리, 메일 규칙·캠페인 담당자·시장 설정 + 업계 최신 정보 / 오른쪽: 캠페인 매니저 대화(메일·매체 성과·시장 도구)
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useClients } from "@/features/clients/ClientContext";
-import { useMediaHistory } from "@/features/media-mix/useMediaHistory";
 import { ChatPanel, type ChatPanelHandle } from "@/features/perf-manager/ChatPanel";
+import { CampaignManagerBoard } from "@/features/perf-manager/CampaignManagerBoard";
 import { KnowledgeBoard } from "@/features/perf-manager/KnowledgeBoard";
-import { buildContext } from "@/features/perf-manager/context";
 import type { Brief } from "@/features/perf-manager/types";
-
-function daysAgo(n: number) {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  return d.toISOString().slice(0, 10);
-}
 
 export default function PerformanceManagerPage() {
   const { selected } = useClients();
@@ -22,15 +16,17 @@ export default function PerformanceManagerPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshMsg, setRefreshMsg] = useState<string | null>(null);
+  const [showKnowledge, setShowKnowledge] = useState(false);
+  const [notice, setNotice] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
 
-  const [contextOn, setContextOn] = useState(false);
-  const since = daysAgo(30);
-  const until = daysAgo(1);
-  // 토글을 켰을 때만 매체 데이터를 불러온다(대시보드와 같은 세션 캐시)
-  const history = useMediaHistory(contextOn ? selected?.id : null, since, until);
-  const contextText = useMemo(() => (selected && contextOn ? buildContext(selected.name, history.inputs, since, until) : null), [selected, contextOn, history.inputs, since, until]);
-  const contextStatus = !contextOn ? "" : history.loading ? "매체 데이터 불러오는 중…" : history.inputs.length ? `최근 30일 · ${history.inputs.map((i) => i.label).join("·")}` : "연동된 매체 데이터 없음";
-
+  // Gmail 연결 후 돌아왔을 때(?gmail=linked|error&msg=)
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search);
+    const g = p.get("gmail");
+    if (!g) return;
+    setNotice(g === "linked" ? { kind: "ok", text: "Gmail 연동에 동의했어요. '메일 동기화'를 누르면 이 프로젝트 조건에 맞는 메일을 모아요." } : { kind: "error", text: p.get("msg") || "Gmail 연결에 실패했어요." });
+    window.history.replaceState(null, "", window.location.pathname);
+  }, []);
   const chatRef = useRef<ChatPanelHandle>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [wide, setWide] = useState(true);
@@ -78,32 +74,37 @@ export default function PerformanceManagerPage() {
     }
   };
 
-  const chatProps = {
-    contextText,
-    contextOn,
-    onContextToggle: setContextOn,
-    contextStatus,
-    clientName: selected?.name ?? null,
-  };
+  const chatProps = { clientId: selected?.id ?? null, clientName: selected?.name ?? null };
 
   return (
-    <div className="mx-auto max-w-[1440px]">
-      <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_440px]">
+    <div className="mx-auto w-full max-w-[1600px]">
+      <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_460px]">
         <div className="min-w-0 space-y-5">
           <div>
-            <h2 className="text-[24px] font-bold tracking-tight text-ink">퍼포먼스 매니저</h2>
-            <p className="mt-1 text-[16px] text-ink-soft">퍼포먼스 마케팅 핵심 정리와 메타·구글·네이버·카카오 최신 소식, 그리고 무엇이든 물어볼 수 있는 퍼포먼스 전문가</p>
+            <h2 className="text-[24px] font-bold tracking-tight text-ink">{selected ? `${selected.name} 캠페인 매니저` : "캠페인 매니저"}</h2>
+            <p className="mt-1 text-[16px] text-ink-soft">광고주와 주고받은 메일, 연동 매체 성과, 시장 동향을 한곳에서 보고 담당자별 할 일을 정리해요</p>
           </div>
-          <KnowledgeBoard
-            briefs={briefs}
-            loading={loading}
-            refreshing={refreshing}
-            lastRefreshed={lastRefreshed}
-            canRefresh
-            refreshMsg={refreshMsg}
-            onRefresh={refresh}
-            onAsk={ask}
-          />
+
+          {selected ? (
+            <CampaignManagerBoard key={selected.id} clientId={selected.id} clientName={selected.name} onAsk={ask} notice={notice} />
+          ) : (
+            <p className="rounded-card border border-line bg-surface px-6 py-5 text-[15px] text-ink-muted">오른쪽 위에서 광고주를 선택하세요.</p>
+          )}
+
+          <section className="rounded-card border border-line bg-surface">
+            <button type="button" onClick={() => setShowKnowledge((v) => !v)} aria-expanded={showKnowledge} className="flex w-full items-center justify-between px-6 py-4 text-left">
+              <span>
+                <span className="text-[17px] font-semibold text-ink">업계 최신 정보 · 퍼포먼스 정리</span>
+                <span className="ml-2 text-[14px] text-ink-muted">메타·구글·네이버·카카오 소식 {briefs.length}건 — 대화에도 반영돼요</span>
+              </span>
+              <i className={`ti ti-chevron-down text-[18px] text-ink-muted transition ${showKnowledge ? "rotate-180" : ""}`} aria-hidden />
+            </button>
+            {showKnowledge && (
+              <div className="border-t border-line p-5">
+                <KnowledgeBoard briefs={briefs} loading={loading} refreshing={refreshing} lastRefreshed={lastRefreshed} canRefresh refreshMsg={refreshMsg} onRefresh={refresh} onAsk={ask} />
+              </div>
+            )}
+          </section>
         </div>
         {wide && (
           <div className="sticky top-0">
@@ -120,7 +121,7 @@ export default function PerformanceManagerPage() {
           className="fixed bottom-5 right-5 z-40 flex items-center gap-2 rounded-full bg-ink px-4 py-3 text-[15px] font-semibold text-white shadow-[0_8px_24px_rgba(21,24,30,0.25)]"
         >
           <i className="ti ti-message-chatbot text-[18px]" aria-hidden />
-          퍼포먼스 매니저에게 묻기
+          캠페인 매니저에게 묻기
         </button>
       )}
       {!wide && (
@@ -131,4 +132,3 @@ export default function PerformanceManagerPage() {
     </div>
   );
 }
-

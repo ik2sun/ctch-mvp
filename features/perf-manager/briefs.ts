@@ -3,7 +3,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { BRIEF_SEED } from "./briefSeed";
-import { PM_MODEL } from "./chat";
+import { PM_MODEL } from "./types";
 import type { Brief, BriefKind, BriefPlatform } from "./types";
 
 const PLATFORMS: BriefPlatform[] = ["meta", "google", "naver", "kakao", "measurement", "industry"];

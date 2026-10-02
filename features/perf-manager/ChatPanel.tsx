@@ -1,20 +1,20 @@
 "use client";
 
-// 퍼포먼스 매니저 대화창 — 스트리밍(NDJSON), 스킬·검색 표시, 출처. 대화는 화면 메모리에만(새로고침하면 사라짐).
+// 캠페인 매니저 대화창 — 현재 광고주 기준. 스트리밍(NDJSON), 스킬·데이터 도구·검색 표시, 출처. 대화는 화면 메모리에만(새로고침·광고주 전환 시 사라짐).
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { SUGGESTIONS } from "./knowledge";
+import { CM_SUGGESTIONS } from "./knowledge";
 import type { ChatEvent, ChatTurn } from "./types";
 
-type Msg = ChatTurn & { skills?: string[]; searches?: string[]; sources?: { title: string; url: string }[]; error?: string; pending?: boolean };
+type Msg = ChatTurn & { skills?: string[]; tools?: string[]; searches?: string[]; sources?: { title: string; url: string }[]; error?: string; pending?: boolean };
 
 export type ChatPanelHandle = { ask: (q: string) => void };
 
 export const ChatPanel = forwardRef<
   ChatPanelHandle,
-  { contextText: string | null; contextOn: boolean; onContextToggle: (v: boolean) => void; contextStatus: string; clientName: string | null; className?: string; onClose?: () => void }
->(function ChatPanel({ contextText, contextOn, onContextToggle, contextStatus, clientName, className = "", onClose }, ref) {
+  { clientId: string | null; clientName: string | null; className?: string; onClose?: () => void }
+>(function ChatPanel({ clientId, clientName, className = "", onClose }, ref) {
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -27,11 +27,17 @@ export const ChatPanel = forwardRef<
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [msgs]);
 
+  // 광고주를 바꾸면 대화를 새로 시작(다른 광고주 맥락이 섞이지 않게)
+  useEffect(() => {
+    abortRef.current?.abort();
+    setMsgs([]);
+  }, [clientId]);
+
   const send = async (text: string) => {
     const q = text.trim();
-    if (!q || busy) return;
+    if (!q || busy || !clientId) return;
     const history: ChatTurn[] = [...msgs.filter((m) => !m.error && m.content.trim()).map((m) => ({ role: m.role, content: m.content })), { role: "user", content: q }];
-    setMsgs((m) => [...m, { role: "user", content: q }, { role: "assistant", content: "", pending: true, skills: [], searches: [] }]);
+    setMsgs((m) => [...m, { role: "user", content: q }, { role: "assistant", content: "", pending: true, skills: [], tools: [], searches: [] }]);
     setInput("");
     setBusy(true);
     const ac = new AbortController();
@@ -41,7 +47,7 @@ export const ChatPanel = forwardRef<
       const res = await fetch("/api/perf-manager/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ turns: history, context: contextOn ? contextText : null, webSearch }),
+        body: JSON.stringify({ clientId, turns: history, webSearch }),
         signal: ac.signal,
       });
       if (!res.ok || !res.body) {
@@ -62,6 +68,7 @@ export const ChatPanel = forwardRef<
           const e = JSON.parse(line) as ChatEvent;
           if (e.type === "text") patch((m) => ({ ...m, content: m.content + e.text }));
           else if (e.type === "skill") patch((m) => ({ ...m, skills: [...(m.skills ?? []), e.label] }));
+          else if (e.type === "tool") patch((m) => ({ ...m, tools: (m.tools ?? []).includes(e.label) ? m.tools : [...(m.tools ?? []), e.label] }))
           else if (e.type === "search") patch((m) => ({ ...m, searches: [...(m.searches ?? []), e.query] }));
           else if (e.type === "sources") patch((m) => ({ ...m, sources: e.items }));
           else if (e.type === "error") patch((m) => ({ ...m, error: e.message }));
@@ -79,15 +86,15 @@ export const ChatPanel = forwardRef<
   useImperativeHandle(ref, () => ({ ask: (q: string) => send(q) }));
 
   return (
-    <section className={`flex min-h-0 flex-col overflow-hidden rounded-card border border-line bg-surface ${className}`} aria-label="퍼포먼스 매니저 대화">
+    <section className={`flex min-h-0 flex-col overflow-hidden rounded-card border border-line bg-surface ${className}`} aria-label="캠페인 매니저 대화">
       <header className="flex items-center justify-between gap-2 border-b border-line px-4 py-3">
         <div className="flex items-center gap-2.5">
-          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-ink text-white">
+          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-signal text-white">
             <i className="ti ti-chart-arrows-vertical text-[17px]" aria-hidden />
           </span>
           <div className="leading-tight">
-            <p className="text-[15px] font-semibold text-ink">퍼포먼스 매니저</p>
-            <p className="text-[12px] text-ink-muted">메타·구글·네이버·카카오 전문 · 대화는 저장되지 않아요</p>
+            <p className="text-[15px] font-semibold text-ink">{clientName ? `${clientName} 캠페인 매니저` : "캠페인 매니저"}</p>
+            <p className="text-[12px] text-ink-muted">메일·매체 성과·시장을 보고 답해요 · 대화는 저장되지 않아요</p>
           </div>
         </div>
         <div className="flex items-center gap-1">
@@ -110,12 +117,12 @@ export const ChatPanel = forwardRef<
         {msgs.length === 0 ? (
           <div>
             <p className="text-[15px] leading-relaxed text-ink-soft">
-              성과 진단, 예산 배분, 매체 운영, 소재 전략, 측정까지 물어보세요. 필요한 전문 스킬을 골라 읽고, 최신 정보는 웹에서 확인해 출처와 함께 답해요.
+              {clientName ?? "광고주"}의 캠페인 매니저예요. 주고받은 메일, 연동 매체의 캠페인 성과, 시장·경쟁 동향을 직접 찾아보고 담당자별 할 일까지 정리해요.
             </p>
             <ul className="mt-3 space-y-1.5">
-              {SUGGESTIONS.map((s) => (
+              {CM_SUGGESTIONS.map((s) => (
                 <li key={s}>
-                  <button type="button" onClick={() => send(s)} className="w-full rounded-lg border border-line px-3 py-2 text-left text-[13px] leading-snug text-ink-soft transition hover:border-ink/30 hover:text-ink">
+                  <button type="button" onClick={() => send(s)} className="w-full rounded-lg border border-line px-3 py-2 text-left text-[13px] leading-snug text-ink-soft transition hover:border-signal/40 hover:bg-signal-soft hover:text-signal">
                     {s}
                   </button>
                 </li>
@@ -130,12 +137,18 @@ export const ChatPanel = forwardRef<
               </div>
             ) : (
               <div key={i} className="space-y-2">
-                {(m.skills?.length || m.searches?.length) ? (
+                {(m.skills?.length || m.tools?.length || m.searches?.length) ? (
                   <div className="flex flex-wrap gap-1">
                     {m.skills?.map((s) => (
                       <span key={s} className="inline-flex items-center gap-1 rounded-md bg-signal-soft px-1.5 py-0.5 text-[12px] text-signal">
                         <i className="ti ti-book text-[12px]" aria-hidden />
                         {s} 스킬
+                      </span>
+                    ))}
+                    {m.tools?.map((t) => (
+                      <span key={t} className="inline-flex items-center gap-1 rounded-md bg-canvas px-1.5 py-0.5 text-[12px] text-ink-soft">
+                        <i className="ti ti-database text-[12px]" aria-hidden />
+                        {t}
                       </span>
                     ))}
                     {m.searches?.map((q, k) => (
@@ -178,10 +191,8 @@ export const ChatPanel = forwardRef<
       <div className="border-t border-line px-3 py-3">
         <div className="mb-2 flex flex-wrap items-center gap-1.5 text-[12px]">
           <Toggle on={webSearch} onChange={setWebSearch} icon="ti-world-search" label="웹 검색(최신 정보)" />
-          <Toggle on={contextOn} onChange={onContextToggle} icon="ti-chart-bar" label={clientName ? `${clientName} 성과 포함` : "광고주 성과 포함"} disabled={!clientName} />
-          {contextOn && <span className="text-ink-muted">{contextStatus}</span>}
         </div>
-        <div className="flex items-end gap-2 rounded-xl border border-line px-3 py-2 focus-within:border-ink/40">
+        <div className="flex items-end gap-2 rounded-xl border border-line px-3 py-2 focus-within:border-signal/60">
           <textarea
             ref={taRef}
             value={input}
@@ -193,7 +204,7 @@ export const ChatPanel = forwardRef<
               }
             }}
             rows={2}
-            placeholder="무엇이든 물어보세요 (Shift+Enter 줄바꿈)"
+            placeholder={clientId ? "이 광고주에 대해 무엇이든 물어보세요 (Shift+Enter 줄바꿈)" : "광고주를 먼저 선택하세요"}
             className="max-h-40 min-h-[40px] flex-1 resize-none bg-transparent text-[15px] leading-relaxed text-ink outline-none placeholder:text-ink-muted"
             aria-label="질문"
           />
@@ -203,7 +214,7 @@ export const ChatPanel = forwardRef<
               <span className="sr-only">멈추기</span>
             </button>
           ) : (
-            <button type="button" onClick={() => send(input)} disabled={!input.trim()} title="보내기" className="flex h-8 w-8 items-center justify-center rounded-lg bg-ink text-white hover:bg-ink-soft disabled:opacity-30">
+            <button type="button" onClick={() => send(input)} disabled={!input.trim() || !clientId} title="보내기" className="flex h-8 w-8 items-center justify-center rounded-lg bg-signal text-white hover:bg-signal-strong disabled:opacity-30">
               <i className="ti ti-arrow-up text-[17px]" aria-hidden />
               <span className="sr-only">보내기</span>
             </button>
@@ -221,10 +232,12 @@ function Toggle({ on, onChange, icon, label, disabled }: { on: boolean; onChange
       aria-pressed={on}
       disabled={disabled}
       onClick={() => onChange(!on)}
-      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 transition disabled:cursor-not-allowed disabled:opacity-40 ${on ? "border-ink/20 bg-ink/5 font-medium text-ink" : "border-line text-ink-muted hover:text-ink"}`}
+      title={on ? `${label} 켜짐 — 누르면 꺼요` : `${label} 꺼짐 — 누르면 켜요`}
+      className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 transition disabled:cursor-not-allowed disabled:opacity-40 ${on ? "border-signal bg-signal font-medium text-white hover:bg-signal-strong" : "border-line bg-surface text-ink-muted hover:border-signal/40 hover:text-signal"}`}
     >
       <i className={`ti ${on ? "ti-check" : icon} text-[12px]`} aria-hidden />
       {label}
+      <span className={`ml-0.5 rounded-full px-1.5 text-[11px] ${on ? "bg-white/20" : "bg-canvas"}`}>{on ? "켜짐" : "꺼짐"}</span>
     </button>
   );
 }
