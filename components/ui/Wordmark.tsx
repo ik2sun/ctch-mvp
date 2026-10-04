@@ -1,17 +1,11 @@
-// CTCH 워드마크 — 마지막 '시그널 닷'이 브랜드 장치
+// CTCH 로고 — 원본은 logo/ctch-soft-tech-color.svg, public/ctch-logo.svg는 여백을 잘라 낸 버전(위쪽 끝 = 심볼 위쪽 끝)
 export function Wordmark({
   size = "md",
+  className = "",
 }: {
-  size?: "sm" | "md" | "lg";
+  size?: "sm" | "md" | "lg" | "xl";
+  className?: string;
 }) {
-  const scale =
-    size === "lg" ? "text-2xl" : size === "sm" ? "text-base" : "text-xl";
-  const dot =
-    size === "lg" ? "h-2 w-2" : size === "sm" ? "h-[5px] w-[5px]" : "h-[6px] w-[6px]";
-  return (
-    <span className={`inline-flex items-end gap-[3px] font-display font-semibold tracking-tight text-ink ${scale}`}>
-      CTCH
-      <span className={`mb-[3px] rounded-full bg-signal ${dot}`} aria-hidden />
-    </span>
-  );
+  const h = size === "xl" ? "h-12" : size === "lg" ? "h-8" : size === "sm" ? "h-[18px]" : "h-5";
+  return <img src="/ctch-logo.svg" alt="CTCH" className={`${h} w-auto ${className}`} />;
 }

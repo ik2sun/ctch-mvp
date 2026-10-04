@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Wordmark } from "@/components/ui/Wordmark";
+import { SignalNetwork } from "@/features/auth/SignalNetwork";
 
 // 로그인 — 회사 구글 계정(@nmg.co.kr)만. hd 파라미터는 계정 선택 화면을 좁히는 힌트이고,
 // 실제 차단은 /auth/callback·미들웨어가 이메일 도메인으로 한다.
@@ -40,24 +41,21 @@ export default function LoginPage() {
 
   return (
     <main className="grid min-h-screen lg:grid-cols-2">
-      {/* 좌측 — 시그니처: 신호를 캐치하는 레이더 펄스 */}
-      <section className="relative hidden overflow-hidden bg-ink lg:block">
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="relative">
-            <span className="absolute inset-0 m-auto h-24 w-24 animate-sweep rounded-full border border-signal/40" />
-            <span className="absolute inset-0 m-auto h-24 w-24 animate-sweep rounded-full border border-signal/40 [animation-delay:1.3s]" />
-            <span className="relative block h-3 w-3 rounded-full bg-signal shadow-[0_0_24px_6px_rgba(79,70,229,0.5)]" />
-          </div>
-        </div>
-        <div className="absolute bottom-12 left-12 right-12">
-          <p className="font-display text-3xl font-semibold leading-tight text-white">
-            흩어진 신호를,
+      {/* 좌측 — 다크 네이비 + 로고 오렌지 단일 포인트: 흩어진 노드가 코어로 응집되는 데이터 네트워크 */}
+      <section className="relative hidden overflow-hidden bg-[#0B1220] lg:block">
+        <SignalNetwork coreX={0.76} coreY={0.5} />
+        {/* 글자 쪽 가림막 — 선이 문구와 겹쳐도 읽히게 */}
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-[#0B1220] via-[#0B1220]/75 to-transparent [background-size:70%_100%] bg-no-repeat" />
+        <div className="relative flex h-full flex-col justify-center px-12 xl:px-16">
+          <h2 className="font-display text-[40px] font-bold leading-[1.25] tracking-tight text-white xl:text-[46px]">
+            숫자가 꺾이는 순간,
             <br />
-            하나의 판단으로.
-          </p>
-          <p className="mt-3 max-w-sm text-[16px] leading-relaxed text-white/55">
-            미디어믹스·UTM·AI 리포트까지. 매체마다 흩어진 퍼포먼스 데이터를
-            CTCH가 한 화면에서 캐치합니다.
+            <span className="text-[#F45B35]">캐치(CTCH).</span>
+          </h2>
+          <p className="mt-6 max-w-[520px] text-[17px] leading-[1.7] text-white/70">
+            매체 성과, 소재 피로도, 검색 수요, 그리고 AI 답변 속 브랜드 언급까지.
+            <br />
+            흩어진 하락의 시그널을 놓치기 전에 가장 먼저 잡아냅니다.
           </p>
         </div>
       </section>
@@ -65,10 +63,9 @@ export default function LoginPage() {
       {/* 우측 — 구글 로그인 */}
       <section className="flex items-center justify-center bg-canvas px-6 py-16">
         <div className="w-full max-w-[380px]">
-          <div className="mb-10">
-            <Wordmark size="lg" />
-            <h1 className="mt-6 text-[22px] font-semibold text-ink">NMG 계정으로 로그인</h1>
-            <p className="mt-1.5 text-[16px] text-ink-muted">
+          <div className="mb-5">
+            <Wordmark size="xl" />
+            <p className="mt-3 text-[16px] text-ink-muted">
               @nmg.co.kr 회사 구글 계정으로 로그인해 주세요.
             </p>
           </div>
@@ -92,7 +89,7 @@ export default function LoginPage() {
             {loading ? "구글로 이동 중…" : "Google 계정으로 로그인"}
           </button>
 
-          <p className="mt-6 text-center text-[13px] leading-relaxed text-ink-muted">
+          <p className="mt-3 text-center text-[13px] leading-relaxed text-ink-muted">
             로그인하면 공유 대시보드를 볼 수 있어요. 저장·수정·삭제는 관리자만 할 수 있어요.
           </p>
         </div>

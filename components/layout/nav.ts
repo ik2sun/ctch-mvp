@@ -11,7 +11,6 @@ export type NavItem = {
 
 export const NAV: NavItem[] = [
   { href: "/", label: "대시보드", icon: "layout-dashboard", desc: "전체 요약", accent: "#2a78d6" },
-  { href: "/utm-builder", label: "UTM 자동화", icon: "link", desc: "캠페인 URL을 규칙에 맞게 생성·관리", priority: true, accent: "#eb6834" },
   {
     label: "AI 리포트",
     icon: "sparkles",
@@ -36,16 +35,16 @@ export const NAV: NavItem[] = [
       { href: "/ai-agent/insta-analysis", label: "인스타 분석", icon: "brand-instagram", desc: "인스타그램 계정 분석 및 AI 진단" },
       { href: "/ai-agent/seo-analysis", label: "SEO 분석", icon: "seo", desc: "SEO·AEO·GEO 진단 — AI 검색 인용 준비도와 엔진별 처방" },
       { href: "/ai-agent/geo-citation", label: "AI 인용 추적", icon: "quote", desc: "GEO 인용 플랫폼 — ChatGPT·Gemini·Claude가 자사를 얼마나 언급·인용했는지 측정" },
-      { href: "/ai-agent/creative", label: "소재 생성", icon: "photo", desc: "Higgsfield 이미지 생성 · 숏폼 제작 파이프라인" },
+      { href: "/utm-builder", label: "UTM 자동화", icon: "link", desc: "캠페인 URL을 규칙에 맞게 생성·관리" },
     ],
   },
   {
-    label: "SA 입찰 시뮬레이터",
+    label: "SA 관리",
     icon: "adjustments",
     desc: "검색광고 키워드·입찰가 최적화",
     accent: "#4a3aa7",
     children: [
-      { href: "/sa-simulator", label: "입찰 시뮬레이터", icon: "target", desc: "키워드·입찰가 조정 시뮬레이션" },
+      { href: "/sa-simulator", label: "입찰 시뮬레이터", icon: "target", desc: "네이버·구글 키워드별 입찰가 → 예상 노출·클릭·비용" },
       { href: "/sa-simulator/competitor", label: "경쟁사 모니터링", icon: "radar", desc: "네이버 파워링크 순위를 사이트별로 체크" },
       { href: "/sa-simulator/brand-keyword", label: "브랜드 키워드 모니터링", icon: "shield-exclamation", desc: "브랜드 키워드 타사 노출 감지·담당자 알림" },
     ],
@@ -72,7 +71,7 @@ export const ADMIN_NAV: NavItem = {
   href: "/admin/members",
   label: "회원 관리",
   icon: "users-group",
-  desc: "가입 승인·역할 관리",
+  desc: "로그인한 회사 계정·최근 접속 확인",
 };
 
 // 관리자·최고관리자 — 대행사 계정 API 공용 키(메타·네이버·카카오·GFA·구글 Ads·GA4) 등록
