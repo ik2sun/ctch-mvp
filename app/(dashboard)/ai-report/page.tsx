@@ -48,13 +48,14 @@ function shortDate(s?: string) {
   return `${d.getMonth() + 1}.${d.getDate()}`;
 }
 
-type Channel = "meta" | "naver" | "kakao" | "gfa";
+type Channel = "meta" | "naver" | "kakao" | "gfa" | "google_ads";
 
 const CHANNELS: { key: Channel; label: string; icon: string; sheetName: string; channelLabel: string }[] = [
   { key: "meta", label: "메타", icon: "ti-brand-meta", sheetName: "메타 API", channelLabel: "메타(Meta)" },
   { key: "naver", label: "네이버 SA", icon: "ti-search", sheetName: "네이버 SA API", channelLabel: "네이버 SA" },
   { key: "kakao", label: "카카오모먼트", icon: "ti-message-circle", sheetName: "카카오모먼트 API", channelLabel: "카카오모먼트" },
   { key: "gfa", label: "GFA", icon: "ti-layout-board", sheetName: "GFA API", channelLabel: "네이버 GFA" },
+  { key: "google_ads", label: "구글 Ads", icon: "ti-brand-google", sheetName: "구글 Ads API", channelLabel: "구글 Ads" },
 ];
 
 export default function AiReportPage() {
@@ -128,7 +129,8 @@ export default function AiReportPage() {
           if (!res.ok) throw new Error((json as unknown as { error?: string }).error || "불러오기 실패");
           setTitle(`${selected.name} 메타 ${s}~${u}`);
         } else {
-          const endpoint = ch === "naver" ? "/api/naver-ad/insights" : ch === "gfa" ? "/api/gfa/insights" : "/api/kakao-moment/insights";
+          const endpoint =
+            ch === "naver" ? "/api/naver-ad/insights" : ch === "gfa" ? "/api/gfa/insights" : ch === "google_ads" ? "/api/google-ads/insights" : "/api/kakao-moment/insights";
           const res = await fetch(`${endpoint}?clientId=${selected.id}&since=${s}&until=${u}`);
           json = await res.json();
           if (!res.ok) {

@@ -6,7 +6,7 @@ import { TextField } from "@/features/clients/ClientInfoForm";
 import { SHARED_DEFS, type SharedChannelDef } from "./sharedKeyDefs";
 
 type ChannelStatus = { configured: boolean; linked?: boolean; source: "db" | "env" | null; updatedAt: string | null; display: Record<string, string> };
-type Status = { tableReady: boolean; kakaoConfigured: boolean; gfaRedirectUri?: string; ga4RedirectUri?: string; channels: Record<string, ChannelStatus> };
+type Status = { tableReady: boolean; kakaoConfigured: boolean; gfaRedirectUri?: string; ga4RedirectUri?: string; googleAdsRedirectUri?: string; channels: Record<string, ChannelStatus> };
 type ClientCheck = { clientName: string; accountId: string; ownKey: boolean; ok: boolean; detail: string };
 type TestResult = { ok: boolean; message: string; clients: ClientCheck[]; saved?: boolean };
 
@@ -57,6 +57,22 @@ export function ApiKeysPanel() {
               text: `구글 계정${sp.get("email") ? `(${sp.get("email")})` : ""}을 연결했어요.${props >= 0 ? ` 접근 가능한 GA4 속성 ${props}개.` : ""} '광고주별 접근 점검'으로 확인하세요.`,
             }
           : { ok: false, text: sp.get("msg") ?? "GA4 연결에 실패했어요." },
+      );
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+    // 구글 Ads 구글 계정 연결 후 돌아온 경우
+    const gads = sp.get("gads");
+    if (gads) {
+      setActive("google_ads");
+      const accounts = Number(sp.get("accounts") ?? "-1");
+      const warn = sp.get("warn");
+      setNotice(
+        gads === "linked"
+          ? {
+              ok: !warn,
+              text: `구글 계정${sp.get("email") ? `(${sp.get("email")})` : ""}을 연결했어요.${accounts >= 0 ? ` 직접 접근 가능한 계정 ${accounts}개.` : ""}${warn ? ` 다만 API 호출 확인에 실패했어요 — ${warn}` : " '광고주별 접근 점검'으로 확인하세요."}`,
+            }
+          : { ok: false, text: sp.get("msg") ?? "구글 Ads 연결에 실패했어요." },
       );
       window.history.replaceState(null, "", window.location.pathname);
     }
@@ -236,6 +252,12 @@ function ChannelCard({
           </p>
         )}
 
+        {def.channel === "google_ads" && status?.googleAdsRedirectUri && (
+          <p className="mb-3 text-[13px] text-ink-muted">
+            승인된 리디렉션 URI: <span className="select-all font-mono text-ink-soft">{status.googleAdsRedirectUri}</span>
+          </p>
+        )}
+
         {def.oauth ? (
           <div className="flex flex-wrap items-center gap-2">
             {status && !status.kakaoConfigured ? (
@@ -298,7 +320,7 @@ function ChannelCard({
             </div>
             {def.connect && st?.configured && (
               <p className="mt-2 text-[13px] text-ink-muted">저장된 값을 바꾸지 않고 연결만 하려면 '{def.connect.label}'만 누르면 돼요. Client ID를 바꿔 저장하면 기존 연결은 풀려요.
-                {def.channel === "ga4" && " 저장된 값은 비워 둔 칸은 그대로 유지돼요."}</p>
+                {(def.channel === "ga4" || def.channel === "google_ads") && " 저장된 값은 비워 둔 칸은 그대로 유지돼요."}</p>
             )}
           </>
         )}

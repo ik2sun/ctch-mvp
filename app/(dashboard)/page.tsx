@@ -44,11 +44,11 @@ const MEDIA_LIST = [
   { key: "naver", label: "네이버 SA", connected: false },
   { key: "gfa", label: "GFA", connected: false },
   { key: "kakao", label: "카카오모먼트", connected: false },
-  { key: "google_ads", label: "구글 Ads", connected: false }, // 조회 API 준비 중 — 행만 표시
+  { key: "google_ads", label: "구글 Ads", connected: false },
 ] as const;
 type MediaKey = (typeof MEDIA_LIST)[number]["key"];
-// 대시보드 조회가 아직 없는 매체 — media-status가 ok여도(키 저장만 확인) 필터를 막는다
-const NOT_READY: ReadonlySet<MediaKey> = new Set(["google_ads"]);
+// 대시보드 조회가 아직 없는 매체 — media-status가 ok여도 필터를 막는다(지금은 없음)
+const NOT_READY: ReadonlySet<MediaKey> = new Set<MediaKey>();
 
 function iso(d: Date) {
   return d.toISOString().slice(0, 10);
@@ -96,7 +96,7 @@ export default function DashboardHome() {
     naver: true,
     gfa: true,
     kakao: true,
-    google_ads: false,
+    google_ads: true,
   });
 
   const [reportCount, setReportCount] = useState(0);
@@ -112,6 +112,10 @@ export default function DashboardHome() {
   const [gfaSummary, setGfaSummary] = useState<NaverSummaryRes | null>(null);
   const [gfaLoading, setGfaLoading] = useState(false);
   const [gfaError, setGfaError] = useState<string | null>(null);
+
+  const [gadsSummary, setGadsSummary] = useState<NaverSummaryRes | null>(null);
+  const [gadsLoading, setGadsLoading] = useState(false);
+  const [gadsError, setGadsError] = useState<string | null>(null);
 
   const [aiPlan, setAiPlan] = useState<AiPlan | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
@@ -324,6 +328,59 @@ export default function DashboardHome() {
     if (gfaConnected && selected?.id) loadGfa(periodKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gfaConnected, selected?.id]);
+  // 구글 Ads — GFA와 같은 방식(Explorer 등급 하루 2,880건이라 세션 캐시 + 서버 캐시 10분)
+  const loadGads = useCallback(
+    async (pk: string, force = false, isAutoRetry = false) => {
+      if (!selected?.id) {
+        setGadsSummary(null);
+        return;
+      }
+      const p = PERIODS.find((x) => x.key === pk) ?? PERIODS[1];
+      const since = p.since();
+      const until = p.until();
+      const withYear = yearRef.current;
+      const withMonth = monthRef.current;
+      const cacheKey = `ctch_gads_summary_${selected.id}_${since}_${until}${withYear ? "_y" : ""}${withMonth ? "" : "_nm"}`;
+      if (!force) {
+        const cached = getSessionCache<NaverSummaryRes>(cacheKey);
+        if (cached) {
+          setGadsSummary(cached);
+          setGadsError(null);
+          return;
+        }
+      }
+      setGadsLoading(true);
+      if (!isAutoRetry) setGadsError(null);
+      try {
+        const res = await fetch(`/api/google-ads/summary?clientId=${selected.id}&since=${since}&until=${until}${withYear ? "&year=1" : ""}${withMonth ? "" : "&month=0"}`);
+        const json = await res.json();
+        if (!res.ok) {
+          if (json.code === "RATE_LIMITED" && !isAutoRetry) {
+            setGadsError(json.error || "잠시 후 다시 시도해주세요.");
+            setTimeout(() => loadGads(pk, force, true), 5000);
+            return;
+          }
+          throw new Error(json.error || "불러오기 실패");
+        }
+        setGadsSummary(json);
+        setGadsError(null);
+        setSessionCache(cacheKey, json);
+      } catch (e) {
+        setGadsError(e instanceof Error ? e.message : "오류가 발생했어요.");
+        setGadsSummary(null);
+      } finally {
+        setGadsLoading(false);
+      }
+    },
+    [selected],
+  );
+  const gadsConnected = media?.find((m) => m.key === "google_ads")?.connected ?? false;
+  useEffect(() => {
+    setGadsSummary(null);
+    setGadsError(null);
+    if (gadsConnected && selected?.id) loadGads(periodKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gadsConnected, selected?.id]);
   useEffect(() => {
     setKakaoSummary(null);
     setKakaoError(null);
@@ -396,7 +453,7 @@ export default function DashboardHome() {
   const periodText = periodKey === "1d" ? shortDate(period.since()) : `${shortDate(period.since())} ~ ${shortDate(period.until())}`;
   const compareShort = COMPARE_LABEL[compareBase];
   const compareLabel = `${compareShort} 대비`;
-  const anyLoading = loading || naverLoading || kakaoLoading || gfaLoading;
+  const anyLoading = loading || naverLoading || kakaoLoading || gfaLoading || gadsLoading;
 
   // 연동 + 조회 완료된 매체 시리즈(필터 무관) — 매체 색은 MEDIA_COLORS에 고정
   const available = useMemo(() => {
@@ -405,8 +462,9 @@ export default function DashboardHome() {
     if (naverConnected && naverSummary) list.push({ key: "naver", label: "네이버 SA", res: naverSummary });
     if (gfaConnected && gfaSummary) list.push({ key: "gfa", label: "GFA", res: gfaSummary });
     if (kakaoConnected && kakaoSummary) list.push({ key: "kakao", label: "카카오모먼트", res: kakaoSummary });
+    if (gadsConnected && gadsSummary) list.push({ key: "google_ads", label: "구글 Ads", res: gadsSummary });
     return list;
-  }, [summary, naverConnected, naverSummary, gfaConnected, gfaSummary, kakaoConnected, kakaoSummary]);
+  }, [summary, naverConnected, naverSummary, gfaConnected, gfaSummary, kakaoConnected, kakaoSummary, gadsConnected, gadsSummary]);
 
   const series: MediaSeries[] = useMemo(
     () =>
@@ -432,8 +490,8 @@ export default function DashboardHome() {
   // 표에 "데이터 없음" 사유와 함께 보여줄 매체
   const inactive = MEDIA_LIST.filter((m) => !series.some((s) => s.key === m.key)).map((m) => {
     const st = media?.find((s) => s.key === m.key);
-    const isLoading = (m.key === "meta" && loading) || (m.key === "naver" && naverLoading) || (m.key === "gfa" && gfaLoading) || (m.key === "kakao" && kakaoLoading);
-    const err = m.key === "meta" ? error : m.key === "naver" ? naverError : m.key === "gfa" ? gfaError : m.key === "kakao" ? kakaoError : null;
+    const isLoading = (m.key === "meta" && loading) || (m.key === "naver" && naverLoading) || (m.key === "gfa" && gfaLoading) || (m.key === "kakao" && kakaoLoading) || (m.key === "google_ads" && gadsLoading);
+    const err = m.key === "meta" ? error : m.key === "naver" ? naverError : m.key === "gfa" ? gfaError : m.key === "kakao" ? kakaoError : m.key === "google_ads" ? gadsError : null;
     const note = NOT_READY.has(m.key)
       ? "조회 기능 준비 중"
       : available.some((a) => a.key === m.key)
@@ -535,6 +593,7 @@ export default function DashboardHome() {
     if (lacks(naverSummary)) loadNaver(periodKey);
     if (lacks(kakaoSummary)) loadKakao(periodKey);
     if (lacks(gfaSummary)) loadGfa(periodKey);
+    if (lacks(gadsSummary)) loadGads(periodKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [compareBase]);
 
@@ -544,12 +603,14 @@ export default function DashboardHome() {
     loadNaver(k);
     loadKakao(k);
     loadGfa(k);
+    loadGads(k);
   };
   const refreshAll = () => {
     load(periodKey, true);
     loadNaver(periodKey, true);
     loadKakao(periodKey, true);
     loadGfa(periodKey, true);
+    loadGads(periodKey, true);
   };
 
   const connectedOk = media ? media.filter((m) => m.status === "ok").length : 0;

@@ -49,12 +49,9 @@ const CHANNELS: { key: MediaChannel; label: string; fields: FieldDef[]; hint: st
   {
     key: "google_ads",
     label: "구글 Ads",
-    fields: [
-      { key: "google_ads_customer_id", label: "Customer ID", type: "text" },
-      { key: "google_ads_developer_token", label: "Developer Token", advanced: true },
-    ],
-    hint: "Customer ID만 넣으면 공용 키를 써요. 아직 실시간 데이터 조회는 지원하지 않아요.",
-    advancedNote: "공용 MCC에 연결되지 않은 계정만 넣어요.",
+    fields: [{ key: "google_ads_customer_id", label: "Customer ID", type: "digits" }],
+    hint: "Customer ID(10자리, 하이픈 없이)만 넣으면 공용 구글 계정으로 조회해요. 구글 Ads 화면 우측 상단 계정 번호예요. 이 계정이 NMG MCC 하위에 있어야 해요.",
+    advancedNote: "",
   },
   {
     key: "ga4",

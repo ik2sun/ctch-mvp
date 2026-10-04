@@ -1,7 +1,6 @@
 import { dataOwnerId, ownerOnly } from "@/lib/workspace";
 import { NextResponse } from "next/server";
 import { resolveMetaToken } from "@/lib/meta/token";
-import { getShared } from "@/lib/sharedKeys";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllCampaigns } from "@/lib/naver-ad/aggregate";
 import { resolveNaverAdCredentials, NaverAdNotConfiguredError } from "@/lib/naver-ad/auth";
@@ -14,6 +13,9 @@ import { fetchAdAccount as fetchGfaAdAccount, fetchCampaigns as fetchGfaCampaign
 import { GfaApiError } from "@/lib/gfa/client";
 import { getGa4Credentials, Ga4AuthError } from "@/lib/ga4/auth";
 import { probeProperty, Ga4ApiError } from "@/lib/ga4/client";
+import { getGoogleAdsCredentials, GoogleAdsAuthError } from "@/lib/google-ads/auth";
+import { probeCustomer } from "@/lib/google-ads/aggregate";
+import { GoogleAdsApiError } from "@/lib/google-ads/client";
 
 // 매체 연동 상태 점검 — 광고주별로 저장된 키를 기준으로 가벼운 호출 1회씩 유효성 확인
 // (구 app/api/meta-status를 메타 전용에서 전 매체로 확장)
@@ -173,19 +175,6 @@ export async function POST(req: Request) {
     }
   }
 
-  // 조회 API가 아직 없는 매체(구글 Ads) — 광고계정 ID + (개별 키 또는 공용 키)가 있는지만 확인
-  const gadsShared = await getShared("google_ads");
-  const storedOnly = (key: string, label: string, accountId: string | null | undefined, ownKey: boolean, sharedKey: boolean, idLabel: string) => {
-    const id = accountId?.trim();
-    if (!id) {
-      media.push({ key, label, connected: false, status: "none", detail: `${idLabel} 미등록` });
-    } else if (!ownKey && !sharedKey) {
-      media.push({ key, label, connected: false, status: "error", detail: `${idLabel} ${id} — 공용 키가 없어요. API 공용 키 관리에서 등록하거나 개별 키를 넣으세요.` });
-    } else {
-      media.push({ key, label, connected: true, status: "ok", detail: `${idLabel} ${id} · ${ownKey ? "개별 키" : "공용 키"} (연동 API 준비 중)` });
-    }
-  };
-
   // 카카오모먼트 — 광고계정 ID + (개별 연결 또는 공용 카카오 계정)으로 캠페인 목록 조회 실검증
   if (!client.kakao_ad_account_id) {
     media.push({ key: "kakao", label: "카카오모먼트", connected: false, status: "none", detail: "광고계정 ID 미등록" });
@@ -219,7 +208,32 @@ export async function POST(req: Request) {
     }
   }
 
-  storedOnly("google_ads", "구글 Ads", client.google_ads_customer_id, !!client.google_ads_developer_token, !!gadsShared?.config.developer_token, "Customer ID");
+  // 구글 Ads — Customer ID + 공용 구글 계정 연결로 계정 정보·활성 캠페인 수 조회 실검증(호출 2건)
+  const gadsId = client.google_ads_customer_id?.replace(/\D/g, "");
+  if (!gadsId) {
+    media.push({ key: "google_ads", label: "구글 Ads", connected: false, status: "none", detail: "Customer ID 미등록" });
+  } else {
+    try {
+      const creds = await getGoogleAdsCredentials(client);
+      const p = await probeCustomer(creds);
+      media.push({
+        key: "google_ads",
+        label: "구글 Ads",
+        connected: true,
+        status: "ok",
+        detail: `Customer ID ${gadsId}${p.name ? ` (${p.name})` : ""} · 활성 캠페인 ${p.campaigns}개${p.currency && p.currency !== "KRW" ? ` · 통화 ${p.currency}` : ""}`,
+      });
+    } catch (e) {
+      const expired = (e instanceof GoogleAdsAuthError && e.code === "NOT_LINKED" && /만료/.test(e.message)) || (e instanceof GoogleAdsApiError && e.code === "UNAUTHORIZED");
+      media.push({
+        key: "google_ads",
+        label: "구글 Ads",
+        connected: false,
+        status: expired ? "expired" : "error",
+        detail: `Customer ID ${gadsId} — ${e instanceof Error ? e.message : "연결 확인 실패"}`,
+      });
+    }
+  }
 
   // GA4 — 속성 ID + (개별 서비스 계정 또는 공용 구글 계정 연결)로 최근 7일 세션 조회 실검증
   if (!client.ga4_property_id?.trim()) {

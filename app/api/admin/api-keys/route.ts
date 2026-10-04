@@ -9,6 +9,8 @@ import { getGfaCredentials, gfaRedirectUri } from "@/lib/gfa/auth";
 import { fetchManagerChildAdAccounts, fetchMyAdAccounts as fetchGfaMyAdAccounts, fetchMyManagerAccounts } from "@/lib/gfa/aggregate";
 import { getGa4Credentials, ga4RedirectUri, parseServiceAccount } from "@/lib/ga4/auth";
 import { fetchAccessibleProperties, probeProperty } from "@/lib/ga4/client";
+import { digitsOnly, getGoogleAdsCredentials, googleAdsAppFrom, googleAdsRedirectUri } from "@/lib/google-ads/auth";
+import { fetchMccChildren, probeCustomer } from "@/lib/google-ads/aggregate";
 
 // API 공용 키 관리 (관리자·최고관리자) — 키 값은 응답에 마스킹해서만 내려준다.
 // GET: 매체별 등록 상태 / POST {channel, action:"test"|"save"|"import", config?}: 테스트(+저장), import = 지금 쓰는 .env.local 값을 테스트 후 DB로 옮김 / DELETE ?channel=: DB 공용 키 삭제
@@ -25,6 +27,7 @@ type ClientRow = {
   gfa_customer_id: string | null;
   ga4_property_id: string | null;
   ga4_service_account_json: string | null;
+  google_ads_customer_id: string | null;
 };
 type ClientCheck = { clientName: string; accountId: string; ownKey: boolean; ok: boolean; detail: string };
 type TestResult = { ok: boolean; message: string; clients: ClientCheck[] };
@@ -32,7 +35,7 @@ type TestResult = { ok: boolean; message: string; clients: ClientCheck[] };
 async function allClients(): Promise<ClientRow[]> {
   const { data } = await createAdminClient()
     .from("clients")
-    .select("name, meta_account_id, meta_access_token, naver_ad_customer_id, naver_ad_api_key, kakao_ad_account_id, kakao_access_token, gfa_customer_id, ga4_property_id, ga4_service_account_json")
+    .select("name, meta_account_id, meta_access_token, naver_ad_customer_id, naver_ad_api_key, kakao_ad_account_id, kakao_access_token, gfa_customer_id, ga4_property_id, ga4_service_account_json, google_ads_customer_id")
     .order("name");
   return (data ?? []) as ClientRow[];
 }
@@ -153,9 +156,9 @@ async function testGfa(cfg: SharedConfig): Promise<TestResult> {
   return { ok: true, message, clients };
 }
 
-// GA4 — 저장된 config를 유지한 채 입력한 값만 바꾼다. OAuth Client ID가 바뀌면 이전 구글 연결 토큰은 무효라 버린다.
+// GA4·구글 Ads — 저장된 config를 유지한 채 입력한 값만 바꾼다. OAuth Client ID가 바뀌면 이전 구글 연결 토큰은 무효라 버린다.
 const GA4_TOKEN_KEYS = ["access_token", "refresh_token", "expires_at", "linked_at", "linked_email"];
-function ga4Merge(stored: SharedConfig | undefined, input: SharedConfig): SharedConfig {
+function linkedMerge(stored: SharedConfig | undefined, input: SharedConfig): SharedConfig {
   const base = { ...(stored ?? {}) };
   if (input.client_id && base.client_id && base.client_id !== input.client_id) GA4_TOKEN_KEYS.forEach((k) => delete base[k]);
   return { ...base, ...input };
@@ -199,6 +202,42 @@ async function testGa4(cfg: SharedConfig): Promise<TestResult> {
   return { ok: true, message, clients };
 }
 
+async function testGoogleAds(cfg: SharedConfig): Promise<TestResult> {
+  const err = validateStatic("google_ads", cfg);
+  if (err) return { ok: false, message: err, clients: [] };
+  if (!cfg.refresh_token && !cfg.access_token) {
+    return { ok: true, message: "형식 확인 완료 — 저장한 뒤 '구글 계정 연결'을 눌러야 조회할 수 있어요.", clients: [] };
+  }
+  const mcc = digitsOnly(cfg.login_customer_id);
+  let creds;
+  try {
+    creds = { ...(await getGoogleAdsCredentials(null, false)), loginCustomerId: mcc };
+  } catch (e) {
+    return { ok: false, message: `구글 인증 실패 — ${e instanceof Error ? e.message : "오류"}`, clients: [] };
+  }
+  let message: string;
+  let children: Map<string, string>;
+  try {
+    const kids = await fetchMccChildren(creds, mcc);
+    children = new Map(kids.map((k) => [k.id, k.name]));
+    message = `연결 정상 — ${creds.account || "구글 계정"} · MCC ${mcc} 하위 광고계정 ${kids.length}개`;
+  } catch (e) {
+    return { ok: false, message: `MCC ${mcc} 조회 실패 — ${e instanceof Error ? e.message : "오류"}`, clients: [] };
+  }
+  const clients: ClientCheck[] = [];
+  for (const c of await allClients()) {
+    const id = digitsOnly(c.google_ads_customer_id);
+    if (!id) continue;
+    try {
+      const p = await probeCustomer(creds, id);
+      clients.push({ clientName: c.name, accountId: id, ownKey: false, ok: true, detail: `${p.name || children.get(id) || "계정"} · 활성 캠페인 ${p.campaigns}개${p.currency && p.currency !== "KRW" ? ` · 통화 ${p.currency}` : ""}` });
+    } catch (e) {
+      clients.push({ clientName: c.name, accountId: id, ownKey: false, ok: false, detail: e instanceof Error ? e.message : "조회 실패" });
+    }
+  }
+  return { ok: true, message, clients };
+}
+
 function validateStatic(channel: SharedChannel, cfg: SharedConfig): string | null {
   const def = SHARED_DEFS.find((d) => d.channel === channel)!;
   for (const f of def.fields) {
@@ -210,6 +249,14 @@ function validateStatic(channel: SharedChannel, cfg: SharedConfig): string | nul
     if (!cfg.client_id && !cfg.service_account_json) return "OAuth Client ID·Secret(구글 계정 연결용)을 넣어 주세요.";
     if (cfg.service_account_json && !parseServiceAccount(cfg.service_account_json)) return "서비스 계정 JSON 형식이 아니에요(client_email·private_key 필요).";
   }
+  if (channel === "google_ads") {
+    if (!!cfg.client_id !== !!cfg.client_secret) return "OAuth Client ID와 Secret을 함께 넣어 주세요.";
+    try {
+      googleAdsAppFrom(cfg);
+    } catch (e) {
+      return e instanceof Error ? e.message : "OAuth 클라이언트가 없어요.";
+    }
+  }
   return null;
 }
 
@@ -219,6 +266,7 @@ async function runTest(channel: SharedChannel, cfg: SharedConfig): Promise<TestR
   if (channel === "kakao") return testKakao(cfg.access_token);
   if (channel === "gfa") return testGfa(cfg);
   if (channel === "ga4") return testGa4(cfg);
+  if (channel === "google_ads") return testGoogleAds(cfg);
   const err = validateStatic(channel, cfg);
   return err ? { ok: false, message: err, clients: [] } : { ok: true, message: "형식 확인 완료 (이 매체는 아직 실제 조회를 지원하지 않아요)", clients: [] };
 }
@@ -235,20 +283,20 @@ export async function GET() {
         const v = entry.config[f.key];
         if (v) display[f.key] = f.secret ? maskKey(f.textarea ? (safeEmail(v) ?? v) : v) : v;
       }
-      if ((ch === "kakao" || ch === "gfa" || ch === "ga4") && entry.config.linked_at) display.linked_at = entry.config.linked_at;
-      if (ch === "ga4" && entry.config.refresh_token && entry.config.linked_email) display.linked_email = entry.config.linked_email;
+      if ((ch === "kakao" || ch === "gfa" || ch === "ga4" || ch === "google_ads") && entry.config.linked_at) display.linked_at = entry.config.linked_at;
+      if ((ch === "ga4" || ch === "google_ads") && entry.config.refresh_token && entry.config.linked_email) display.linked_email = entry.config.linked_email;
     }
     channels[ch] = entry
       ? {
           configured: ch === "kakao" ? !!entry.config.access_token : true,
-          ...(ch === "gfa" || ch === "ga4" ? { linked: !!entry.config.refresh_token } : {}),
+          ...(ch === "gfa" || ch === "ga4" || ch === "google_ads" ? { linked: !!entry.config.refresh_token } : {}),
           source: entry.source,
           updatedAt: entry.updatedAt,
           display,
         }
       : { configured: false, source: null, updatedAt: null, display: {} };
   }
-  return NextResponse.json({ tableReady: await sharedTableReady(), kakaoConfigured: !!process.env.KAKAO_REST_API_KEY, gfaRedirectUri: gfaRedirectUri(), ga4RedirectUri: ga4RedirectUri(), channels });
+  return NextResponse.json({ tableReady: await sharedTableReady(), kakaoConfigured: !!process.env.KAKAO_REST_API_KEY, gfaRedirectUri: gfaRedirectUri(), ga4RedirectUri: ga4RedirectUri(), googleAdsRedirectUri: googleAdsRedirectUri(), channels });
 }
 
 function safeEmail(json: string): string | null {
@@ -273,8 +321,8 @@ export async function POST(req: Request) {
   const cfg: SharedConfig = body.config
     ? channel === "gfa"
       ? { ...gfaTokensOf(stored?.config, input.client_id), ...input }
-      : channel === "ga4"
-        ? ga4Merge(stored?.source === "db" ? stored.config : undefined, input)
+      : channel === "ga4" || channel === "google_ads"
+        ? linkedMerge(stored?.source === "db" ? stored.config : undefined, input)
         : input
     : (stored?.config ?? {});
   if (channel === "kakao" && body.action === "save") return NextResponse.json({ error: "카카오는 '공용 카카오 계정 연결'로 등록해요." }, { status: 400 });
