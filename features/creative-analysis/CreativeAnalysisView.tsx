@@ -1,6 +1,7 @@
 "use client";
 
 // 소재 분석 화면 본문 — 메타 소재를 이미지·소재명·실제 타겟 세팅까지 묶어 분석(1단계: 메타).
+// 2026-10-04: 소재명 파싱 태그 칩, 소재 유형(테마·상품)별 성과 맵(버블), 캠페인 목표 탭(전체·CV·TR), A/B 묶음 위너 👑, UTM 고급 필터 사이드바.
 // 광고주는 props로 받는다(페이지는 useClients, 시각 점검용 미리보기는 고정 광고주).
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getSessionCache, setSessionCache } from "@/features/dashboard/sessionCache";
@@ -24,6 +25,10 @@ import { AttributePanel } from "@/features/creative-analysis/AttributePanel";
 import { CreativeMatrix } from "@/features/creative-analysis/CreativeMatrix";
 import { FatigueList, SettingCheckList } from "@/features/creative-analysis/SidePanels";
 import { CreativeDrawer } from "@/features/creative-analysis/CreativeDrawer";
+import { AbTestPanel, ThemeMap, UtmSidebar } from "@/features/creative-analysis/NamingInsights";
+import { abGroups, matches, themeStats, type FacetSel } from "@/features/creative-analysis/groups";
+import { adsetActions, decide, type TargetRules } from "@/features/creative-analysis/decision";
+import { DecisionLog, DecisionQueue, TargetRoasEditor, isActive, type LoggedItem, type Snapshot } from "@/features/creative-analysis/DecisionQueue";
 
 function daysAgo(n: number) {
   const d = new Date();
@@ -70,7 +75,53 @@ export function CreativeAnalysisView({
   const [since, setSince] = useState(daysAgo(14));
   const [until, setUntil] = useState(daysAgo(1));
   const [minImp, setMinImp] = useState<string>("3000");
-  const [group, setGroup] = useState<ObjectiveGroup>("sales");
+  const [obj, setObj] = useState<"all" | "cv" | "tr">("all");
+  const [facets, setFacets] = useState<FacetSel>({});
+  const [themePick, setThemePick] = useState<{ keys: string[]; label: string } | null>(null);
+  // 광고주별 목표 ROAS(%) — 판정 엔진·성과 맵 기준선. 저장 전이면 기본 500%
+  const [target, setTarget] = useState<{ value: number; rules: TargetRules; saved: boolean }>({ value: 500, rules: {}, saved: false });
+  const [targetBusy, setTargetBusy] = useState(false);
+  // 지난 결정 스냅숏(0030)
+  const [log, setLog] = useState<{ snapshot: Snapshot | null; items: LoggedItem[]; ready: boolean }>({ snapshot: null, items: [], ready: true });
+  const loadLog = useCallback(async () => {
+    if (!selected?.id) return;
+    try {
+      const r = await fetch(`/api/creative-analysis/decisions?clientId=${selected.id}`);
+      if (r.ok) setLog(await r.json());
+    } catch {
+      /* 무시 */
+    }
+  }, [selected?.id]);
+  useEffect(() => {
+    setTarget({ value: 500, rules: {}, saved: false });
+    setLog({ snapshot: null, items: [], ready: true });
+    if (!selected?.id) return;
+    fetch(`/api/clients/${selected.id}/target-roas`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => j && setTarget({ value: j.targetRoas, rules: j.rules ?? {}, saved: j.saved }))
+      .catch(() => undefined);
+    loadLog();
+  }, [selected?.id, loadLog]);
+  const saveTarget = async (v: number | null, rules: TargetRules) => {
+    if (!selected?.id) return;
+    setTargetBusy(true);
+    try {
+      const res = await fetch(`/api/clients/${selected.id}/target-roas`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ targetRoas: v, rules }) });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || "저장하지 못했어요.");
+      setTarget({ value: j.targetRoas, rules: j.rules ?? {}, saved: j.saved });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "목표 ROAS를 저장하지 못했어요.");
+    } finally {
+      setTargetBusy(false);
+    }
+  };
+  const pickTheme = (keys: string[], label: string) => {
+    setThemePick({ keys, label });
+    document.getElementById("ca-gallery")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+  const adsManagerUrl = selected?.meta_account_id ? `https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=${selected.meta_account_id.replace(/^act_/, "")}` : null;
+  const group: ObjectiveGroup = obj === "tr" ? "upper" : "sales"; // 요소별 표의 평가 지표(전체는 전환 기준)
   const [data, setData] = useState<CreativeAnalysisRes | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -83,7 +134,7 @@ export function CreativeAnalysisView({
         return;
       }
       // v2: 썸네일을 원본 비율로 받도록 바뀜(이전 캐시는 정사각형 썸네일) — 응답 모양이 바뀌면 버전을 올린다
-      const key = `ctch_creative_meta_v2_${selected.id}_${s}_${u}`;
+      const key = `ctch_creative_meta_v3_${selected.id}_${s}_${u}`; // v3: UTM(utm) 필드 추가
       if (!force) {
         const hit = getSessionCache<CreativeAnalysisRes>(key, 30 * 60 * 1000);
         if (hit) {
@@ -125,13 +176,35 @@ export function CreativeAnalysisView({
     () => (data ? enrich(data.creatives, data.adsets, data.campaigns, dict, data.period.until, Number(minImp)) : []),
     [data, dict, minImp],
   );
-  const rows = useMemo(() => enriched.filter((r) => r.group === group), [enriched, group]);
-  const sales = useMemo(() => enriched.filter((r) => r.group === "sales"), [enriched]);
+  // 목표 탭(CV = 전환 캠페인, TR = 트래픽·인지 캠페인 — 캠페인 실제 목표 기준, 없으면 소재명 목표 코드) → UTM 필터
+  const byObj = useMemo(() => (obj === "all" ? enriched : enriched.filter((r) => r.group === (obj === "cv" ? "sales" : "upper"))), [enriched, obj]);
+  const rows = useMemo(() => byObj.filter((r) => matches(r, facets)), [byObj, facets]);
+  const sales = useMemo(() => rows.filter((r) => r.group === "sales"), [rows]);
+  const themes = useMemo(() => themeStats(rows), [rows]);
+  const ab = useMemo(() => abGroups(rows), [rows]);
+  const winnerIds = useMemo(() => new Set(ab.map((g) => g.winnerId).filter((x): x is string => !!x)), [ab]);
+  const decisions = useMemo(() => decide(rows, target.value, target.rules, new Set(fatigue(rows).map((f) => f.row.id))), [rows, target.value, target.rules]);
+  const adsetActs = useMemo(() => (data ? adsetActions(rows, decisions, data.adsets, data.campaigns) : []), [rows, decisions, data]);
+  const saveSnapshot = async () => {
+    if (!selected?.id || !data) return;
+    const items = rows
+      .map((r) => ({ r, d: decisions.get(r.id) }))
+      .filter((x) => x.d && x.d.status !== "new" && !((x.d.status === "kill" || x.d.status === "starved") && !isActive(x.r.status))) // 이미 꺼진 소재의 끄기 권고는 기록 안 함
+      .map(({ r, d }) => ({ ad_id: r.id, ad_name: r.name, adset_id: r.adsetId, status: d!.status, reason: d!.reason, roas: r.roas, conversions: r.conversions, cost: r.cost }));
+    try {
+      const res = await fetch("/api/creative-analysis/decisions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clientId: selected.id, since: data.period.since, until: data.period.until, target: target.value, items }) });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || "저장하지 못했어요.");
+      loadLog();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "결정을 저장하지 못했어요.");
+    }
+  };
   const fat = useMemo(() => fatigue(rows), [rows]);
-  const insights = useMemo(() => creativeInsights(enriched, fatigue(sales)), [enriched, sales]);
+  const insights = useMemo(() => creativeInsights(rows, fatigue(sales)), [rows, sales]); // UTM·목표 필터 반영
   const checks = useMemo(() => (data ? settingChecks(enriched, data.adsets, data.campaigns, dict) : []), [data, enriched, dict]);
 
-  const counts = { sales: sales.length, upper: enriched.length - sales.length };
+  const counts = { all: enriched.length, sales: enriched.filter((r) => r.group === "sales").length, upper: enriched.filter((r) => r.group === "upper").length };
   const preset = PRESETS.find((p) => since === daysAgo(p.days) && until === daysAgo(1))?.key ?? null;
 
   // 그룹 평균(상세 비교용)
@@ -222,14 +295,16 @@ export function CreativeAnalysisView({
           <div className="flex items-center gap-2">
             <span className="text-[15px] text-ink-muted">캠페인 목표</span>
             <Segmented
-              value={group}
+              value={obj}
               options={[
-                { key: "sales", label: `전환 ${counts.sales}` },
-                { key: "upper", label: `인지·트래픽 ${counts.upper}` },
+                { key: "all", label: `전체 ${counts.all}` },
+                { key: "cv", label: `🎯 전환(CV) ${counts.sales}` },
+                { key: "tr", label: `🔗 트래픽(TR) ${counts.upper}` },
               ]}
-              onChange={setGroup}
+              onChange={setObj}
             />
           </div>
+          {selected?.meta_account_id && <TargetRoasEditor value={target.value} rules={target.rules} saved={target.saved} onSave={saveTarget} busy={targetBusy} />}
           <div className="flex items-center gap-2">
             <span className="text-[15px] text-ink-muted" title="이보다 노출이 적은 소재는 등급·비교에서 '판단 보류'">판단 기준 노출</span>
             <Segmented value={minImp} options={MIN_IMP.map((m) => ({ key: m.key, label: m.label }))} onChange={setMinImp} />
@@ -251,14 +326,39 @@ export function CreativeAnalysisView({
       )}
 
       {data && (
-        <div className={`space-y-5 transition-opacity ${loading ? "opacity-60" : ""}`}>
+        <div className={`grid gap-5 transition-opacity xl:grid-cols-[250px_minmax(0,1fr)] ${loading ? "opacity-60" : ""}`}>
+          <UtmSidebar rows={byObj} sel={facets} onChange={setFacets} />
+        <div className="min-w-0 space-y-5">
           <div className="grid grid-cols-2 gap-4 md:grid-cols-3 min-[1440px]:grid-cols-5">
             <Tile label="집행 소재" value={`${rows.length}개`} sub={`${shortDate(data.period.since)} ~ ${shortDate(data.period.until)} · 광고비 ${fmt(kpi.total, "won")}`} />
             <Tile label="신규 소재(1주 이내)" value={`${kpi.fresh}개`} sub={`광고비 비중 ${Math.round(kpi.freshShare * 100)}%`} />
-            <Tile label={group === "sales" ? `상위 20%(${kpi.topN}개) 매출 비중` : "평균 CTR"} value={group === "sales" ? (kpi.topShare != null ? `${Math.round(kpi.topShare * 100)}%` : "—") : fmt(avg.ctr, "pct")} sub={group === "sales" ? "높을수록 소수 소재 의존" : `CPM ${fmt(avg.cpm, "won")}`} />
+            <Tile label={obj !== "tr" ? `상위 20%(${kpi.topN}개) 매출 비중` : "평균 CTR"} value={obj !== "tr" ? (kpi.topShare != null ? `${Math.round(kpi.topShare * 100)}%` : "—") : fmt(avg.ctr, "pct")} sub={obj !== "tr" ? "높을수록 소수 소재 의존" : `CPM ${fmt(avg.cpm, "won")}`} />
             <Tile label="판단 보류" value={`${kpi.hold}개`} sub={`노출 ${Number(minImp).toLocaleString("ko-KR")} 미만 · 광고비 ${Math.round(kpi.holdShare * 100)}%`} />
             <Tile label="피로 의심" value={`${fat.length}개`} sub="CTR 초반 대비 −30% 이상" />
           </div>
+
+          <Card title="이번 주 결정" sub={`모든 소재를 목표 ROAS ${target.value.toLocaleString("ko-KR")}%${Object.keys(target.rules).length ? "(유형별 목표 반영)" : ""} 기준으로 판정했어요 · 끄기 → 키우기 → 지켜보기 순으로 처리하고, 실행 단위는 ‘광고세트별 행동’에서 확인하세요`}>
+            <DecisionQueue
+              rows={rows}
+              decisions={decisions}
+              adsets={adsetActs}
+              dict={dict}
+              accountId={selected?.meta_account_id ?? null}
+              onOpen={(r) => setOpenId(r.id)}
+              onSaveSnapshot={log.ready ? saveSnapshot : undefined}
+              snapshotInfo={log.snapshot ? `마지막 저장 ${new Date(log.snapshot.at).toLocaleDateString("ko-KR", { month: "numeric", day: "numeric" })}` : null}
+            />
+          </Card>
+
+          {log.ready && (
+            <Card title="지난 결정 추적" sub="저장해 둔 판정과 지금 데이터를 비교해요 — 끄라고 한 소재를 실제로 껐는지, 키운 소재가 버티는지">
+              <DecisionLog snapshot={log.snapshot} items={log.items} rows={enriched} decisions={decisions} onOpen={(r) => setOpenId(r.id)} />
+            </Card>
+          )}
+
+          <Card title="소재 유형별 성과 맵" sub="소재명에서 뽑은 콘텐츠·상품(테마)을 광고비 × 효율 4사분면에 놓았어요 · 버블이나 패널 버튼을 누르면 아래 갤러리가 그 테마로 좁혀져요">
+            <ThemeMap stats={themes.list} avg={obj === "tr" ? themes.ctr : target.value / 100} metric={obj === "tr" ? "ctr" : "roas"} onPick={pickTheme} adsManagerUrl={adsManagerUrl} baseLabel={obj === "tr" ? "평균" : Object.keys(target.rules).length ? "기본 목표" : "목표"} />
+          </Card>
 
           {/* 인사이트·세팅 점검 — 넓은 화면에선 2~3단 Masonry(한 줄이 너무 길어지지 않게) */}
           <Card title="소재 인사이트" sub="전환 캠페인 소재 기준 · 데이터로 확인된 신호만">
@@ -268,8 +368,13 @@ export function CreativeAnalysisView({
             <SettingCheckList checks={checks} max={9} columns />
           </Card>
 
-          <Card title="소재 갤러리" sub={`${group === "sales" ? "전환" : "인지·트래픽"} 캠페인 소재 · 등급은 같은 목표 소재끼리 ${group === "sales" ? "ROAS" : "CTR"}로 매겨요 · 눌러서 원본·세팅 보기`}>
-            <CreativeGallery rows={rows} onOpen={(r) => setOpenId(r.id)} />
+          <div id="ca-gallery" className="scroll-mt-4" />
+          <Card title="소재 갤러리" sub={`${obj === "all" ? "전체" : obj === "cv" ? "전환(CV)" : "트래픽(TR)"} 캠페인 소재 · 등급은 같은 목표 소재끼리(전환=ROAS, 트래픽=CTR) · 태그는 소재명을 파싱한 것 · 눌러서 원본·세팅 보기`}>
+            <CreativeGallery rows={rows} onOpen={(r) => setOpenId(r.id)} dict={dict} winnerIds={winnerIds} theme={themePick} onClearTheme={() => setThemePick(null)} decisions={decisions} />
+          </Card>
+
+          <Card title="A/B 테스트 그룹" sub={`이름 앞부분(날짜_목표_콘텐츠)이 같고 번호만 다른 소재를 자동으로 묶었어요 · ${ab.length}개 묶음 · 👑 = 전환은 ROAS, 트래픽은 CTR 1위(판단 기준 노출 이상만)`}>
+            <AbTestPanel groups={ab} onOpen={(r) => setOpenId(r.id)} />
           </Card>
 
           <Card title="소재명으로 본 요소별 성과" sub="소재명을 해석해 같은 요소끼리 묶었어요 — 어떤 콘텐츠·모델·상품이 잘 되나">
@@ -311,6 +416,7 @@ export function CreativeAnalysisView({
           </div>
 
           {data.notes.length > 0 && <p className="text-[13px] text-ink-muted">{data.notes.join(" ")}</p>}
+        </div>
         </div>
       )}
 

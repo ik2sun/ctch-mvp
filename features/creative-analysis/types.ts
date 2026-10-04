@@ -31,6 +31,7 @@ export type CreativeRow = CreativeMetrics & {
   body: string | null;
   cta: string | null;
   previewUrl: string | null;
+  utm?: { source: string | null; medium: string | null; campaign: string | null; content: string | null } | null; // 소재 url_tags·랜딩 URL의 UTM(2026-10-04)
   daily?: DailyPoint[]; // 광고비 상위 소재만
 };
 

@@ -7,7 +7,29 @@ import type { DailyPoint } from "@/features/ai-report/metaTypes";
 
 const DAILY_TOP = 40;
 const AD_FIELDS =
-  "name,effective_status,created_time,preview_shareable_link,creative{id,object_type,image_url,image_hash,video_id,title,body,call_to_action_type,asset_feed_spec{bodies,titles,images,videos},object_story_spec{link_data{message,name,image_hash,child_attachments},video_data{message,title,video_id}}}";
+  "name,effective_status,created_time,preview_shareable_link,creative{id,object_type,image_url,image_hash,video_id,title,body,call_to_action_type,url_tags,asset_feed_spec{bodies,titles,images,videos,link_urls{website_url}},object_story_spec{link_data{message,name,link,image_hash,child_attachments},video_data{message,title,video_id,call_to_action{value{link}}}}}";
+
+// UTM — 메타는 소재의 url_tags("utm_source=…&utm_campaign=…")로 붙이거나 랜딩 URL에 직접 넣는다. 둘 다 보고 url_tags 우선.
+function utmOf(ad: Raw | undefined): CreativeRow["utm"] {
+  const c = (ad?.creative ?? {}) as Raw;
+  const oss = (c.object_story_spec ?? {}) as { link_data?: { link?: string }; video_data?: { call_to_action?: { value?: { link?: string } } } };
+  const afs = (c.asset_feed_spec ?? {}) as { link_urls?: { website_url?: string }[] };
+  const params = new URLSearchParams();
+  const link = oss.link_data?.link ?? oss.video_data?.call_to_action?.value?.link ?? afs.link_urls?.[0]?.website_url ?? "";
+  try {
+    if (link) new URL(link).searchParams.forEach((v, k) => params.set(k.toLowerCase(), v));
+  } catch {
+    /* 잘못된 URL */
+  }
+  const tags = typeof c.url_tags === "string" ? c.url_tags.replace(/^[?&]/, "") : "";
+  if (tags) new URLSearchParams(tags).forEach((v, k) => params.set(k.toLowerCase(), v));
+  const pick = (k: string) => {
+    const v = params.get(k)?.trim();
+    return v && !/^\{\{.*\}\}$/.test(v) ? v : null; // {{campaign.name}} 같은 동적 매크로는 값이 아니라 제외
+  };
+  const utm = { source: pick("utm_source"), medium: pick("utm_medium"), campaign: pick("utm_campaign"), content: pick("utm_content") };
+  return utm.source || utm.medium || utm.campaign || utm.content ? utm : null;
+}
 
 // 서버 메모리 캐시(같은 프로세스) — 원본 크기는 바뀌지 않고, 썸네일 URL은 수일 유효 → 다시 열 때 메타 호출을 줄인다
 const SIZE_CACHE = new Map<string, { w: number; h: number }>(); // "h:<hash>" | "v:<videoId>"
@@ -69,6 +91,7 @@ function creativeInfo(ad: Raw | undefined) {
   const format: CreativeRow["format"] = oss.link_data?.child_attachments?.length ? "carousel" : multiAsset ? "dynamic" : isVideo ? "video" : c.object_type === "SHARE" || c.object_type === "PHOTO" || c.image_url || (afs.images?.length ?? 0) > 0 ? "image" : "other";
   return {
     format,
+    utm: utmOf(ad),
     thumbnailUrl: (c.image_url as string) ?? null,
     title: (c.title as string) ?? afs.titles?.[0]?.text ?? oss.link_data?.name ?? oss.video_data?.title ?? null,
     body: (c.body as string) ?? afs.bodies?.[0]?.text ?? oss.link_data?.message ?? oss.video_data?.message ?? null,

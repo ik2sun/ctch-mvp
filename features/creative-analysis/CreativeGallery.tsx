@@ -1,9 +1,13 @@
 "use client";
 
-// 소재 갤러리 — 실제 썸네일 + 등급(같은 목표 그룹 안 순위) + 소재명 해석 칩 + 목표에 맞는 지표
+// 소재 갤러리 — 실제 썸네일 + 등급(같은 목표 그룹 안 순위) + 소재명 파싱 태그 칩(긴 이름 대신) + A/B 위너 👑 + 목표에 맞는 지표
 import { useMemo, useState } from "react";
 import { fmt } from "@/features/ai-report/calcMetrics";
 import { GRADE_META, type Enriched, type Grade } from "./analyze";
+import type { NamingDict } from "./naming";
+import { ParsedTags } from "./NamingInsights";
+import { themeOf } from "./groups";
+import { STATUS_META, type Decision } from "./decision";
 
 const FORMAT_BADGE: Record<string, { label: string; icon: string } | undefined> = {
   video: { label: "영상", icon: "ti-player-play" },
@@ -74,21 +78,34 @@ function Metric({ label, value, strong }: { label: string; value: string; strong
   );
 }
 
-function CreativeCard({ row, onOpen }: { row: Enriched; onOpen: (r: Enriched) => void }) {
+function CreativeCard({ row, onOpen, dict, winner, decision }: { row: Enriched; onOpen: (r: Enriched) => void; dict: NamingDict; winner: boolean; decision?: Decision }) {
   const fb = FORMAT_BADGE[row.format];
   const sales = row.group === "sales";
   return (
     <button
       type="button"
       onClick={() => onOpen(row)}
-      className="group flex flex-col overflow-hidden rounded-card border border-line bg-surface text-left transition hover:border-ink-faint hover:shadow-[0_4px_16px_rgba(21,24,30,0.06)]"
+      className={`group flex flex-col overflow-hidden rounded-card border bg-surface text-left transition hover:shadow-[0_4px_16px_rgba(21,24,30,0.06)] ${winner ? "border-[#E8B500]/60 hover:border-[#E8B500]" : "border-line hover:border-ink-faint"}`}
     >
       {/* 원본 비율 그대로 전부 보이게(contain) — 남는 칸은 캔버스색 */}
       <Thumb row={row} fit="contain" className="aspect-[4/5] w-full" />
       <div className="flex flex-1 flex-col gap-2.5 p-3.5">
         {/* 등급·포맷은 이미지 밖(정보 영역)에 — 이미지 속 카피를 가리지 않게 */}
         <div className="flex items-center justify-between gap-2">
-          <GradeBadge grade={row.grade} />
+          <span className="flex items-center gap-1">
+            {decision ? (
+              <span className={`inline-flex items-center gap-0.5 whitespace-nowrap rounded-full px-2 py-0.5 text-[12px] font-semibold ${STATUS_META[decision.status].chip}`} title={decision.reason}>
+                {STATUS_META[decision.status].icon} {STATUS_META[decision.status].label}
+              </span>
+            ) : (
+              <GradeBadge grade={row.grade} />
+            )}
+            {winner && (
+              <span className="inline-flex items-center gap-0.5 whitespace-nowrap rounded-full bg-[#FFF7D6] px-2 py-0.5 text-[12px] font-semibold text-[#8A6100]" title="같은 A/B 묶음(번호만 다른 소재) 중 1위">
+                👑 위너
+              </span>
+            )}
+          </span>
           {fb && (
             <span className="inline-flex items-center gap-0.5 text-[12px] font-medium text-ink-muted">
               <i className={`ti ${fb.icon} text-[12px]`} aria-hidden />
@@ -96,10 +113,7 @@ function CreativeCard({ row, onOpen }: { row: Enriched; onOpen: (r: Enriched) =>
             </span>
           )}
         </div>
-        <p className="truncate font-mono text-[13px] text-ink-soft" title={row.name}>
-          {row.name}
-        </p>
-        <NameChips row={row} />
+        <ParsedTags row={row} dict={dict} />
         <div className="mt-auto grid grid-cols-2 gap-x-3 gap-y-2 border-t border-line/70 pt-3">
           <Metric label="광고비" value={wonShort(row.cost)} />
           {sales ? (
@@ -131,9 +145,25 @@ const SORTS: { key: SortKey; label: string }[] = [
   { key: "newest", label: "최신 소재 순" },
 ];
 
-export function CreativeGallery({ rows, onOpen }: { rows: Enriched[]; onOpen: (r: Enriched) => void }) {
+export function CreativeGallery({
+  rows,
+  onOpen,
+  dict,
+  winnerIds,
+  theme,
+  onClearTheme,
+  decisions,
+}: {
+  rows: Enriched[];
+  onOpen: (r: Enriched) => void;
+  dict: NamingDict;
+  winnerIds: Set<string>;
+  theme?: { keys: string[]; label: string } | null; // 성과 맵에서 고른 테마(들)
+  onClearTheme?: () => void;
+  decisions?: Map<string, Decision>; // 판정 엔진 결과 — 있으면 등급 대신 상태 칩
+}) {
   const [sort, setSort] = useState<SortKey>("cost");
-  const [grade, setGrade] = useState<Grade | "all">("all");
+  const [grade, setGrade] = useState<Grade | "all" | "winner">("all");
   const [q, setQ] = useState("");
   const [limit, setLimit] = useState(28);
 
@@ -141,13 +171,14 @@ export function CreativeGallery({ rows, onOpen }: { rows: Enriched[]; onOpen: (r
     const qq = q.trim().toLowerCase();
     const f = rows.filter(
       (r) =>
-        (grade === "all" || r.grade === grade) &&
+        (!theme || theme.keys.includes(themeOf(r).key)) &&
+        (grade === "all" || (grade === "winner" ? winnerIds.has(r.id) : r.grade === grade)) &&
         (!qq || r.name.toLowerCase().includes(qq) || r.adsetName.toLowerCase().includes(qq) || (r.parsed.theme ?? "").toLowerCase().includes(qq) || (r.parsed.influencer ?? "").includes(qq)),
     );
     const v = (r: Enriched): number =>
       sort === "cost" ? r.cost : sort === "score" ? (r.judged ? (r.score ?? -1) : -2) : sort === "revenue" ? r.revenue : sort === "ctr" ? (r.judged ? (r.ctr ?? -1) : -2) : sort === "cpa" ? -(r.cpa ?? Number.MAX_VALUE) : -(r.ageDays ?? 9999);
     return f.sort((a, b) => v(b) - v(a));
-  }, [rows, sort, grade, q]);
+  }, [rows, sort, grade, q, winnerIds, theme]);
 
   const counts = useMemo(() => {
     const m: Record<string, number> = {};
@@ -158,8 +189,18 @@ export function CreativeGallery({ rows, onOpen }: { rows: Enriched[]; onOpen: (r
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center gap-2">
+        {theme && (
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-[#F45B35]/50 bg-[#FFF3EF] px-3 py-1.5 text-[13px] font-semibold text-[#C2410C]">
+            성과 맵: {theme.label} · {list.length}개
+            {onClearTheme && (
+              <button type="button" onClick={onClearTheme} aria-label="테마 필터 해제" className="ml-0.5 text-[#C2410C]/70 hover:text-[#C2410C]">
+                ✕
+              </button>
+            )}
+          </span>
+        )}
         <div className="flex flex-wrap gap-1">
-          {(["all", "top", "good", "mid", "low", "hold"] as const).map((g) => (
+          {(["all", "winner", "top", "good", "mid", "low", "hold"] as const).filter((g) => g !== "winner" || winnerIds.size > 0).map((g) => (
             <button
               key={g}
               type="button"
@@ -169,7 +210,8 @@ export function CreativeGallery({ rows, onOpen }: { rows: Enriched[]; onOpen: (r
                 grade === g ? "border-ink/15 bg-surface font-medium text-ink shadow-[0_1px_2px_rgba(21,24,30,0.06)]" : "border-line bg-canvas text-ink-muted hover:text-ink"
               }`}
             >
-              {g === "all" ? "전체" : GRADE_META[g].label} <span className="tabular-nums text-ink-faint">{g === "all" ? rows.length : (counts[g] ?? 0)}</span>
+              {g === "all" ? "전체" : g === "winner" ? "👑 A/B 위너" : GRADE_META[g].label}{" "}
+              <span className="tabular-nums text-ink-faint">{g === "all" ? rows.length : g === "winner" ? rows.filter((r) => winnerIds.has(r.id)).length : (counts[g] ?? 0)}</span>
             </button>
           ))}
         </div>
@@ -193,7 +235,7 @@ export function CreativeGallery({ rows, onOpen }: { rows: Enriched[]; onOpen: (r
         <>
           <div className="grid grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-4">
             {list.slice(0, limit).map((r) => (
-              <CreativeCard key={r.id} row={r} onOpen={onOpen} />
+              <CreativeCard key={r.id} row={r} onOpen={onOpen} dict={dict} winner={winnerIds.has(r.id)} decision={decisions?.get(r.id)} />
             ))}
           </div>
           {list.length > limit && (
