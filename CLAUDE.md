@@ -146,6 +146,20 @@ NMG(넥스트미디어그룹) 내부용 AI 기반 퍼포먼스 마케팅 대시�
   - 르무통 14일 실측(목표 500%): 키우기 48(광고비 ₩3,451만)·지켜보기 59·끄기 21·예산 못 받음 123(₩102만)·신규 59. 브랜딩/TVC 250% 지정 시 키우기 59. 광고세트 27개 중 증액 19·축소 1·정리 3(ABO 19·CBO 8). 실행은 메타 광고 관리자에서(쓰기 권한 미확인)
 - 한계·다음: 파트너십(인스타 게시물) 소재는 광고 문구가 비어 있음(인스타 캡션 조회 필요), 사전은 코드 상수(편집 UI·DB 미구현), AI 비전 진단·제작 브리프는 미구현, 카카오·GFA·네이버 확장 예정
 
+## 캠페인 오토파일럿 — 2026-10-04
+- 사이드바 독립 그룹(`nav.ts`, accent `#eb6834`, 아이콘 rocket): 자동 세팅 `/autopilot/setup` · 자동 최적화 `/autopilot/optimize` · 운영 규칙 `/autopilot/rules` · 실행 기록 `/autopilot/logs`(`/autopilot`은 setup으로 이동). 목표는 캠페인 자동 세팅 + 자동 최적화 운영. 최적화·규칙은 아직 설계 골격(`PlannedSection.tsx`), 공통 머리 `AutopilotHeader`
+- **결정**: 첫 매체 = **GFA**(다른 매체는 아직 안 붙임), 실행 = **승인 후 실행**(완성도 확인 후 사용자가 완전 자동 전환 결정). 상수 `AUTOPILOT_MEDIA`·`AUTOPILOT_MODE`
+- **GFA 자동 세팅**(`features/autopilot/gfa/`): 담당자가 GFA에서 **캠페인만** 만든다 → 화면에서 캠페인 선택(목적 전환·웹사이트 트래픽·참여 유도만, `SUPPORTED_OBJECTIVES`) → 브리프(상품·혜택·타겟 메모·랜딩·일 예산 합계·광고그룹 수·카피 수·시작일)+이미지 최대 6장+규격 선택 → `plan.ts`(Sonnet 5.5 json_schema, 실측 7.7초)가 광고그룹(타겟 이름·성별·연령 5세 구간·기기·예산 비중)과 카피(문구 65·제목 25·설명 45자, CTA) → 표에서 수정 → [GFA에 세팅 실행](confirm) → 화면이 단계별 호출: 광고그룹 생성 → 그 광고그룹의 템플릿 규격으로 브라우저 canvas 크롭·JPEG 품질 탐색(`imageFit.ts`, 파일 크기 상·하한) → 이미지 업로드(광고계정 단위라 광고그룹끼리 재사용) → `SINGLE_IMAGE` 소재(이미지×규격×카피) → 광고그룹 켜기/끄기(기본 끄기) → 기록
+  - API `/api/autopilot/gfa`(action campaigns·context·plan = 구성원 / createAdSet·createCreative·activate·log = **소유자만**) + `/api/autopilot/gfa/image`(multipart, 소유자) + `/api/autopilot/logs`. `lib/gfa/client.ts gfaRequest`에 method·json·form 추가(쓰기는 5xx 재시도 안 함 — 중복 생성 방지)
+  - 광고그룹 본문 = GFA `adSets/sampleByCampaignNo`(캠페인 목적에 맞는 입찰·예산·시작 기본값 — 르무통 전환 캠페인: MAX_CONV·NO_CAP·CPC·DAILY 10만·다음날 09:00) + 이름·타겟·예산·시작 덮어쓰기, 게재 위치는 `typeInfoByCampaignNo` 전체(allPlacementGroup), 샘플에 딸려 오는 고객파일 타겟(adidLibraries)은 뺀다. 연령은 `{from,to}`(60+ = {60,200})
+  - 템플릿 규격(실응답): FEED_SINGLE_IMAGE 1200×628(50~500KB) / _SQUARE 1200×1200(80~800KB) / _2TO3 1200×1800(100KB~1.2MB) / NATIVE_SINGLE_IMAGE_V2 342×228(10~130KB). 실행 때는 새 광고그룹 `includeCreativeTemplates` 응답을 다시 쓴다. CTA는 광고그룹별 `callToActions`로 확인(없으면 MORE)
+  - 네이밍: 광고그룹 `MMDD_타겟이름_성별연령코드`(f3044·aall — 소재 분석 naming.ts 형식), 소재 `광고그룹_img01_ls|sq|pt|nt_c1`. UTM은 랜딩에 utm_이 없을 때만 source=naver·medium=gfa·campaign=캠페인명·content=소재명
+  - **쓰기 API(광고그룹·이미지·소재 생성, activate)는 실계정 미검증** — 읽기(캠페인·샘플·유형·템플릿·CTA)와 AI 세팅안은 르무통 GFA(8790, 캠페인 1620654)로 확인(2026-10-04). 첫 실행 때 결과·오류를 보고 본문을 보정할 것
+  - **엑셀 벌크 업로드**(2026-10-04, 자동 세팅 화면 기본 탭, `BulkUpload.tsx` + `bulkSheet.ts` 순수 함수): 템플릿 시트 '소재'(광고그룹·상품명·이미지 파일명·소재 규격·광고 문구·제목·설명·CTA·랜딩 URL·소재 이름, 머리글 위치로 열을 찾음) + 선택 '광고그룹'(성별·연령 `30-44`/`60+`·기기·일 예산 `5만` 가능) + '작성 안내'. 광고그룹 이름이 캠페인에 이미 있으면 그 광고그룹에 소재만 추가(`adSetMeta` — 캠페인 소속 확인, **기존 광고그룹 켜짐 상태는 안 건드림**), 없으면 새로 만듦. 이미지는 내 PC 파일·폴더(webkitdirectory) 또는 **구글 드라이브 폴더 주소**(`driveImport.ts`: 브라우저 GIS 토큰 팝업 scope drive.readonly, 서버 저장 없음, 하위 폴더 2단계·공유 드라이브, 클라이언트 ID는 `/api/autopilot/google-client` = GMAIL_CLIENT_ID). 매칭 `matchImages`: 파일명·상품명 정규화(공백·_·-·괄호·대소문자·확장자 무시) 후 포함 관계, 겹치면 긴 상품명 우선, '이미지 파일명' 칸이 있으면 그 파일만. 한 행 = 매칭 이미지 × 규격만큼 소재, 같은 광고그룹·상품 카피 여러 행은 `_c1·_c2`. 최대 400장, 원본 디코딩은 자를 때만
+  - 드라이브 준비(**미완료·미검증**): GCP ctch 프로젝트 Google Drive API 사용 설정 + 'CTCH Gmail 연결' OAuth 클라이언트 '승인된 자바스크립트 원본'에 `http://localhost:3001`·`https://ctch-mvp.vercel.app` + 동의 화면에 drive.readonly
+  - 실행 엔진 공용 `runner.ts runSetup`(AI·벌크), 화면 조각 `ui.tsx`
+  - 실행 기록 `autopilot_actions`(마이그레이션 `0031_autopilot_actions.sql` — **SQL Editor 실행 필요**, 없으면 기록만 건너뜀, RLS on·정책 없음)
+
 ## 미디어믹스 최적화 (Budget Allocator) — 2026-10-01
 - 페이지 `app/(dashboard)/media-mix/page.tsx`(데이터) → 본문 `features/media-mix/MediaMixView.tsx`(models를 props로 받음 — 샘플로 렌더 확인 가능). 좌측 조건 설정(총예산·집행 기간·목표 3종·목표 ROAS/CPA·매체 잠금·학습 기간 30/60/90일) / 우측 Uplift(40px 고정폭, 롤링) + 예상 매출·ROAS·전환·CPA + AS-IS vs TO-BE 100% 막대 + 반응 곡선 / 하단 상세 믹스안(슬라이더, 증액 초록·감액 회색 뱃지, 한계 ROAS/CPA, 효율 한계점) + 예산 동기화
 - 학습 데이터 `useMediaHistory.ts`: 대시보드와 같은 요약 API(메타·네이버 SA·GFA·카카오)를 학습 기간으로 호출, **세션 캐시 키도 대시보드와 동일**. 연동 안 된 매체·학습 기간 광고비 0 매체는 제외. 구글 Ads 미포함

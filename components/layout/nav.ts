@@ -23,6 +23,18 @@ export const NAV: NavItem[] = [
       { href: "/creative-analysis", label: "소재 분석", icon: "photo-search", desc: "소재 이미지·소재명·타겟 세팅 통합 분석" },
     ],
   },
+  {
+    label: "캠페인 오토파일럿",
+    icon: "rocket",
+    desc: "AI가 캠페인 세팅부터 최적화 운영까지 — 규칙은 사람이, 실행은 AI가",
+    accent: "#eb6834",
+    children: [
+      { href: "/autopilot/setup", label: "자동 세팅", icon: "wand", desc: "브리프 → 캠페인·광고세트·소재 구조, 네이밍, 타겟·예산 초안 → 매체 생성" },
+      { href: "/autopilot/optimize", label: "자동 최적화", icon: "adjustments-bolt", desc: "규칙·AI 판단으로 예산 증감, 소재 ON/OFF, 입찰 조정" },
+      { href: "/autopilot/rules", label: "운영 규칙", icon: "list-check", desc: "목표 ROAS·CPA, 증감 한도, 실행 시간대, 승인 필요 여부" },
+      { href: "/autopilot/logs", label: "실행 기록", icon: "history", desc: "AI가 무엇을 언제 왜 바꿨는지와 이후 성과" },
+    ],
+  },
   { href: "/media-mix", label: "미디어믹스 최적화", icon: "chart-pie", desc: "목표 KPI별 매체 예산 최적 배분·예상 성과·예산 동기화", accent: "#eda100" },
   { href: "/correlation", label: "상관관계 분석", icon: "chart-dots", desc: "영상·트래픽 캠페인이 전환·검색 성과에 준 영향(시차 상관·기여도), GRP·SOV 외부 지표", accent: "#e87ba4" },
   {

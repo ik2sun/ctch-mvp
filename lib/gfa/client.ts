@@ -18,7 +18,14 @@ export class GfaApiError extends Error {
 }
 
 type Query = Record<string, string | number | boolean | undefined>;
-export type GfaRequestOptions = { accessToken: string; managerAccountNo?: string | null; query?: Query };
+export type GfaRequestOptions = {
+  accessToken: string;
+  managerAccountNo?: string | null;
+  query?: Query;
+  method?: "GET" | "POST" | "PUT" | "DELETE";
+  json?: unknown;     // JSON 본문(쓰기 — 캠페인 오토파일럿)
+  form?: FormData;    // multipart 본문(소재 이미지 업로드)
+};
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
@@ -29,8 +36,13 @@ async function performRequest<T>(path: string, opts: GfaRequestOptions): Promise
   for (const [k, v] of Object.entries(opts.query ?? {})) if (v !== undefined) url.searchParams.set(k, String(v));
   const headers: Record<string, string> = { Authorization: `Bearer ${opts.accessToken}`, Accept: "application/json" };
   if (opts.managerAccountNo) headers.AccessManagerAccountNo = opts.managerAccountNo;
+  let body: BodyInit | undefined;
+  if (opts.json !== undefined) {
+    headers["Content-Type"] = "application/json";
+    body = JSON.stringify(opts.json);
+  } else if (opts.form) body = opts.form; // Content-Type(boundary)은 fetch가 붙인다
 
-  const res = await fetch(url.toString(), { headers, cache: "no-store" });
+  const res = await fetch(url.toString(), { method: opts.method ?? (body ? "POST" : "GET"), headers, body, cache: "no-store" });
   const text = await res.text();
   let json: unknown = null;
   if (text) {
@@ -42,9 +54,9 @@ async function performRequest<T>(path: string, opts: GfaRequestOptions): Promise
   }
   if (!res.ok) {
     // 게이트웨이 오류 {errorCode, errorMessage} / 광고 API 오류 {error: {code, message, description}}
-    const body = json as { errorCode?: string; errorMessage?: string; error?: { code?: string; message?: string; description?: string } } | null;
-    const detail = body?.error?.description || body?.error?.message || body?.errorMessage || `GFA API 요청이 실패했어요. (${res.status})`;
-    if (res.status === 401 || body?.errorCode === "024") {
+    const err = json as { errorCode?: string; errorMessage?: string; error?: { code?: string; message?: string; description?: string } } | null;
+    const detail = [err?.error?.message, err?.error?.description].filter(Boolean).join(" — ") || err?.errorMessage || `GFA API 요청이 실패했어요. (${res.status})`;
+    if (res.status === 401 || err?.errorCode === "024") {
       throw new GfaApiError(`GFA 인증에 실패했어요. API 사용 승인 전에 연결했다면 네이버 내정보 > 연결된 서비스에서 동의 철회 후 다시 연결하세요. (${detail})`, "UNAUTHORIZED", 401);
     }
     if (res.status === 403) throw new GfaApiError(`이 광고계정에 접근 권한이 없어요. 관리 계정 번호와 광고계정 소속을 확인하세요. (${detail})`, "FORBIDDEN", 403);
@@ -58,7 +70,9 @@ async function withRetry<T>(path: string, opts: GfaRequestOptions): Promise<T> {
   try {
     return await performRequest<T>(path, opts);
   } catch (e) {
-    if (!(e instanceof GfaApiError) || (e.code !== "RATE_LIMITED" && !(e.status && e.status >= 500))) throw e;
+    // 쓰기 요청은 5xx면 이미 처리됐을 수 있어(중복 생성) 재시도하지 않는다. 429는 처리 전이라 재시도
+    const write = (opts.method && opts.method !== "GET") || opts.json !== undefined || !!opts.form;
+    if (!(e instanceof GfaApiError) || (e.code !== "RATE_LIMITED" && (write || !(e.status && e.status >= 500)))) throw e;
     await sleep(2000);
     return await performRequest<T>(path, opts);
   }
