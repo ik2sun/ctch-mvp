@@ -16,6 +16,7 @@ export type PostTag = {
 };
 
 export type Diagnosis = {
+  headline?: string; // 원라인 행동 지침(2026-10-04 추가 — 이전 진단엔 없음)
   summary: string;
   winningPattern: string;
   losingPattern: string;

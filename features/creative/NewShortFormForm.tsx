@@ -48,18 +48,26 @@ const ROLE_TONE: Record<SceneRole, { chip: string; dot: string; bar: string }> =
 
 // 새 숏폼 생성 — 템플릿 → (브리프 → AI 스크립트 → 편집) → 소재(사진 업로드 | 클립 업로드 | Veo API 자동) → 작업 등록.
 // 실제 Veo 생성·TTS·합성은 사내 렌더 워커(short-form/worker/render_worker.py)가 처리한다.
-export function NewShortFormForm({ onClose, onCreated }: { onClose: () => void; onCreated: (job: ShortFormJob) => void }) {
+export function NewShortFormForm({
+  onClose,
+  onCreated,
+  initial,
+}: {
+  onClose: () => void;
+  onCreated: (job: ShortFormJob) => void;
+  initial?: { title?: string; brief?: Partial<ShortFormBrief> } | null; // 인스타 분석에서 넘어온 브리프 — 스크립트형(veo_promo)으로 연다
+}) {
   const { clients, selected } = useClients();
-  const [templateId, setTemplateId] = useState(TEMPLATES[0].id);
+  const [templateId, setTemplateId] = useState(initial?.brief ? "veo_promo" : TEMPLATES[0].id);
   const template = TEMPLATE_BY_ID[templateId];
-  const [title, setTitle] = useState("");
+  const [title, setTitle] = useState(initial?.title ?? "");
   const [clientId, setClientId] = useState<string>(selected?.id ?? "");
   const client = clients.find((c) => c.id === clientId) ?? null;
 
   // 고정 템플릿(르무통) 카피
   const [copy, setCopy] = useState<Record<string, string>>({});
   // 스크립트형
-  const [brief, setBrief] = useState<ShortFormBrief>({ ...EMPTY_BRIEF });
+  const [brief, setBrief] = useState<ShortFormBrief>({ ...EMPTY_BRIEF, ...(initial?.brief ?? {}) });
   const [voice, setVoice] = useState(VOICES[0].id);
   const [durationSec, setDurationSec] = useState<DurationPreset["seconds"]>(DEFAULT_DURATION);
   const preset = durationPreset(durationSec);

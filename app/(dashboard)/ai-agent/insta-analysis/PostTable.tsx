@@ -105,7 +105,7 @@ export function PostTable({
   ];
 
   return (
-    <div className="rounded-card border border-line bg-surface p-6">
+    <div className="rounded-card border border-line bg-surface p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <p className="text-[15px] font-medium text-ink-soft">
           게시물별 성과 <span className="font-normal text-ink-muted">{rows.length}개</span>

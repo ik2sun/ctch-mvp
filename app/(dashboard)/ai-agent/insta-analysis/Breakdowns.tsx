@@ -13,7 +13,7 @@ const TOOLTIP_STYLE = { borderRadius: 10, border: "1px solid #E6E6E2", fontSize:
 
 function Card({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-card border border-line bg-surface p-6">
+    <div className="rounded-card border border-line bg-surface p-4">
       <div className="mb-3">
         <p className="text-[15px] font-medium text-ink-soft">{title}</p>
         {sub && <p className="text-[13px] text-ink-muted">{sub}</p>}

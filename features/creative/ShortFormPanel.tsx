@@ -5,6 +5,7 @@ import { useClients } from "@/features/clients/ClientContext";
 import { Badge, MediaCard, type BadgeTone } from "./MediaCard";
 import { VideoModal, type MediaItem } from "./VideoModal";
 import { NewShortFormForm } from "./NewShortFormForm";
+import type { ShortFormBrief } from "./shortFormScript";
 import { FinalUploadForm } from "./FinalUploadForm";
 import { ENGINE_META, SHORT_FORM_PIPELINES, type ShortFormPipeline } from "./shortFormPipelines";
 import { TEMPLATE_BY_ID } from "./shortFormTemplates";
@@ -37,6 +38,19 @@ export function ShortFormPanel() {
   const [modal, setModal] = useState<MediaItem | null>(null);
   const [showNew, setShowNew] = useState(false);
   const [showFinal, setShowFinal] = useState(false);
+  // 인스타 분석 '이 구도로 숏폼 만들기'에서 넘어온 브리프(sessionStorage, 한 번 쓰고 지움)
+  const [prefill, setPrefill] = useState<{ title?: string; brief?: Partial<ShortFormBrief> } | null>(null);
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem("ctch_shortform_prefill");
+      if (!raw) return;
+      sessionStorage.removeItem("ctch_shortform_prefill");
+      setPrefill(JSON.parse(raw));
+      setShowNew(true);
+    } catch {
+      /* 무시 */
+    }
+  }, []);
 
   const refresh = useCallback(async () => {
     const { data, error } = await listJobs(selected?.id ?? null);
@@ -282,7 +296,11 @@ export function ShortFormPanel() {
       {showFinal && <FinalUploadForm onClose={() => setShowFinal(false)} onCreated={(job) => setJobs((prev) => [job, ...prev])} />}
       {showNew && (
         <NewShortFormForm
-          onClose={() => setShowNew(false)}
+          initial={prefill}
+          onClose={() => {
+            setShowNew(false);
+            setPrefill(null);
+          }}
           onCreated={(job) => setJobs((prev) => [job, ...prev])}
         />
       )}

@@ -11,6 +11,7 @@ import {
 } from "@/features/brand-analysis/postMetrics";
 import { CONTENT_TYPES, CTA_TYPES, HOOK_TYPES, type Diagnosis } from "@/features/brand-analysis/diagnosisTypes";
 import { saveDiagnosis } from "@/features/brand-analysis/historyStore";
+import type { VisualResult } from "@/features/brand-analysis/visualTypes";
 
 export const maxDuration = 120;
 
@@ -21,6 +22,7 @@ const SYSTEM = `당신은 인스타그램 계정을 퍼포먼스 마케팅 관�
 반드시 아래 스키마의 JSON만 출력하세요. 마크다운 코드펜스나 인사말, 설명 문장을 붙이지 마세요.
 
 {
+  "headline": "실무자가 이번 주에 바로 할 행동 지침 1~2문장. 반드시 비교 수치(예: 캐러셀 반응률이 릴스의 1.5배)와 구체적 행동(무엇을·어떤 포맷/구도/시간대로)을 함께 쓸 것. 단순 사실 나열 금지",
   "summary": "계정 성과 총평 2~3문장. 중앙값 ER, 릴스 확산율, 게시 주기 등 수치를 근거로",
   "winningPattern": "상위 게시물(tier=top)의 공통점 2~3문장. 포맷·유형·훅·CTA·시간대 중 실제 데이터에서 드러나는 것만",
   "losingPattern": "하위 게시물(tier=low)의 공통점 2~3문장",
@@ -49,7 +51,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "서버에 ANTHROPIC_API_KEY가 없어요." }, { status: 500 });
   }
 
-  const { profile } = (await req.json()) as { profile?: InstagramProfile };
+  const { profile, visual } = (await req.json()) as { profile?: InstagramProfile; visual?: VisualResult | null };
+  const visualById = new Map((visual?.posts ?? []).map((v) => [v.id, v]));
   if (!profile || !Array.isArray(profile.posts)) {
     return NextResponse.json({ error: "분석할 프로필 데이터가 없어요." }, { status: 400 });
   }
@@ -99,6 +102,9 @@ export async function POST(req: Request) {
       해시태그: m.post.hashtags.slice(0, 15),
       멘션: m.post.mentions.slice(0, 5),
       이미지설명: (m.post.altText ?? "").slice(0, 300),
+      시각태그: visualById.has(m.post.id)
+        ? (({ people, subject, tone, overlayText, textOverlay }) => ({ 사람: people, 피사체: subject, 톤: tone, 이미지위글자: overlayText || (textOverlay ? "있음" : "없음") }))(visualById.get(m.post.id)!)
+        : undefined,
     })),
   };
 

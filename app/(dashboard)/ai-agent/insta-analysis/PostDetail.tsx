@@ -63,7 +63,7 @@ export function PostDetail({
   const idxTone = metric.erIndex == null ? undefined : metric.erIndex >= 1.3 ? "good" : metric.erIndex <= 0.7 ? "bad" : undefined;
 
   return (
-    <div className="space-y-4 rounded-card border border-line bg-surface p-6">
+    <div className="space-y-3 rounded-card border border-line bg-surface p-4">
       <div className="flex gap-3">
         <div className="h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-line">
           <PostThumbnail post={post} index={index} />

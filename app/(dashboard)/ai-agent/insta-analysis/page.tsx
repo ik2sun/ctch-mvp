@@ -1,7 +1,7 @@
 "use client";
 
 // 인스타 분석 — 대시보드형(2026-10-04 개편).
-// 위(흰 띠): 검색창 + 자동 완성(분석했던 계정에서 앞 글자 검색) + 퀵 버튼(내 브랜드 계정·최근 검색)
+// 위(흰 띠): 검색창(오른쪽 끝 🔥 내 브랜드 배지 — 누르면 분석, ✎로 지정·변경) + 자동 완성(분석했던 계정에서 앞 글자 검색) + 최근 검색 퀵 버튼
 // 아래(옅은 회색 #F4F5F7): 최근 분석 히스토리(카드/목록) — [리포트 보기]는 저장된 결과를 바로 연다(Apify 재호출 없음).
 // 리포트를 열면 같은 회색 영역에 리포트 본문(InstaReport)이 뜨고 '← 분석 히스토리'로 돌아간다.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -9,9 +9,10 @@ import { useClients } from "@/features/clients/ClientContext";
 import type { InstagramProfile } from "@/features/brand-analysis/apifyClient";
 import type { Diagnosis } from "@/features/brand-analysis/diagnosisTypes";
 import type { HistoryRow } from "@/features/brand-analysis/historyStore";
+import type { VisualResult } from "@/features/brand-analysis/visualTypes";
 import { InstaReport } from "./InstaReport";
 
-type Report = { profile: InstagramProfile; diagnosis: Diagnosis | null; analyzedAt: string };
+type Report = { profile: InstagramProfile; diagnosis: Diagnosis | null; analyzedAt: string; visual: VisualResult | null; category: string | null };
 const VIEW_KEY = "ctch_insta_view";
 const handleOf = (input: string) => {
   const m = input.trim().match(/instagram\.com\/([A-Za-z0-9._]+)/i);
@@ -140,7 +141,8 @@ export default function InstaAnalysisPage() {
       const res = await fetch("/api/brand-analysis", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ input: handle }) });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "분석에 실패했어요.");
-      setReport({ profile: json as InstagramProfile, diagnosis: null, analyzedAt: new Date().toISOString() });
+      // 다시 분석해도 카테고리는 유지(서버 행의 category 칸은 덮어쓰지 않음)
+      setReport({ profile: json as InstagramProfile, diagnosis: null, analyzedAt: new Date().toISOString(), visual: null, category: rows.find((r) => r.username === handle)?.category ?? null });
       loadHistory();
     } catch (e) {
       setError(e instanceof Error ? e.message : "오류가 발생했어요.");
@@ -156,13 +158,22 @@ export default function InstaAnalysisPage() {
       const res = await fetch(`/api/brand-analysis/history/${encodeURIComponent(username)}`);
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "리포트를 열지 못했어요.");
-      setReport({ profile: json.profile, diagnosis: json.diagnosis, analyzedAt: json.analyzed_at });
+      setReport({ profile: json.profile, diagnosis: json.diagnosis, analyzedAt: json.analyzed_at, visual: json.visual ?? null, category: json.category ?? null });
       window.scrollTo?.({ top: 0 });
     } catch (e) {
       setError(e instanceof Error ? e.message : "오류가 발생했어요.");
     } finally {
       setOpening(null);
     }
+  };
+
+  const saveCategory = async (category: string | null) => {
+    if (!report) return;
+    const res = await fetch("/api/brand-analysis/category", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username: report.profile.username, category }) });
+    const j = await res.json();
+    if (!res.ok) return setError(j.error || "카테고리를 저장하지 못했어요.");
+    setReport((r) => (r ? { ...r, category } : r));
+    loadHistory();
   };
 
   const saveBrand = async (value: string | null) => {
@@ -199,12 +210,12 @@ export default function InstaAnalysisPage() {
   return (
     <div className="-m-6 flex min-h-[calc(100%+3rem)] flex-col 2xl:-mx-8">
       {/* ── 위: 검색 ── */}
-      <section className="border-b border-line bg-surface px-6 py-8 2xl:px-8">
+      <section className="border-b border-line bg-surface px-6 py-5 2xl:px-8">
         <div className="mx-auto w-full max-w-[1600px]">
           <h2 className="font-display text-[26px] font-semibold text-ink">인스타 분석</h2>
           <p className="mt-1.5 text-[15px] text-ink-muted">계정을 넣으면 최근 게시물 50개로 참여율·포맷·시간대를 분석하고, AI가 잘 되는 게시물의 공통점과 광고 소재 후보를 뽑아요.</p>
 
-          <div ref={boxRef} className="relative mt-6 max-w-[760px]">
+          <div ref={boxRef} className="relative mt-4 max-w-[760px]">
             <div className="flex gap-2">
               <div className="relative flex-1">
                 <i className="ti ti-brand-instagram pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[20px] text-ink-muted" aria-hidden />
@@ -232,8 +243,63 @@ export default function InstaAnalysisPage() {
                   role="combobox"
                   aria-expanded={acOpen && suggestions.length > 0}
                   aria-autocomplete="list"
-                  className="field h-12 w-full pl-11 text-[16px]"
+                  className={`field h-12 w-full pl-11 text-[16px] ${brand ? "pr-[220px]" : selected ? "pr-[150px]" : ""}`}
                 />
+                {/* 내 브랜드 — 검색창 오른쪽 끝 배지(별도 입력 줄 없음) */}
+                <div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1">
+                  {brand ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => analyze(brand)}
+                        disabled={busy}
+                        title="내 브랜드 계정 바로 분석"
+                        className="inline-flex h-8 max-w-[170px] items-center gap-1 truncate rounded-full border border-[#F45B35]/30 bg-[#FFF3EF] px-3 text-[13px] font-medium text-ink hover:border-[#F45B35]/60 disabled:opacity-50"
+                      >
+                        <span aria-hidden>🔥</span>
+                        <span className="truncate">@{brand}</span>
+                      </button>
+                      <button type="button" onClick={() => setBrandEdit(brand)} title="내 브랜드 변경" aria-label="내 브랜드 변경" className="flex h-8 w-8 items-center justify-center rounded-full text-[14px] text-ink-muted hover:bg-canvas hover:text-ink">
+                        ✎
+                      </button>
+                    </>
+                  ) : (
+                    selected && (
+                      <button type="button" onClick={() => setBrandEdit("")} title={`${selected.name} 인스타 계정을 지정하면 한 번에 분석할 수 있어요`} className="inline-flex h-8 items-center gap-1 rounded-full border border-dashed border-line px-3 text-[13px] text-ink-muted hover:border-[#F45B35]/60 hover:text-ink">
+                        <span aria-hidden>🔥</span> 내 브랜드 지정
+                      </button>
+                    )
+                  )}
+                </div>
+                {brandEdit !== null && (
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      saveBrand(brandEdit.trim() || null);
+                    }}
+                    className="absolute right-0 top-[52px] z-30 w-[300px] rounded-xl border border-line bg-surface p-3 shadow-[0_12px_32px_rgba(16,24,40,0.14)]"
+                  >
+                    <p className="mb-1.5 text-[12px] font-semibold text-ink-soft">{selected?.name ?? "광고주"}의 인스타 계정</p>
+                    <input autoFocus value={brandEdit} onChange={(e) => setBrandEdit(e.target.value)} placeholder="@브랜드계정" className="field h-9 w-full text-[14px]" />
+                    <div className="mt-2 flex items-center justify-between">
+                      {brand ? (
+                        <button type="button" onClick={() => saveBrand(null)} className="text-[12px] text-ink-muted hover:text-bad">
+                          지정 해제
+                        </button>
+                      ) : (
+                        <span />
+                      )}
+                      <div className="flex gap-1">
+                        <button type="button" onClick={() => setBrandEdit(null)} className="h-8 px-2.5 text-[13px] text-ink-muted hover:text-ink">
+                          취소
+                        </button>
+                        <button type="submit" className="btn-signal h-8 px-3 text-[13px]">
+                          저장
+                        </button>
+                      </div>
+                    </div>
+                  </form>
+                )}
               </div>
               <button type="button" onClick={() => analyze(input)} disabled={busy} className="btn-signal h-12 min-w-[120px] px-6 text-[16px]">
                 {busy ? "분석 중…" : "분석 시작"}
@@ -269,46 +335,22 @@ export default function InstaAnalysisPage() {
             )}
           </div>
 
-          {/* 퀵 버튼 */}
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            {brandEdit !== null ? (
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  saveBrand(brandEdit.trim() || null);
-                }}
-                className="flex items-center gap-1.5"
-              >
-                <input autoFocus value={brandEdit} onChange={(e) => setBrandEdit(e.target.value)} placeholder="@브랜드계정" className="field h-9 w-[180px] rounded-full px-4 text-[14px]" />
-                <button type="submit" className="btn-signal h-9 rounded-full px-4 text-[14px]">저장</button>
-                <button type="button" onClick={() => setBrandEdit(null)} className="h-9 px-2 text-[13px] text-ink-muted hover:text-ink">취소</button>
-              </form>
-            ) : brand ? (
-              <>
-                <Pill icon="🔥" tone="brand" onClick={() => analyze(brand)} disabled={busy}>
-                  내 브랜드 계정 분석하기 <span className="text-ink-muted">@{brand}</span>
+          {/* 최근 검색 퀵 버튼 */}
+          {recent.length > 0 && (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              {recent.map((r) => (
+                <Pill key={r.username} icon="🕒" onClick={() => analyze(r.username)} disabled={busy}>
+                  최근 검색: @{r.username}
                 </Pill>
-                <button type="button" onClick={() => setBrandEdit(brand)} className="-ml-1 px-1 text-[12px] text-ink-muted hover:text-ink">변경</button>
-              </>
-            ) : (
-              selected && (
-                <Pill icon="🔥" tone="ghost" onClick={() => setBrandEdit("")}>
-                  {selected.name} 브랜드 계정 지정하기
-                </Pill>
-              )
-            )}
-            {recent.map((r) => (
-              <Pill key={r.username} icon="🕒" onClick={() => analyze(r.username)} disabled={busy}>
-                최근 검색: @{r.username}
-              </Pill>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 
       {/* ── 아래: 히스토리 / 리포트 ── */}
-      <section className="flex-1 bg-[#F4F5F7] px-6 py-8 2xl:px-8">
-        <div className="mx-auto w-full max-w-[1600px] space-y-6">
+      <section className="flex-1 bg-[#F4F5F7] px-6 py-5 2xl:px-8">
+        <div className="mx-auto w-full max-w-[1600px] space-y-4">
           {error && <p className="rounded-lg border border-bad/20 bg-bad/5 px-3.5 py-2.5 text-[15px] text-bad">{error}</p>}
 
           {analyzing && (
@@ -323,32 +365,26 @@ export default function InstaAnalysisPage() {
 
           {report ? (
             <>
-              <div className="flex flex-wrap items-center justify-between gap-4 rounded-card bg-surface px-6 py-4 shadow-[0_1px_3px_rgba(16,24,40,0.06),0_6px_16px_rgba(16,24,40,0.06)]">
-                <div className="flex min-w-0 items-center gap-4">
-                  <button type="button" onClick={() => setReport(null)} className="whitespace-nowrap rounded-lg border border-line px-3 py-1.5 text-[14px] text-ink-soft hover:border-ink-faint hover:text-ink">
-                    ← 분석 히스토리
-                  </button>
-                  <Avatar src={reportRow?.avatar ?? (report.profile.profilePicUrl ? `/api/proxy-image?url=${encodeURIComponent(report.profile.profilePicUrl)}` : null)} name={report.profile.username} size={44} />
-                  <div className="min-w-0">
-                    <p className="truncate text-[17px] font-semibold text-ink">
-                      @{report.profile.username}
-                      {report.profile.username.toLowerCase() === brand && <span className="ml-2 rounded-full bg-[#FFF3EF] px-2 py-0.5 text-[12px] font-semibold text-[#C2410C]">내 브랜드</span>}
-                    </p>
-                    <p className="truncate text-[13px] text-ink-muted">{report.profile.fullName} · {dateLabel(report.analyzedAt)} 분석</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  {selected && report.profile.username.toLowerCase() !== brand && (
-                    <button type="button" onClick={() => saveBrand(report.profile.username)} className="btn-ghost h-9 px-3 text-[14px]">
-                      내 브랜드로 지정
-                    </button>
-                  )}
-                  <button type="button" onClick={() => analyze(report.profile.username)} disabled={busy} className="btn-ghost h-9 px-3 text-[14px]">
-                    다시 분석
-                  </button>
-                </div>
-              </div>
-              <InstaReport key={`${report.profile.username}|${report.analyzedAt}`} profile={report.profile} initialDiagnosis={report.diagnosis} onDiagnosed={loadHistory} />
+              <InstaReport
+                key={`${report.profile.username}|${report.analyzedAt}`}
+                profile={report.profile}
+                initialDiagnosis={report.diagnosis}
+                initialVisual={report.visual}
+                category={report.category}
+                onCategory={saveCategory}
+                peers={rows}
+                onDiagnosed={loadHistory}
+                header={{
+                  avatarSrc: null,
+                  analyzedAt: report.analyzedAt,
+                  isBrand: report.profile.username.toLowerCase() === brand,
+                  onBack: () => setReport(null),
+                  onReanalyze: () => analyze(report.profile.username),
+                  reanalyzing: busy,
+                  onMakeBrand: selected ? () => saveBrand(report.profile.username) : undefined,
+                  avatar: <Avatar src={reportRow?.avatar ?? (report.profile.profilePicUrl ? `/api/proxy-image?url=${encodeURIComponent(report.profile.profilePicUrl)}` : null)} name={report.profile.username} size={40} />,
+                }}
+              />
             </>
           ) : (
             !analyzing && (
