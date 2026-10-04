@@ -56,7 +56,7 @@ export async function suggestPrompts(input: { url: string; brandTerms: string[];
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
   const msg = await anthropic.messages
     .stream({
-      model: "claude-opus-5",
+      model: "claude-sonnet-5-5",
       max_tokens: 16000,
       thinking: { type: "adaptive" },
       output_config: { effort: "medium", format: { type: "json_schema", schema: SCHEMA } },

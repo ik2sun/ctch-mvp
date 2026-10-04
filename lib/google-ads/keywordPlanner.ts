@@ -19,7 +19,7 @@ async function call<T>(creds: GoogleAdsCredentials, suffix: string, body: unknow
   } catch (e) {
     if (e instanceof GoogleAdsApiError && (e.code === "FORBIDDEN" || e.code === "NOT_APPROVED") && !/USER_PERMISSION_DENIED|CUSTOMER_NOT_ENABLED/.test(e.message)) {
       throw new PlannerLockedError(
-        `구글 키워드 플래너는 API Basic 등급부터 쓸 수 있어요(지금 ctch 프로젝트는 Explorer). Cloud Console > Google Ads API에서 브랜드 인증 후 Basic을 신청하세요. (${e.message})`,
+        "구글 키워드 플래너는 API Basic 등급부터 쓸 수 있어요(지금 ctch 프로젝트는 Explorer — 성과 조회는 되지만 키워드 플래너는 막혀 있음). Cloud Console > Google Ads API에서 브랜드 인증 후 Basic을 신청하세요.",
       );
     }
     throw e;

@@ -163,7 +163,7 @@ async function callPart(anthropic: Anthropic, part: PartName, userContent: strin
   const request = (withSchema: boolean) =>
     anthropic.messages
       .stream({
-        model: "claude-opus-5",
+        model: "claude-sonnet-5-5",
         max_tokens: part === "core" ? 16000 : 32000,
         thinking: { type: "adaptive" },
         output_config: withSchema ? { effort: "high", format: { type: "json_schema", schema } } : { effort: "high" },

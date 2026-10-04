@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { EDIT_TOOL_BY_ID, type EditPromptResult, type EditToolId } from "./editTools";
 
 // 서버 전용 — 이미지 + 수정 요청 → 도구별 수정 프롬프트 (Claude 비전 + 구조화 출력).
-// 거절(refusal) 시 서버측 폴백으로 claude-opus-4-8 이 이어 받는다.
+// 거절(refusal) 시 서버측 폴백("default" — 거절 분류별 자동 대체 모델)이 이어 받는다.
 
 const SCHEMA = {
   type: "object",
@@ -60,10 +60,10 @@ export async function buildEditPrompt(input: {
 
   const msg = await anthropic.beta.messages
     .stream({
-      model: "claude-opus-5",
+      model: "claude-sonnet-5-5",
       max_tokens: 16000,
-      betas: ["server-side-fallback-2026-06-01"],
-      fallbacks: [{ model: "claude-opus-4-8" }],
+      betas: ["server-side-fallback-2026-07-01"],
+      fallbacks: "default" as never, // Sonnet 5.5는 배열형(특정 모델 지정)을 받지 않고 "default"(거절 분류별 자동 대체)만 지원. SDK 타입은 배열형만 선언
       thinking: { type: "adaptive" },
       output_config: { effort: "medium", format: { type: "json_schema", schema: SCHEMA } },
       system: SYSTEM,

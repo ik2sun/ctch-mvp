@@ -116,7 +116,7 @@ export async function generateScript(input: GenerateInput): Promise<ShortFormScr
   const request = (withSchema: boolean) =>
     anthropic.messages
       .stream({
-        model: "claude-opus-5",
+        model: "claude-sonnet-5-5",
         max_tokens: 16000,
         thinking: { type: "adaptive" },
         output_config: withSchema

@@ -27,7 +27,7 @@ export function engineReady(engine: ApiEngine): boolean {
 }
 
 export const ENGINE_MODEL: Record<ApiEngine, () => string> = {
-  claude: () => "claude-opus-5",
+  claude: () => "claude-sonnet-5-5",
   openai: () => process.env.GEO_OPENAI_MODEL || "gpt-5",
   // 추이 비교가 흔들리지 않도록 별칭(-latest) 대신 버전을 고정. gemini-2.5-flash는 신규 사용자 차단(2026-09-29 확인)
   gemini: () => process.env.GEO_GEMINI_MODEL || "gemini-3.8-flash",
@@ -36,7 +36,7 @@ export const ENGINE_MODEL: Record<ApiEngine, () => string> = {
 const TIMEOUT_MS = 150_000;
 
 // ---------------------------------------------------------------- Claude (web_search 서버 도구)
-// 단가: Opus 5 입력 $5 / 출력 $25 per 1M, 웹 검색 $10 / 1,000회
+// 단가: Sonnet 5.5 입력 $2 / 출력 $10 per 1M, 웹 검색 $10 / 1,000회
 async function askClaude(query: string): Promise<EngineResult> {
   const model = ENGINE_MODEL.claude();
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY!, timeout: TIMEOUT_MS });
@@ -50,10 +50,11 @@ async function askClaude(query: string): Promise<EngineResult> {
       .stream({
         model,
         max_tokens: 16000,
-        betas: ["server-side-fallback-2026-06-01"],
-        fallbacks: [{ model: "claude-opus-4-8" }],
+        betas: ["server-side-fallback-2026-07-01"],
+        fallbacks: "default" as never, // Sonnet 5.5는 배열형(특정 모델 지정)을 받지 않고 "default"(거절 분류별 자동 대체)만 지원. SDK 타입은 배열형만 선언
         thinking: { type: "adaptive" },
-        output_config: { effort: "low" },
+        // Sonnet 5.5는 시스템 프롬프트 없는 질문에 effort low·medium이면 웹 검색 없이 기억으로 답한다 — high에서 검색·인용(2026-10-04 실측: medium 검색 0, high 검색 1·인용 7·14초)
+        output_config: { effort: "high" },
         // 기본형 web_search를 쓴다. 20260209(동적 필터링)는 검색을 코드 실행으로 돌려 답변에 citations가
         // 붙지 않았고 응답도 2분 넘게 걸렸다(2026-09-29 실측). 기본형은 약 30초·인용 정상.
         tools: [

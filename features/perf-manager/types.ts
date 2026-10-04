@@ -28,7 +28,7 @@ export const KIND_LABEL: Record<BriefKind, string> = { update: "제품 업데이
 
 // ── 캠페인 매니저(광고주별) ─────────────────────────────
 
-export const PM_MODEL = "claude-opus-5-5";
+export const PM_MODEL = "claude-sonnet-5-5";
 
 // 메일 수집 조건·시장 정보(pm_client_settings) — 특정인 = 주소(mailAddresses) + 도메인 전체(mailDomains)
 // mailMatch: any = 특정인 또는 키워드 하나라도 / all = 특정인 AND 키워드(교집합)
