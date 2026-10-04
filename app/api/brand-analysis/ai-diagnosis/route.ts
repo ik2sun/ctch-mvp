@@ -10,6 +10,7 @@ import {
   TIER_LABELS,
 } from "@/features/brand-analysis/postMetrics";
 import { CONTENT_TYPES, CTA_TYPES, HOOK_TYPES, type Diagnosis } from "@/features/brand-analysis/diagnosisTypes";
+import { saveDiagnosis } from "@/features/brand-analysis/historyStore";
 
 export const maxDuration = 120;
 
@@ -103,6 +104,7 @@ export async function POST(req: Request) {
 
   try {
     const parsed = await anthropicCall(payload);
+    await saveDiagnosis(profile.username, parsed);
     return NextResponse.json(parsed);
   } catch (e) {
     const message = e instanceof Error ? e.message : "AI 진단 중 오류가 발생했어요.";

@@ -42,6 +42,10 @@ NMG(넥스트미디어그룹) 내부용 AI 기반 퍼포먼스 마케팅 대시�
 - 템플릿 스크립트는 `SF_WORK/SF_CLIPS/SF_FRAMES/SF_OUT/SF_JOB` 환경변수로 입출력을 바꿀 수 있음. Flow 다운로드 클립은 `flow_import.py`로 clips/에 정규화
 - `short-form/`은 tsconfig exclude 대상. Tailwind content에 `features/**` 포함됨
 
+## 인스타 분석 (AI 마케팅 에이전트 > 인스타 분석) — 2026-10-04 대시보드형 개편
+- 페이지 `app/(dashboard)/ai-agent/insta-analysis/page.tsx`: 위 흰 띠(검색창 + 자동 완성 드롭다운 — 분석했던 계정의 핸들·이름 부분 일치 + 내 브랜드 + '새로 분석', 키보드 ↑↓ Enter Esc / 퀵 버튼 🔥 내 브랜드 계정 분석·🕒 최근 검색 3개) → 아래 `#F4F5F7` 전폭(`-m-6`로 main 여백 상쇄) 최근 분석 히스토리(카드 auto-fill 300px / 목록 표, 보기 localStorage `ctch_insta_view`, 히스토리 내 검색). 카드: 프로필 사진·@핸들·이름, 배지(팔로워·중앙값 참여율·주간 게시·릴스 확산·AI 진단 완료·샘플), 마지막 분석일·분석자, [다시 분석]·[리포트 보기]. 리포트는 `InstaReport.tsx`(기존 본문을 옮김)로 같은 회색 영역에 열리고 '← 분석 히스토리'로 복귀. '계정 건강도' 같은 합성 점수는 만들지 않고 실제 계산 지표만 배지로 표시
+- 저장 `features/brand-analysis/historyStore.ts` + 마이그레이션 `0027_insta_analyses.sql`(**SQL Editor 실행 필요** — 없으면 분석은 되고 히스토리만 안내 문구): `insta_analyses`(계정당 최신 1행 upsert, 프로필 원본 jsonb로 리포트 재열기 시 Apify 재호출 없음, 프로필 사진은 인스타 CDN 만료 때문에 저장 시 data URL로 내려받음 80KB 이하, AI 진단 결과도 저장 — 새로 분석하면 진단은 비움) / `insta_brand_accounts`(광고주별 내 브랜드 계정). 둘 다 RLS on·정책 없음(service_role), 워크스페이스 공용·구성원 누구나 저장. API `/api/brand-analysis`(분석 후 저장) · `/history`(목록, ?q=) · `/history/[username]`(저장 리포트) · `/brand`(GET·POST) · `/ai-diagnosis`(진단 후 저장)
+
 ## SEO 분석 (AI 마케팅 에이전트 > SEO 분석) — 2026-09-16 추가
 - 페이지 `app/(dashboard)/ai-agent/seo-analysis/page.tsx`: URL 입력 → `/api/seo-analysis/audit`(기술 진단) → `/api/seo-analysis/ai-diagnosis`(Claude 진단)
 - 로직 `features/seo-analysis/`: `audit.ts`(JS 미실행 fetch, robots.txt UA별 판정, JSON-LD 검증, 정합성·온페이지·인용 적합도 휴리스틱 → PASS/FIX/INFO findings), `crawlers.ts`(검색용/학습용 UA 표), `types.ts`(AuditResult·SeoDiagnosis)
@@ -101,9 +105,16 @@ NMG(넥스트미디어그룹) 내부용 AI 기반 퍼포먼스 마케팅 대시�
 - OAuth 동의 화면이 '외부 + 테스트'면 리프레시 토큰 7일 만료 → '내부'(워크스페이스) 또는 게시
 - `media-status`·API 공용 키 "광고주별 접근 점검"은 실제 runReport로 검증. 대시보드·실시간 리포트 GA4 지표 표시는 미구현(`live: false`)
 
+## 구글 Ads 연동 (2026-10-04 추가)
+- **Developer Token은 2026-09-09 폐지** — API 등급(Test/Explorer/Basic/Standard)은 OAuth 클라이언트를 만든 GCP 프로젝트에 붙고 `developer-token` 헤더는 무시된다(향후 버전에서 거절 예정이라 보내지 않음). ctch 프로젝트(ctch-503703)는 **Explorer**(실계정 하루 2,880건, 브랜드 인증 불필요 — Basic 15,000건은 브랜드 인증 후). GA4 OAuth 클라이언트(Default Gemini Project)는 등급이 없어 쓰면 안 됨
+- 인증: 공용 구글 계정 OAuth(scope `adwords`) + `login-customer-id`=NMG MCC **9064897349**('[sub] 넥스트미디어그룹', k2s@nmg.co.kr 관리 권한). 공용 키 `shared_media_keys.google_ads` config: `login_customer_id`(필수) / 선택 `client_id`·`client_secret`(비우면 env `GOOGLE_ADS_CLIENT_*` → `GMAIL_CLIENT_*` = ctch 'CTCH Gmail 연결' 클라이언트) / 토큰 `access_token`·`refresh_token`·`expires_at`·`linked_at`·`linked_email`. 흐름 `/admin/api-keys` > 구글 Ads 저장 → '구글 계정 연결' `/api/google-ads/oauth/start` → `/oauth/callback`. 리디렉션 URI `{SITE_URL}/api/google-ads/oauth/callback`(`GOOGLE_ADS_REDIRECT_URI`로 변경 가능)을 그 OAuth 클라이언트에 등록해야 함. 광고주에는 `clients.google_ads_customer_id`만(구 `google_ads_developer_token` 미사용)
+- 데이터 `lib/google-ads/{auth,client,aggregate}.ts`: REST `v25` `googleAds:searchStream`(GAQL). 캠페인 일별(`campaign` + segments.date) / 광고그룹·광고 기간 합계. 지표 cost_micros÷1e6=광고비(계정 통화 — 점검에서 KRW 아니면 표시), conversions·conversions_value=전환·매출, 도달 없음. PMax 등 광고그룹 없는 캠페인은 캠페인 행에만. `login-customer-id` 헤더로 USER_PERMISSION_DENIED면 헤더 유무를 바꿔 재시도하고 계정별로 기억. 오류 코드 NOT_APPROVED(`CLOUD_PROJECT_NOT_APPROVED_FOR_PRODUCTION` — 9/9 이후 등급 올린 일부 프로젝트에 구글 측 알려진 이슈)·FORBIDDEN·RATE_LIMITED
+- 라우트: `/api/google-ads/summary`(대시보드, 호출 2~4회, 서버 캐시 10분) / `/insights`(실시간 리포트 MetaHierarchy, 호출 5회) / `media-status`·공용 키 '광고주별 접근 점검'은 `customer` + 활성 캠페인 조회로 실검증(MCC 하위 `customer_client` 목록 포함). 대시보드 `loadGads`(세션 캐시 `ctch_gads_summary_`), 실시간 리포트 `CHANNELS`에 google_ads. 미디어믹스·상관관계 분석에는 아직 미포함
+- **실데이터 미검증(2026-10-04)** — 구글 계정 연결 후 첫 조회로 광고비가 구글 Ads 화면과 맞는지 대조할 것
+
 ## 대시보드 개편 (2026-10-01)
 - `app/(dashboard)/page.tsx`: 필터 한 줄(기간·매체 칩·비교 기준 직전 기간/전월 동기간) → KPI 5종(광고비·매출·ROAS·전환·CPA, 증감+스파크라인) → 매체별 효율 표(정렬, 예산 비중 막대, ROAS·CPA 증감) → 예산 비중 vs 매출 기여 + 규칙 기반 인사이트 → 일별 추이(광고비 매체별 누적 / ROAS 매체별 선, 이중 축 없음) → AI 액션 플랜(매체별 직전·전월 수치 전달) → 연동 상태 접힘
-- 로직·컴포넌트는 `features/dashboard/`(`analysis.ts`가 계산·인사이트 규칙, API 비용 없음). 연동된 매체는 기본 켜짐, 구글 Ads는 `NOT_READY`(준비 중 행)
+- 로직·컴포넌트는 `features/dashboard/`(`analysis.ts`가 계산·인사이트 규칙, API 비용 없음). 연동된 매체는 기본 켜짐(구글 Ads도 2026-10-04부터 조회 — `NOT_READY`는 비어 있음)
 - 인사이트 규칙: 광고비 0인데 클릭 있음 / 전환·매출 0 / 광고비↑·매출↓ / 매체 ROAS ±20% / CPA +25%(전환 5건 이상) / 예산 비중 vs 매출 기여 ±10%p / 최고 효율 매체. 매체당 최대 2개, 총 6개. 원인 추정 문장 금지
 - 차트·색 작업은 프로젝트 스킬 `ctch-dataviz`(`.claude/skills/ctch-dataviz`)를 먼저 로드. 매체 색은 검증된 고정값(`MEDIA_COLORS`)
 - 기존 `PeriodComparison`·`KeyMetricsBarChart`·`TrendChart`(이중 축)·`MetricTrendGrid`·`DeltaBadge`는 이제 어느 화면에서도 쓰지 않음(파일만 남김)
@@ -166,11 +177,19 @@ NMG(넥스트미디어그룹) 내부용 AI 기반 퍼포먼스 마케팅 대시�
 - 광고주 브랜드 색(2026-10-01): `clients.brand_color`(#RRGGBB, **마이그레이션 `0020_client_brand_color.sql` — SQL Editor 실행 필요**). 광고주 관리 기본 정보의 "브랜드 색"(견본 12색·색 선택·hex)에서 저장 → 사이드바 현재 광고주·우측 상단 광고주 전환의 이니셜 박스 색. 비우면 이름 해시로 범주 팔레트 자동 색(`brandColorOf`), 밝은 색이면 글자 자동 어둡게(`onColor`). 마이그레이션 전에도 목록 조회·저장이 깨지지 않게 brand_color 없이 재시도
 - 대시보드 속도(2026-10-01): 요약 API 4종에 전월 동기 생략 옵션(meta-summary POST `withMonth:false`, naver·kakao·gfa GET `month=0`; 기본은 포함 — 미디어믹스 등 기존 호출 그대로). 대시보드는 비교 기준이 "전월 동기"일 때만 전월을 받고 캐시 키에 `_nm`(미디어믹스와 같은 캐시 이름이라 섞이지 않게). 요약 API 서버 메모리 캐시 10분(소유 확인 뒤 조회). 네이버 일별 근사 상위 20→8 캠페인(네이버 요청 대기열 1초 간격이라 12건≈12초 절약). dashboard-smart는 lastMonth 없을 때도 동작. 카카오는 보고서 5초/1회 제한이 근본 원인이라 최소 ~10초
 
+## SA 입찰 시뮬레이터 (SA 관리 > 입찰 시뮬레이터) — 2026-10-04
+- 페이지 `app/(dashboard)/sa-simulator/page.tsx` → `features/sa-simulator/BidSimulator.tsx`(+ `LadderCharts.tsx`, 입력부 `SimulatorForm.tsx`). 입력부 2단(2026-10-04 개편): 좌측 폼(최대 680px — 매체·기기 **다중 선택 칩**, 세로로 긴 키워드 입력 360px, 시뮬레이션) / 우측 최근 시뮬레이션(localStorage `ctch_sa_sim_history` 8개, 눌러서 재실행)·입력 팁. 조합(네이버 모바일·네이버 PC·구글 전체 기기)을 한 번에 돌리고 조합 비교 카드로 상세 전환(네이버 기기 조합은 순차, 구글은 동시). 흐름: 키워드 최대 20개 → 시뮬레이션 → 조합 비교 → 합계 KPI(월 예상) → 키워드별 표(순위 칩 클릭·입찰가 직접 입력 시 0.7초 뒤 재계산, 전환율·객단가 가정 입력 시 예상 전환·ROAS) → 키워드 선택 시 입찰가 곡선(클릭·비용 차트 2개, 로그 눈금, 그래프 클릭 = 입찰가 설정, 포화 입찰가·한 단계 올릴 때 추가 클릭당 비용, 표로 보기) + 연관 키워드 칩(누르면 추가·재계산). 광고 계정은 바꾸지 않음(읽기 전용)
+- 네이버 `lib/naver-ad/estimate.ts` + `/api/sa-simulator/naver`(action analyze|plan|ladder, 서버 캐시 30분): `/keywordstool`(검색량·경쟁·연관) · `/estimate/average-position-bid/keyword`(1~5위) · `exposure-minimum-bid`·`median-bid`(period MONTH) · `/estimate/performance/keyword`(곡선, 70원~1위가×1.5 로그 간격 41점, 응답 키 `estimate`/`estiamte` 둘 다) · `/estimate/performance-bulk`(키워드별). 형식은 공식 java-sample 기준. **키워드는 공백을 빼고 보낸다** — 공백이 있으면 전 순위 70원·실적 0으로 옴(실측). 추천 입찰가 = 3위 평균 입찰가. 견적은 시장 단위라 계정 순서: 광고주 고객 ID → 공용 키 발급 계정(owner_customer_id) → 고객 ID가 있는 다른 광고주. 키워드 4개 analyze ≈ 7초(네이버 대기열 1초). 실적 견적은 월간으로 표시(검색량과 최대 노출이 같은 규모 — 관리자 화면 대조는 미실시)
+- 구글 `lib/google-ads/keywordPlanner.ts` + `/api/sa-simulator/google`: `:generateKeywordIdeas`(한국 2410·한국어 1012·구글 검색, 검색량·경쟁·상단 노출 입찰가 낮음~높음) · `:generateKeywordForecastMetrics`(수동 CPC·EXACT, 다음 30일 합계 — 키워드별이 아니라 묶음 합계, 곡선은 버튼으로 8건). 조회 계정 = 광고주 Customer ID → MCC. **Explorer 등급은 키워드 플래너 불가 → `PlannerLockedError`/`code: PLANNER_LOCKED`로 Basic 신청 안내**(실호출 미검증). `client.ts gadsCall`(suffix `/googleAds:searchStream` 또는 `:rpc`)로 공통화
+- 2026-10-04 'AI 마케팅 에이전트 > 소재 생성' 메뉴 삭제(페이지·코드는 남김, `/ai-agent/creative` 주소로는 열림)
+
 ## 로그인·권한 (2026-10-01 개편)
 - 로그인은 **구글 계정(@nmg.co.kr)만**(`app/(auth)/login`, hd 힌트 + `/auth/callback`·미들웨어에서 도메인 외 계정 로그아웃). 비밀번호 가입 없음(`/signup`은 /login으로)
 - 워크스페이스 = 소유자(`SUPERADMIN_EMAIL` = k2s@nmg.co.kr) 데이터 하나. nmg 계정은 자동 승인 뷰어로 **읽기만**, 저장·수정·삭제·실제 예산 변경·공용 키·회원 관리는 소유자만. 회원 관리에서 거절한 계정은 거절 유지
 - DB: `0021_workspace_sharing.sql` — user_id 칸이 있는 테이블 전부 `ws_read`(user_id=`workspace_owner_id()` + `is_workspace_member()`) / `ws_insert·update·delete`(소유자 본인). 소유자 이메일은 함수 안에 하드코딩 → 바꿀 땐 env와 함께. 새 user_id 테이블을 만들면 0021의 DO 블록을 다시 실행
 - 서버: `lib/workspace.ts` — 읽기 라우트는 `.eq("user_id", await dataOwnerId(user))`, 쓰기 라우트는 첫 줄 `ownerOnly(user)`(403). 미들웨어용 순수 판정은 `lib/workspaceEmail.ts`(edge에서 admin 클라이언트 import 금지)
 - 화면: `features/workspace/WorkspaceContext.tsx` `useCanEdit()`·`EditGate`(fieldset disabled). 헤더에 "보기 전용" 표시. 그 외 화면의 저장 버튼은 RLS가 막는다(오류 문구로 표시)
+- **회원 관리**(2026-10-04 개편, `/admin/members`, 소유자만): 승인·역할 선택 없음 — 회사 계정 표(구글 이름·사진, 권한 관리자/보기 전용/차단됨, 최근 활동, 마지막 로그인, 처음 로그인, 차단·차단 해제) + 접힌 '이전 가입 방식 계정'(비밀번호 시절 non-nmg, 로그인 불가). 마지막 로그인 = `auth.users.last_sign_in_at`(새로 로그인할 때만 바뀜), 최근 활동 = `profiles.last_seen_at`(마이그레이션 `0026_profiles_last_seen.sql` — SQL Editor 실행 필요, `ensureProfile`이 사용자당 5분 간격 기록). API `/api/admin/members` PATCH action=block|unblock
+- `ensureProfile` 버그 수정(2026-10-04): 소유자가 이미 superadmin이면 아래 비소유자 보정으로 내려가 viewer로 강등 → 요청마다 superadmin↔viewer 반복(관리 메뉴·`getKeyManager`가 번갈아 막힘). 소유자는 항상 superadmin으로 early return
 - 미들웨어는 `/api/cron/*`을 로그인 없이 통과시킨다(라우트가 `CRON_SECRET` 검증)
 - **Vercel Hobby 요금제는 크론을 하루 1회까지만 허용**(시간 단위 스케줄이 있으면 Git 배포가 'Deployment failed'로 거절됨). `vercel.json`은 매일 09:00·09:10·09:30 KST(경쟁사·브랜드 키워드·AI 인용) + 월 10:00 KST(최신 정보). 1·3·6·12시간 점검 주기는 Pro 전환 전까지 사실상 하루 1회. Vercel 프로젝트는 GitHub `ik2sun/ctch-mvp` main에 연결(2026-10-01), push = 운영 배포

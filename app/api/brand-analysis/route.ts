@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { fetchInstagramProfile } from "@/features/brand-analysis/apifyClient";
+import { saveAnalysis } from "@/features/brand-analysis/historyStore";
+
+export const maxDuration = 120;
 
 export async function POST(req: Request) {
   const supabase = await createClient();
@@ -16,7 +19,9 @@ export async function POST(req: Request) {
 
   try {
     const profile = await fetchInstagramProfile(String(input));
-    return NextResponse.json(profile);
+    // 히스토리 저장(0027 미실행이면 건너뜀) — 실패해도 분석 결과는 그대로 돌려준다
+    const saveError = await saveAnalysis(profile, user.email ?? null);
+    return NextResponse.json({ ...profile, saved: !saveError });
   } catch (e) {
     const message = e instanceof Error ? e.message : "계정 분석에 실패했어요.";
     return NextResponse.json({ error: message }, { status: 400 });
