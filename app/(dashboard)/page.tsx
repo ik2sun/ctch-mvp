@@ -2,18 +2,21 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useClients } from "@/features/clients/ClientContext";
 import { listReports } from "@/features/ai-report/reportData";
 import { getSessionCache, setSessionCache } from "@/features/dashboard/sessionCache";
 import type { DailyPoint, Totals } from "@/features/ai-report/metaTypes";
-import { MEDIA_COLORS, buildInsights, combinedDaily, efficiency, sumTotals, type MediaSeries } from "@/features/dashboard/analysis";
+import { MEDIA_COLORS, buildInsights, combinedDaily, efficiency, sumTotals, type Insight, type MediaSeries } from "@/features/dashboard/analysis";
 import { KpiStrip } from "@/features/dashboard/KpiStrip";
 import { MediaEfficiencyTable } from "@/features/dashboard/MediaEfficiencyTable";
-import { BudgetShareChart } from "@/features/dashboard/BudgetShareChart";
-import { DailyRoasChart, DailySpendChart, MediaLegend } from "@/features/dashboard/DailyMediaCharts";
 import { InsightPanel } from "@/features/dashboard/InsightPanel";
 import { Card, MediaChip, Segmented } from "@/features/dashboard/ui";
-import { AiPlanView, type AiPlan } from "@/features/dashboard/AiPlanView";
+import { AiPlanView, type AiPlan, type BudgetMove } from "@/features/dashboard/AiPlanView";
+import { TrendShareCard } from "@/features/dashboard/TrendShareCard";
+import { MediaDrilldown, fetchChannelInsights } from "@/features/dashboard/MediaDrilldown";
+import { RebalanceDialog } from "@/features/dashboard/RebalanceDialog";
+import type { MetaHierarchy, MetaRow } from "@/features/ai-report/metaTypes";
 
 type Period = { since: string; until: string };
 
@@ -74,6 +77,9 @@ const COMPARE_LABEL: Record<CompareBase, string> = { prev: "직전 기간", mont
 
 export default function DashboardHome() {
   const { selected } = useClients();
+  const router = useRouter();
+  const [rebalance, setRebalance] = useState<(BudgetMove & { fromKey: string; toKey: string }) | null>(null);
+  const [creativeBusy, setCreativeBusy] = useState<string | null>(null);
 
   const [periodKey, setPeriodKey] = useState("7d");
   const [compareBase, setCompareBase] = useState<CompareBase>("prev");
@@ -613,6 +619,45 @@ export default function DashboardHome() {
     loadGads(periodKey, true);
   };
 
+  // AI 예산 이동 제안 → 매체 키로(라벨 일치). 시리즈에 없는 매체면 버린다.
+  const keyOfLabel = (label: string) => series.find((x) => x.label === label || label.includes(x.label) || x.label.includes(label))?.key ?? null;
+  const moves = (aiPlan?.budgetMoves ?? [])
+    .map((m) => ({ ...m, fromKey: keyOfLabel(m.from) ?? "", toKey: keyOfLabel(m.to) ?? "" }))
+    .filter((m) => m.fromKey && m.toKey && m.fromKey !== m.toKey);
+  const periodDays = Math.max(1, Math.round((Date.parse(period.until()) - Date.parse(period.since())) / 86400000) + 1);
+
+  // 🎨 숏폼 만들기 — 그 매체의 ROAS 1위 소재(전환 있는 것) 정보를 소재 생성 > 숏폼 폼에 채워 넘긴다(sessionStorage → /ai-agent/creative)
+  const toShortform = (mediaKey: string, ad: MetaRow | null, data: MetaHierarchy | null, why?: string) => {
+    const s = series.find((x) => x.key === mediaKey);
+    const roas = (r: { cost: number; revenue: number }) => (r.cost > 0 ? `${Math.round((r.revenue / r.cost) * 100)}%` : "—");
+    const others = (data?.ads ?? []).filter((a) => a.cost > 0 && a.conversions > 0 && a.id !== ad?.id).sort((a, b) => b.revenue / b.cost - a.revenue / a.cost).slice(0, 2);
+    const notes = [
+      `${s?.label ?? mediaKey} 성과 기반 숏폼 — 기간 ${period.since()} ~ ${period.until()}${why ? ` · ${why}` : ""}`,
+      ad ? `성과 1위 소재: "${ad.name}" (광고비 ₩${Math.round(ad.cost).toLocaleString("ko-KR")}, 전환 ${ad.conversions.toFixed(0)}, ROAS ${roas(ad)})${ad.campaignName ? ` · 캠페인 ${ad.campaignName}` : ""}` : "",
+      others.length ? `참고 소재: ${others.map((o) => `"${o.name}" ROAS ${roas(o)}`).join(", ")}` : "",
+      "소재 이름에서 드러나는 훅·모델·콘텐츠 유형을 살려 같은 구도로 기획해 주세요.",
+    ].filter(Boolean);
+    try {
+      sessionStorage.setItem("ctch_shortform_prefill", JSON.stringify({ title: `${selected?.name ?? ""} ${s?.label ?? ""} 성과 소재 재해석`.trim(), brief: { brand: selected?.name ?? "", notes: notes.join("\n") } }));
+    } catch {
+      /* 무시 */
+    }
+    router.push("/ai-agent/creative");
+  };
+  const onCreative = async (it: Insight) => {
+    if (!selected?.id || !it.mediaKey) return;
+    setCreativeBusy(it.id);
+    try {
+      const data = await fetchChannelInsights(it.mediaKey, selected.id, period.since(), period.until());
+      const best = [...(data.ads ?? [])].filter((a) => a.cost > 0 && a.conversions > 0).sort((a, b) => b.revenue / b.cost - a.revenue / a.cost)[0] ?? null;
+      toShortform(it.mediaKey, best, data, it.title);
+    } catch {
+      toShortform(it.mediaKey, null, null, it.title); // 소재 조회가 안 돼도 매체 성과만으로 넘긴다
+    } finally {
+      setCreativeBusy(null);
+    }
+  };
+
   const connectedOk = media ? media.filter((m) => m.status === "ok").length : 0;
   const problems = media?.filter((m) => m.status === "expired" || m.status === "error") ?? [];
 
@@ -691,66 +736,16 @@ export default function DashboardHome() {
         <>
           <KpiStrip total={hasData ? total : null} totalPrev={hasData ? totalPrev : null} daily={daily} compareLabel={compareShort} loading={anyLoading} />
 
-          <Card
-            title="매체별 효율"
-            sub={`${periodText} · 증감은 ${compareLabel} · 열 제목을 누르면 정렬돼요`}
-            right={
-              hasData ? (
-                <span className="text-[12px] text-ink-muted">
-                  {series.length}개 매체 합산 · 매체별 전환 기준이 달라 합계 매출은 중복될 수 있어요
-                </span>
-              ) : null
-            }
-          >
-            {hasData ? (
-              <MediaEfficiencyTable rows={effRows} total={total} totalPrev={totalPrev} inactive={inactive} highlight={highlight} onHighlight={setHighlight} />
-            ) : (
-              <p className="py-10 text-center text-[15px] text-ink-muted">{anyLoading ? "매체 데이터를 불러오는 중…" : "표시할 매체 데이터가 없어요. 매체 필터와 연동 상태를 확인해 주세요."}</p>
-            )}
-          </Card>
-
-          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-            <Card title="예산 비중 vs 매출 기여" sub="같은 예산으로 누가 더 많이 벌고 있나">
-              <BudgetShareChart rows={effRows} highlight={highlight} onHighlight={setHighlight} />
-            </Card>
-            <Card title="AI 인사이트 보드" sub={`데이터에서 확인된 신호와 해야 할 일 · ${compareLabel}`}>
-              <InsightPanel insights={insights} colors={MEDIA_COLORS} onHighlight={setHighlight} />
-            </Card>
-          </div>
-
-          <Card
-            title="일별 추이"
-            sub={series.some((s) => s.dailyApprox) ? "네이버 SA 일별 값은 상위 캠페인 기준 근사치예요" : periodText}
-            right={hasData ? <MediaLegend series={series} highlight={highlight} onHighlight={setHighlight} /> : null}
-          >
-            {daily.length > 1 ? (
-              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-                <div>
-                  <p className="mb-3 text-[15px] font-semibold text-[#1A1A1A]">광고비 · 매체별 누적</p>
-                  <DailySpendChart series={series} highlight={highlight} />
-                </div>
-                <div>
-                  <p className="mb-3 text-[15px] font-semibold text-[#1A1A1A]">ROAS · 매체별</p>
-                  <DailyRoasChart series={series} highlight={highlight} />
-                </div>
-              </div>
-            ) : (
-              <p className="py-8 text-center text-[15px] text-ink-muted">
-                {anyLoading ? "불러오는 중…" : periodKey === "1d" ? "일별 추이는 최근 7일·30일에서 볼 수 있어요." : "표시할 일별 데이터가 없어요."}
-              </p>
-            )}
-          </Card>
-
-          {/* AI 액션 플랜 */}
+          {/* AI 액션 플랜 — 최상단(KPI 바로 아래) */}
           <Card
             title="AI 액션 플랜"
-            sub="매체별 수치와 비교 기간 변화를 바탕으로 정리해요"
+            sub={`매체별 수치와 ${compareLabel} 변화로 정리한 이번 주 할 일`}
             right={
               <button
                 type="button"
                 onClick={() => loadAiPlan(true)}
                 disabled={aiLoading || !hasData}
-                className="flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-[15px] text-ink-soft transition hover:border-signal hover:text-signal disabled:opacity-50"
+                className="flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-[14px] text-ink-soft transition hover:border-signal hover:text-signal disabled:opacity-50"
               >
                 <i className={`ti ${aiLoading ? "ti-loader-2 animate-spin" : "ti-sparkles"} text-[15px]`} aria-hidden />
                 다시 분석
@@ -758,16 +753,57 @@ export default function DashboardHome() {
             }
           >
             {!hasData ? (
-              <p className="py-6 text-center text-[15px] text-ink-muted">분석할 매체 데이터가 없어요.</p>
+              <p className="py-6 text-center text-[15px] text-ink-muted">{anyLoading ? "매체 데이터를 불러오는 중…" : "분석할 매체 데이터가 없어요."}</p>
             ) : aiError ? (
               <p className="rounded-lg border border-bad/20 bg-bad/5 px-3.5 py-2.5 text-[15px] text-bad">{aiError}</p>
             ) : aiLoading && !aiPlan ? (
               <p className="py-6 text-center text-[15px] text-ink-muted">AI가 분석 중이에요…</p>
             ) : aiPlan ? (
-              <AiPlanView plan={aiPlan} />
+              <AiPlanView plan={aiPlan} moves={moves} onRebalance={selected?.id ? setRebalance : undefined} />
             ) : (
               <p className="py-6 text-center text-[15px] text-ink-muted">데이터가 모이면 자동으로 분석해요.</p>
             )}
+          </Card>
+
+          <Card
+            title="매체별 효율"
+            sub={`${periodText} · 증감은 ${compareLabel} · 열 제목을 누르면 정렬 · 행을 누르면 캠페인·소재 상세`}
+            right={hasData ? <span className="text-[12px] text-ink-muted">{series.length}개 매체 합산 · 매체별 전환 기준이 달라 합계 매출은 중복될 수 있어요</span> : null}
+          >
+            {hasData ? (
+              <MediaEfficiencyTable
+                rows={effRows}
+                total={total}
+                totalPrev={totalPrev}
+                inactive={inactive}
+                highlight={highlight}
+                onHighlight={setHighlight}
+                renderDetail={
+                  selected?.id
+                    ? (key) => (
+                        <MediaDrilldown
+                          channel={key}
+                          label={series.find((x) => x.key === key)?.label ?? key}
+                          clientId={selected.id}
+                          since={period.since()}
+                          until={period.until()}
+                          onShortform={(ad, data) => toShortform(key, ad, data)}
+                        />
+                      )
+                    : undefined
+                }
+              />
+            ) : (
+              <p className="py-10 text-center text-[15px] text-ink-muted">{anyLoading ? "매체 데이터를 불러오는 중…" : "표시할 매체 데이터가 없어요. 매체 필터와 연동 상태를 확인해 주세요."}</p>
+            )}
+          </Card>
+
+          <Card title="추이 × 예산 비중" sub={series.some((s) => s.dailyApprox) ? "네이버 SA 일별 값은 상위 캠페인 기준 근사치예요 · 날짜를 누르면 그날의 예산 비중과 매출 기여" : "날짜를 누르면 그날의 예산 비중과 매출 기여를 보여줘요"}>
+            {hasData ? <TrendShareCard series={series} rows={effRows} highlight={highlight} onHighlight={setHighlight} /> : <p className="py-8 text-center text-[15px] text-ink-muted">{anyLoading ? "불러오는 중…" : "표시할 데이터가 없어요."}</p>}
+          </Card>
+
+          <Card title="AI 인사이트 보드" sub={`데이터에서 확인된 신호와 해야 할 일 · ${compareLabel}`}>
+            <InsightPanel insights={insights} colors={MEDIA_COLORS} onHighlight={setHighlight} columns onCreative={onCreative} creativeBusy={creativeBusy} />
           </Card>
 
           {/* 연동 상태 · 바로가기 */}
@@ -806,6 +842,20 @@ export default function DashboardHome() {
             </div>
           </div>
         </>
+      )}
+
+      {rebalance && selected?.id && (
+        <RebalanceDialog
+          clientId={selected.id}
+          clientName={selected.name}
+          media={series.map((x) => ({ key: x.key, label: x.label, color: x.color, cost: x.current.cost }))}
+          days={periodDays}
+          fromKey={rebalance.fromKey}
+          toKey={rebalance.toKey}
+          percent={rebalance.percent}
+          reason={rebalance.reason}
+          onClose={() => setRebalance(null)}
+        />
       )}
     </div>
   );

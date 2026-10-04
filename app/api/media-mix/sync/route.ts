@@ -12,7 +12,7 @@ import type { MediaSyncPlan, MediaSyncResult } from "@/features/media-mix/syncTy
 // 뷰어는 실행 불가. 실행 결과는 media_mix_syncs(0018)에 남긴다(테이블이 없으면 기록만 건너뜀).
 export const maxDuration = 120;
 
-const LABEL: Record<string, string> = { meta: "메타", naver: "네이버 SA", gfa: "GFA", kakao: "카카오모먼트" };
+const LABEL: Record<string, string> = { meta: "메타", naver: "네이버 SA", gfa: "GFA", kakao: "카카오모먼트", google_ads: "구글 Ads" }; // 구글 Ads는 수동 반영 안내(예산 변경 API 미연동)
 
 type Body = {
   action: "plan" | "apply";

@@ -1,6 +1,7 @@
 "use client";
 
 // 규칙 기반 인사이트 카드 — 상태는 색만이 아니라 아이콘+라벨로 함께 표시한다.
+// onCreative를 주면 '기회'(매체 지정) 카드에 [🎨 이 소재와 유사한 숏폼 생성하기] 퀵 버튼 — 그 매체의 성과 1위 소재 정보를 소재 생성으로 넘긴다.
 import type { Insight, InsightTone } from "./analysis";
 
 const TONE: Record<InsightTone, { icon: string; label: string; cls: string; dot: string }> = {
@@ -15,11 +16,15 @@ export function InsightPanel({
   colors,
   onHighlight,
   columns = false,
+  onCreative,
+  creativeBusy,
 }: {
   insights: Insight[];
   colors: Record<string, string>;
   onHighlight: (key: string | null) => void;
   columns?: boolean; // 넓은 카드에선 2~3단 Masonry(한 줄 글자 수를 읽기 좋게 유지)
+  onCreative?: (it: Insight) => void;
+  creativeBusy?: string | null; // 처리 중인 인사이트 id
 }) {
   if (insights.length === 0) {
     return (
@@ -51,6 +56,16 @@ export function InsightPanel({
                 {it.title}
               </p>
               <p className="mt-1 text-[15px] leading-relaxed text-ink-soft">{it.detail}</p>
+              {onCreative && it.tone === "good" && it.mediaKey && (
+                <button
+                  type="button"
+                  onClick={() => onCreative(it)}
+                  disabled={!!creativeBusy}
+                  className="mt-2.5 inline-flex items-center gap-1.5 rounded-full border border-signal/30 bg-signal-soft/60 px-3 py-1.5 text-[13px] font-medium text-signal transition hover:border-signal disabled:opacity-50"
+                >
+                  {creativeBusy === it.id ? "성과 1위 소재를 찾는 중…" : "🎨 이 소재와 유사한 숏폼 생성하기"}
+                </button>
+              )}
             </div>
           </li>
         );

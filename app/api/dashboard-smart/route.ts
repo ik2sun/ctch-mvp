@@ -33,7 +33,8 @@ const SYSTEM = `당신은 퍼포먼스 마케팅 대시보드용 AI 어시스턴
 {
   "issues": ["이번 주 주요 이슈 1~3개, 각각 수치 근거 포함"],
   "urgentActions": ["즉시 조치가 필요한 항목 (없으면 빈 배열)"],
-  "nextWeekActions": ["다음 주 추천 액션 1~3개"]
+  "nextWeekActions": ["다음 주 추천 액션 1~3개"],
+  "budgetMoves": [{ "from": "예산을 줄일 매체 이름", "to": "늘릴 매체 이름", "percent": 20, "reason": "수치 근거 한 문장" }]
 }
 
 작성 규칙:
@@ -41,7 +42,9 @@ const SYSTEM = `당신은 퍼포먼스 마케팅 대시보드용 AI 어시스턴
 - urgentActions: CPA 급등, ROAS 급락, 예산 소진 이상 등 즉시 대응이 필요한 신호가 있을 때만 작성. 없으면 빈 배열로 둘 것 — 억지로 만들지 말 것
 - nextWeekActions: issues/urgentActions에서 자연스럽게 이어지는 실행 가능한 제안
 - 데이터로 확인할 수 없는 원인은 추측하지 말 것
-- 매체가 1개뿐이면 매체 간 비교는 하지 말 것`;
+- 매체가 1개뿐이면 매체 간 비교는 하지 말 것
+- 각 항목은 첫 문장에 핵심 행동이나 결론을 쓰고, 다음 문장에 근거 수치를 쓸 것(화면에서 첫 문장을 굵게 표시함)
+- budgetMoves: 매체 간 ROAS·CPA 차이가 뚜렷하고(예: ROAS 1.3배 이상 차이) 양쪽 다 광고비가 충분할 때만 최대 1~2개. from/to는 입력 '매체별'의 매체 이름을 그대로 쓰고, percent는 from 매체 광고비 중 옮길 비율(10~30). 근거가 약하면 빈 배열 — 억지로 만들지 말 것`;
 
 // 구조화 출력 — 응답이 항상 이 모양의 JSON(코드펜스·설명 문장 없음)
 const PLAN_SCHEMA = {
@@ -50,8 +53,17 @@ const PLAN_SCHEMA = {
     issues: { type: "array", items: { type: "string" } },
     urgentActions: { type: "array", items: { type: "string" } },
     nextWeekActions: { type: "array", items: { type: "string" } },
+    budgetMoves: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: { from: { type: "string" }, to: { type: "string" }, percent: { type: "number" }, reason: { type: "string" } },
+        required: ["from", "to", "percent", "reason"],
+        additionalProperties: false,
+      },
+    },
   },
-  required: ["issues", "urgentActions", "nextWeekActions"],
+  required: ["issues", "urgentActions", "nextWeekActions", "budgetMoves"],
   additionalProperties: false,
 };
 
@@ -75,7 +87,7 @@ export async function POST(req: Request) {
   };
 
   if (!channels || channels.length === 0) {
-    return NextResponse.json({ issues: [], urgentActions: [], nextWeekActions: [] });
+    return NextResponse.json({ issues: [], urgentActions: [], nextWeekActions: [], budgetMoves: [] });
   }
 
   const payload = {
