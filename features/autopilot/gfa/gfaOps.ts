@@ -10,6 +10,7 @@ import {
   type PlanAdSet,
   type RawTemplate,
 } from "./types";
+import type { GfaAdSetDetail, GfaCodeBook } from "./adSetSheet";
 
 type Page<T> = { content?: T[]; totalPages?: number; last?: boolean };
 const opt = (c: GfaCredentials) => ({ accessToken: c.accessToken, managerAccountNo: c.managerAccountNo });
@@ -35,11 +36,81 @@ export async function loadContext(c: GfaCredentials, campaignNo: number): Promis
     listCampaigns(c),
     gfaRequest<GfaAdSetSample>(`${base(c)}/adSets/sampleByCampaignNo`, { ...opt(c), query: { campaignNo } }),
     gfaRequest<GfaTypeInfo>(`${base(c)}/adSets/typeInfoByCampaignNo`, { ...opt(c), query: { campaignNo } }),
-    gfaRequest<Page<{ no: number; name: string }>>(`${base(c)}/adSets`, { ...opt(c), query: { campaignNo, page: 0, size: 100 } }),
+    listAdSets(c, campaignNo),
   ]);
   const campaign = campaigns.find((x) => x.no === campaignNo);
   if (!campaign) throw new Error("이 광고계정에서 캠페인을 찾지 못했어요.");
-  return { campaign, sample, types, existingAdSets: (sets.content ?? []).map((s) => ({ no: s.no, name: s.name })) };
+  return { campaign, sample, types, existingAdSets: sets };
+}
+
+// 캠페인의 광고그룹 전부(100개씩, 최대 1,000개) — 벌크 템플릿 미리 채우기·기존 광고그룹 재사용 판정에 쓴다
+async function listAdSets(c: GfaCredentials, campaignNo: number): Promise<GfaContext["existingAdSets"]> {
+  const out: GfaContext["existingAdSets"] = [];
+  for (let page = 0; page < 10; page++) {
+    const p = await gfaRequest<Page<{ no: number; name: string; deleted?: boolean; activated?: boolean; status?: string }>>(`${base(c)}/adSets`, {
+      ...opt(c),
+      query: { campaignNo, page, size: 100 },
+    });
+    for (const s of p.content ?? []) if (!s.deleted) out.push({ no: s.no, name: s.name, activated: s.activated, status: s.status });
+    if (p.last !== false || (p.totalPages ?? 1) <= page + 1) break;
+  }
+  return out;
+}
+
+// 광고그룹 상세(타겟팅·입찰·일정 전 항목) — 목록 응답에는 타겟팅이 없어 하나씩 조회. 동시 4건
+export async function getAdSetDetails(c: GfaCredentials, campaignNo: number, nos: number[]): Promise<GfaAdSetDetail[]> {
+  const out: GfaAdSetDetail[] = [];
+  for (let i = 0; i < nos.length; i += 4) {
+    const batch = await Promise.all(nos.slice(i, i + 4).map((no) => gfaRequest<GfaAdSetDetail>(`${base(c)}/adSets/${no}`, opt(c))));
+    out.push(...batch.filter((d) => Number(d.campaignNo) === campaignNo));
+  }
+  return out;
+}
+
+// 코드표(관심사·구매 의도·지역·확장 데모·게재 위치 = 계정 무관, 고객 파일 = 광고계정별) — 서버 메모리 12시간
+type Tree = { code: number; keyword: string; depth: number; children?: Tree[] };
+type LocTree = { rcode: string; location: string; childLocations?: LocTree[] };
+let COMMON_BOOK: { at: number; book: Omit<GfaCodeBook, "adidLibraries"> } | null = null;
+
+export async function loadCodeBook(c: GfaCredentials): Promise<GfaCodeBook> {
+  if (!COMMON_BOOK || Date.now() - COMMON_BOOK.at > 12 * 3600_000) {
+    const [interests, purchase, locations, extDemo, placements] = await Promise.all([
+      gfaRequest<Tree[]>(`/targetings/interests`, opt(c)),
+      gfaRequest<Tree[]>(`/targetings/purchaseIntent`, opt(c)),
+      gfaRequest<LocTree[]>(`/targetings/locations`, opt(c)),
+      gfaRequest<Record<string, { code: number; keyword: string }[]>>(`/targetings/extendedDemo`, opt(c)),
+      gfaRequest<{ value: string; name: string }[]>(`/targetings/placementGroupCodes`, opt(c)),
+    ]);
+    const flatTree = (list: Tree[], key: (t: Tree) => string) => {
+      const m: Record<string, string> = {};
+      const walk = (t: Tree, path: string[]) => {
+        const p = [...path, t.keyword];
+        m[key(t)] = p.join(" > ");
+        (t.children ?? []).forEach((x) => walk(x, p));
+      };
+      list.forEach((t) => walk(t, []));
+      return m;
+    };
+    const loc: Record<string, string> = {};
+    const walkLoc = (t: LocTree, path: string[]) => {
+      const p = [...path, t.location];
+      loc[t.rcode] = p.join(" ");
+      (t.childLocations ?? []).forEach((x) => walkLoc(x, p));
+    };
+    (locations ?? []).forEach((t) => walkLoc(t, []));
+    COMMON_BOOK = {
+      at: Date.now(),
+      book: {
+        interests: flatTree(interests ?? [], (t) => `${t.depth}-${t.code}`),
+        purchase: flatTree(purchase ?? [], (t) => String(t.code)),
+        locations: loc,
+        extDemo: Object.fromEntries(Object.values(extDemo ?? {}).flat().map((x) => [String(x.code), x.keyword])),
+        placements: Object.fromEntries((placements ?? []).map((x) => [x.value, x.name])),
+      },
+    };
+  }
+  const libs = await gfaRequest<Page<{ no: number; name: string }>>(`${base(c)}/customTargets/adidLibraries`, { ...opt(c), query: { page: 0, size: 100 } }).catch(() => ({ content: [] }));
+  return { ...COMMON_BOOK.book, adidLibraries: Object.fromEntries((libs.content ?? []).map((x) => [String(x.no), x.name])) };
 }
 
 // 광고그룹 생성 본문 — GFA 샘플(캠페인 목적에 맞는 입찰·예산 기본값)에 세팅안의 이름·타겟·예산·시작을 덮는다.

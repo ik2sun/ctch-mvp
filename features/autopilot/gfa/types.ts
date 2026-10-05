@@ -63,7 +63,7 @@ export type GfaContext = {
   campaign: GfaCampaignLite;
   sample: GfaAdSetSample;
   types: GfaTypeInfo;
-  existingAdSets: { no: number; name: string }[];
+  existingAdSets: { no: number; name: string; activated?: boolean; status?: string }[];
 };
 
 // ── 타겟 ─────────────────────────────────────────────

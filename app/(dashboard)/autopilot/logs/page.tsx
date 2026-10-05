@@ -49,7 +49,7 @@ export default function AutopilotLogsPage() {
             <li key={r.id} className="py-3">
               <button type="button" onClick={() => setOpen(open === r.id ? null : r.id)} className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 text-left">
                 <span className="tabular-nums text-[14px] text-ink-muted">{new Date(r.created_at).toLocaleString("ko-KR")}</span>
-                <span className="rounded-full border border-line px-2 py-0.5 text-[12px] text-ink-soft">{r.media.toUpperCase()} · {r.kind === "setup" ? "자동 세팅" : r.kind}</span>
+                <span className="rounded-full border border-line px-2 py-0.5 text-[12px] text-ink-soft">{r.media.toUpperCase()} · {r.kind === "setup" ? "자동 대량 세팅" : r.kind}</span>
                 <span className="text-[15px] font-semibold text-ink">{r.summary?.campaignName ?? `캠페인 #${r.campaign_no}`}</span>
                 <span className="text-[14px] text-ink-soft">
                   광고그룹 {r.summary?.adSets ?? 0} · 소재 {r.summary?.creatives ?? 0}

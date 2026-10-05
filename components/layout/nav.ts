@@ -29,7 +29,7 @@ export const NAV: NavItem[] = [
     desc: "AI가 캠페인 세팅부터 최적화 운영까지 — 규칙은 사람이, 실행은 AI가",
     accent: "#eb6834",
     children: [
-      { href: "/autopilot/setup", label: "자동 세팅", icon: "wand", desc: "브리프 → 캠페인·광고세트·소재 구조, 네이밍, 타겟·예산 초안 → 매체 생성" },
+      { href: "/autopilot/setup", label: "자동 대량 세팅", icon: "wand", desc: "브리프 → 캠페인·광고세트·소재 구조, 네이밍, 타겟·예산 초안 → 매체 생성" },
       { href: "/autopilot/optimize", label: "자동 최적화", icon: "adjustments-bolt", desc: "규칙·AI 판단으로 예산 증감, 소재 ON/OFF, 입찰 조정" },
       { href: "/autopilot/rules", label: "운영 규칙", icon: "list-check", desc: "목표 ROAS·CPA, 증감 한도, 실행 시간대, 승인 필요 여부" },
       { href: "/autopilot/logs", label: "실행 기록", icon: "history", desc: "AI가 무엇을 언제 왜 바꿨는지와 이후 성과" },

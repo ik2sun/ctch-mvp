@@ -3,7 +3,7 @@
 import { SINGLE_IMAGE_TEMPLATES, withUtm, type PlanAdSet, type PlanCopy, type TemplateSpec } from "./types";
 import { fitToTemplate, type SourceImage } from "./imageFit";
 
-export type RunAdSet = { name: string; existingNo?: number; target?: PlanAdSet };
+export type RunAdSet = { name: string; existingNo?: number; target?: PlanAdSet; overrides?: Record<string, unknown> }; // overrides = 엑셀 광고그룹 시트에 적힌 GFA 칸
 export type RunCreative = { adSetName: string; image: SourceImage; templates: string[]; copy: PlanCopy; landingUrl: string; name: (t: TemplateSpec) => string };
 export type LogLine = { kind: "ok" | "err" | "info"; text: string };
 export type RunResult = {
@@ -32,6 +32,7 @@ export async function runSetup(opts: {
   kind: "ai" | "bulk";
   logExtra?: Record<string, unknown>;
   onLog: (lines: LogLine[]) => void;
+  imageCache?: Map<string, number>; // 여러 캠페인을 이어 돌릴 때 공유 — 이미지는 광고계정 단위라 다시 올리지 않는다
 }): Promise<RunResult> {
   const { clientId, campaignNo } = opts;
   const lines: LogLine[] = [];
@@ -44,7 +45,7 @@ export async function runSetup(opts: {
     out.errors.push(m);
     push({ kind: "err", text: m });
   };
-  const imageNos = new Map<string, number>(); // `${이미지 id}:${템플릿}` → GFA 이미지 번호
+  const imageNos = opts.imageCache ?? new Map<string, number>(); // `${이미지 id}:${템플릿}` → GFA 이미지 번호
 
   for (const a of opts.adSets) {
     let info: { adSet: { no: number; name: string }; templates: TemplateSpec[]; ctas: string[] };
@@ -56,7 +57,7 @@ export async function runSetup(opts: {
       } else {
         if (!a.target) throw new Error("타겟 정보가 없어요");
         push({ kind: "info", text: `광고그룹 만드는 중: ${a.name}` });
-        info = await postAutopilot({ action: "createAdSet", clientId, campaignNo, adSet: a.target, name: a.name, startTime: opts.startTime });
+        info = await postAutopilot({ action: "createAdSet", clientId, campaignNo, adSet: a.target, name: a.name, startTime: opts.startTime, overrides: a.overrides });
         out.adSets.push({ ...info.adSet, created: true });
         push({ kind: "ok", text: `광고그룹 생성 #${info.adSet.no} ${info.adSet.name}` });
       }

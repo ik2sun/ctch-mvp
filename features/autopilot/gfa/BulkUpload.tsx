@@ -1,39 +1,35 @@
 "use client";
 
-// 캠페인 오토파일럿 > 자동 세팅 > 엑셀 벌크 업로드(GFA)
+// 캠페인 오토파일럿 > 자동 대량 세팅 > 엑셀 벌크 업로드(GFA)
 // 엑셀(소재 시트 + 선택 광고그룹 시트) + 이미지(내 PC 파일·폴더 / 구글 드라이브 폴더) → 파일명 ↔ 상품명 자동 매칭 → 미리보기 → 한 번에 생성
-import { useMemo, useState } from "react";
+// 캠페인 여러 개: 행의 '캠페인' 칸이 비면 선택한 캠페인 전부, 적으면 그 캠페인에만. 실행은 캠페인별로 차례대로(이미지 업로드는 공유)
+import { useCallback, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import { Card } from "@/features/dashboard/ui";
 import { SINGLE_IMAGE_TEMPLATES, DEFAULT_TEMPLATES, MIN_ADSET_BUDGET, slug, startTimeFor, type GfaContext } from "./types";
-import {
-  ADSET_HEADERS,
-  ADSET_SAMPLE,
-  CREATIVE_HEADERS,
-  CREATIVE_SAMPLE,
-  CTA_ALL,
-  SHEET_GUIDE,
-  matchImages,
-  norm,
-  parseAdSetSheet,
-  parseCreativeSheet,
-  type BulkAdSetSpec,
-  type BulkRow,
-} from "./bulkSheet";
+import { CREATIVE_HEADERS, CREATIVE_SAMPLE, CTA_ALL, SHEET_GUIDE, matchImages, norm, parseCreativeSheet, type BulkRow } from "./bulkSheet";
+import { ADSET_COLUMNS, ADSET_FULL_HEADERS, ADSET_GUIDE, ADSET_SAMPLE_FULL, adSetToRow, parseAdSetSheetFull, type AdSetSpec, type GfaAdSetDetail, type GfaCodeBook } from "./adSetSheet";
 import { readImage, releaseImage, upscaleRatio, type SourceImage } from "./imageFit";
 import { downloadDriveFile, folderIdFrom, getDriveToken, listDriveImages } from "./driveImport";
-import { runSetup, type LogLine, type RunAdSet, type RunCreative, type RunResult } from "./runner";
+import { postAutopilot, runSetup, type LogLine, type RunAdSet, type RunCreative, type RunResult } from "./runner";
 import { CHIP, CHIP_ON, Field, INPUT, PRIMARY, RunLog, SECONDARY, todayKst, won } from "./ui";
 
 const MAX_IMAGES = 400;
 
-type Prepared = BulkRow & { images: SourceImage[]; tpl: string[]; adSet: { existingNo?: number; spec?: BulkAdSetSpec }; problems: string[]; count: number };
+type Target = { ctx: GfaContext; existingNo?: number; spec?: AdSetSpec };
+type Prepared = BulkRow & { images: SourceImage[]; tpl: string[]; targets: Target[]; problems: string[]; count: number };
 
-export function BulkUpload({ clientId, ctx, accountNo, canEdit }: { clientId: string; ctx: GfaContext; accountNo: string; canEdit: boolean }) {
+const campaignKey = (s: string) => s.normalize("NFC").toLowerCase().replace(/\s+/g, "");
+const sameCampaign = (ctx: GfaContext, label: string) => String(ctx.campaign.no) === label.trim() || campaignKey(ctx.campaign.name) === campaignKey(label);
+
+export function BulkUpload({ clientId, ctxs, accountNo, canEdit }: { clientId: string; ctxs: GfaContext[]; accountNo: string; canEdit: boolean }) {
+  const multi = ctxs.length > 1;
   // 엑셀
   const [fileName, setFileName] = useState("");
   const [rows, setRows] = useState<BulkRow[]>([]);
-  const [specs, setSpecs] = useState<BulkAdSetSpec[]>([]);
+  const [specs, setSpecs] = useState<AdSetSpec[]>([]);
+  const [book, setBook] = useState<GfaCodeBook | null>(null);
+  const [templBusy, setTemplBusy] = useState<string | null>(null);
   const [sheetErr, setSheetErr] = useState<string | null>(null);
   const [excluded, setExcluded] = useState<Set<number>>(new Set());
 
@@ -54,18 +50,69 @@ export function BulkUpload({ clientId, ctx, accountNo, canEdit }: { clientId: st
   const [result, setResult] = useState<RunResult | null>(null);
 
   // ── 엑셀 ──
-  function downloadTemplate() {
+  // 코드표(관심사·지역·게재 위치 등 이름 ↔ 코드) — 한 번 받아 두고 내보내기·해석에 같이 쓴다
+  async function ensureBook(): Promise<GfaCodeBook | null> {
+    if (book) return book;
+    try {
+      const b = await postAutopilot<GfaCodeBook>({ action: "codebook", clientId });
+      setBook(b);
+      return b;
+    } catch {
+      return null;
+    }
+  }
+
+  async function downloadTemplate() {
+    setSheetErr(null);
+    // 선택한 캠페인 × 기존 광고그룹을 한 행씩 미리 채운다(광고그룹이 없으면 캠페인만). 이름이 겹치는 캠페인은 ID로
+    const dupName = (name: string) => ctxs.filter((c) => c.campaign.name.trim() === name.trim()).length > 1;
+    const labelOf = (c: GfaContext) => (dupName(c.campaign.name) ? String(c.campaign.no) : c.campaign.name);
+
+    // '광고그룹' 시트 — 기존 광고그룹 설정 전 항목(상세 조회)
+    const adSetRows: (string | number)[][] = [];
+    try {
+      if (ctxs.some((c) => c.existingAdSets.length)) {
+        setTemplBusy("코드표 불러오는 중…");
+        const b = await ensureBook();
+        if (!b) throw new Error("GFA 코드표(관심사·지역 등)를 불러오지 못했어요.");
+        for (const [i, c] of ctxs.entries()) {
+          if (!c.existingAdSets.length) continue;
+          setTemplBusy(`광고그룹 설정 읽는 중… 캠페인 ${i + 1}/${ctxs.length} (${c.existingAdSets.length}개)`);
+          const r = await postAutopilot<{ adSets: GfaAdSetDetail[] }>({ action: "adSetDetails", clientId, campaignNo: c.campaign.no });
+          for (const d of r.adSets) adSetRows.push(adSetToRow(labelOf(c), d, b));
+        }
+      }
+    } catch (e) {
+      setSheetErr(`광고그룹 설정을 못 읽었어요 — ${(e as Error).message}`);
+      setTemplBusy(null);
+      return;
+    }
+    setTemplBusy(null);
+
     const wb = XLSX.utils.book_new();
-    const s1 = XLSX.utils.aoa_to_sheet([[...CREATIVE_HEADERS], ...CREATIVE_SAMPLE]);
-    s1["!cols"] = [24, 16, 24, 14, 44, 20, 30, 14, 40, 20].map((w) => ({ wch: w }));
-    const s2 = XLSX.utils.aoa_to_sheet([[...ADSET_HEADERS], ...ADSET_SAMPLE]);
-    s2["!cols"] = [24, 8, 16, 8, 12].map((w) => ({ wch: w }));
-    const s3 = XLSX.utils.aoa_to_sheet([...SHEET_GUIDE, [], ["CTA 목록", CTA_ALL.map((c) => `${c.name}(${c.value})`).join(", ")]]);
+    const blank = CREATIVE_HEADERS.slice(2).map(() => "");
+    const prefilled = ctxs.flatMap((c) => (c.existingAdSets.length ? c.existingAdSets.map((s) => [labelOf(c), s.name, ...blank]) : [[labelOf(c), "", ...blank]]));
+    const s1 = XLSX.utils.aoa_to_sheet([[...CREATIVE_HEADERS], ...(prefilled.length ? prefilled : CREATIVE_SAMPLE)]);
+    s1["!cols"] = [Math.min(48, Math.max(20, ...ctxs.map((c) => c.campaign.name.length + 4))), 30, 16, 24, 14, 44, 20, 30, 14, 40, 20].map((w) => ({ wch: w }));
+    // 미리 채운 템플릿에서는 가짜 예시 광고그룹을 넣지 않는다
+    const s2 = XLSX.utils.aoa_to_sheet([ADSET_FULL_HEADERS, ...(prefilled.length ? adSetRows : ADSET_SAMPLE_FULL)]);
+    s2["!cols"] = ADSET_COLUMNS.map((c) => ({ wch: c.w }));
+    s2["!freeze"] = { xSplit: 2, ySplit: 1 };
+    const s3 = XLSX.utils.aoa_to_sheet([
+      ...SHEET_GUIDE,
+      ...ADSET_GUIDE,
+      [],
+      ["CTA 목록", CTA_ALL.map((c) => `${c.name}(${c.value})`).join(", ")],
+      [],
+      ["선택한 캠페인", "'캠페인' 칸에 아래 ID나 이름을 그대로 적으면 됩니다"],
+      ...ctxs.map((c) => [String(c.campaign.no), c.campaign.name]),
+    ]);
     s3["!cols"] = [{ wch: 22 }, { wch: 110 }];
     XLSX.utils.book_append_sheet(wb, s1, "소재");
     XLSX.utils.book_append_sheet(wb, s2, "광고그룹");
     XLSX.utils.book_append_sheet(wb, s3, "작성 안내");
-    XLSX.writeFile(wb, "CTCH_GFA_소재_벌크업로드_템플릿.xlsx");
+    const tag = ctxs.length === 1 ? `_${ctxs[0].campaign.name.replace(/[\\/:*?"<>|\s]+/g, "_").slice(0, 40)}` : ctxs.length > 1 ? `_캠페인${ctxs.length}개` : "";
+    XLSX.writeFile(wb, `CTCH_GFA_소재_벌크업로드${tag}.xlsx`);
   }
 
   async function onSheet(file: File | undefined) {
@@ -80,7 +127,7 @@ export function BulkUpload({ clientId, ctx, accountNo, canEdit }: { clientId: st
       if (parsed.error) throw new Error(parsed.error);
       if (!parsed.rows.length) throw new Error("소재 행이 없어요.");
       const adSheet = wb.Sheets["광고그룹"];
-      setSpecs(adSheet ? parseAdSetSheet(XLSX.utils.sheet_to_json<unknown[]>(adSheet, { header: 1, defval: "", raw: true })) : []);
+      setSpecs(adSheet ? parseAdSetSheetFull(XLSX.utils.sheet_to_json<unknown[]>(adSheet, { header: 1, defval: "", raw: true }), await ensureBook()) : []);
       setRows(parsed.rows);
       setExcluded(new Set());
       setFileName(file.name);
@@ -136,8 +183,16 @@ export function BulkUpload({ clientId, ctx, accountNo, canEdit }: { clientId: st
   }
 
   // ── 매칭·미리보기 ──
-  const existing = useMemo(() => new Map(ctx.existingAdSets.map((s) => [s.name.trim(), s.no])), [ctx.existingAdSets]);
-  const specByName = useMemo(() => new Map(specs.map((s) => [s.name.trim(), s])), [specs]);
+  // '광고그룹' 시트 행 찾기 — 캠페인 칸이 그 캠페인이면 우선, 비어 있으면 모든 캠페인 공통
+  const specFor = useCallback(
+    (ctx: GfaContext, name: string) => {
+      const same = specs.filter((s) => s.name.trim() === name.trim());
+      return same.find((s) => s.campaign && sameCampaign(ctx, s.campaign)) ?? same.find((s) => !s.campaign);
+    },
+    [specs],
+  );
+  // 캠페인별 기존 광고그룹 이름 → 번호
+  const existingBy = useMemo(() => new Map(ctxs.map((c) => [c.campaign.no, new Map(c.existingAdSets.map((s) => [s.name.trim(), s.no]))])), [ctxs]);
 
   const prepared: Prepared[] = useMemo(() => {
     const named = images.map((img) => ({ name: img.file.name, img }));
@@ -162,93 +217,164 @@ export function BulkUpload({ clientId, ctx, accountNo, canEdit }: { clientId: st
       if (!imgs.length && !r.files.length) problems.push("상품명과 맞는 이미지 없음");
       const tpl = r.templates ?? formats;
       if (!tpl.length) problems.push("소재 규격 없음");
-      const no = existing.get(r.adSetName.trim());
-      const spec = specByName.get(r.adSetName.trim());
-      if (!no && spec?.errors.length) problems.push(`광고그룹 시트 ${spec.row}행: ${spec.errors.join(", ")}`);
-      return { ...r, images: imgs, tpl, adSet: { existingNo: no, spec }, problems, count: imgs.length * tpl.length };
+
+      // 넣을 캠페인 — 칸이 비면 선택한 캠페인 전부, 적으면 ID 또는 이름이 같은 캠페인
+      let picked = ctxs;
+      if (r.campaigns.length) {
+        picked = [];
+        for (const want of r.campaigns) {
+          const hit = ctxs.find((c) => String(c.campaign.no) === want || campaignKey(c.campaign.name) === campaignKey(want));
+          if (!hit) problems.push(`선택하지 않은 캠페인 '${want}'`);
+          else if (!picked.includes(hit)) picked.push(hit);
+        }
+      }
+      const name = r.adSetName.trim();
+      const targets: Target[] = picked.map((c) => ({ ctx: c, existingNo: existingBy.get(c.campaign.no)?.get(name), spec: specFor(c, name) }));
+      // 새로 만들 광고그룹의 시트 행에 오류가 있으면 이 행도 멈춘다(기존 광고그룹 행은 참고용이라 무시)
+      for (const sp of new Set(targets.filter((t) => !t.existingNo && t.spec?.errors.length).map((t) => t.spec!))) {
+        problems.push(`광고그룹 시트 ${sp.row}행: ${sp.errors.join(", ")}`);
+      }
+      return { ...r, images: imgs, tpl, targets, problems, count: imgs.length * tpl.length * targets.length };
     });
-  }, [rows, images, formats, existing, specByName]);
+  }, [rows, images, formats, ctxs, existingBy, specFor]);
 
   const usedIds = new Set(prepared.flatMap((p) => p.images.map((i) => i.id)));
   const unmatched = images.filter((i) => !usedIds.has(i.id));
   const runnable = prepared.filter((p) => !excluded.has(p.row) && !p.problems.length && p.count > 0);
-  const newAdSets = [...new Set(runnable.filter((p) => !p.adSet.existingNo).map((p) => p.adSetName.trim()))];
-  const reuseAdSets = [...new Set(runnable.filter((p) => p.adSet.existingNo).map((p) => p.adSetName.trim()))];
-  const totalCreatives = runnable.reduce((s, p) => s + p.count, 0);
-  const newBudget = newAdSets.reduce((s, n) => s + (specByName.get(n)?.budget ?? defaultBudget), 0);
+
+  // 캠페인별 실행 계획
+  const plans = ctxs
+    .map((c) => {
+      const mine = runnable.filter((p) => p.targets.some((t) => t.ctx.campaign.no === c.campaign.no));
+      const ex = existingBy.get(c.campaign.no) ?? new Map<string, number>();
+      const names = [...new Set(mine.map((p) => p.adSetName.trim()))];
+      const newAdSets = names.filter((n) => !ex.has(n));
+      const reuseAdSets = names.filter((n) => ex.has(n));
+      return {
+        ctx: c,
+        rows: mine,
+        newAdSets,
+        reuseAdSets,
+        creatives: mine.reduce((s, p) => s + p.images.length * p.tpl.length, 0),
+        budget: newAdSets.reduce((s, n) => s + (specFor(c, n)?.budget ?? defaultBudget), 0),
+      };
+    })
+    .filter((x) => x.rows.length);
+  const newAdSetCount = plans.reduce((s, x) => s + x.newAdSets.length, 0);
+  const reuseAdSetCount = plans.reduce((s, x) => s + x.reuseAdSets.length, 0);
+  const totalCreatives = plans.reduce((s, x) => s + x.creatives, 0);
+  const newBudget = plans.reduce((s, x) => s + x.budget, 0);
   const blurry = runnable.flatMap((p) => p.images.flatMap((img) => SINGLE_IMAGE_TEMPLATES.filter((t) => p.tpl.includes(t.code) && upscaleRatio(img, t) > 1.5).map(() => img.file.name)));
   const blurryNames = [...new Set(blurry)];
 
   async function run() {
-    if (!runnable.length) return;
-    const msg = `GFA 광고계정 ${accountNo} · 캠페인 "${ctx.campaign.name}"에\n새 광고그룹 ${newAdSets.length}개(일 예산 합계 ${won(newBudget)}) · 기존 광고그룹 ${reuseAdSets.length}개에\n소재 ${totalCreatives}개를 만듭니다. 새 광고그룹은 ${turnOn ? "만든 뒤 바로 켭니다." : "꺼진 상태로 만듭니다."}\n\n실행할까요?`;
+    if (!plans.length) return;
+    const lines = plans.map((x) => `· ${x.ctx.campaign.name} — 새 광고그룹 ${x.newAdSets.length}개 · 기존 ${x.reuseAdSets.length}개 · 소재 ${x.creatives}개`).join("\n");
+    const msg = `GFA 광고계정 ${accountNo}의 캠페인 ${plans.length}개에\n${lines}\n\n합계: 새 광고그룹 ${newAdSetCount}개(일 예산 합계 ${won(newBudget)}) · 소재 ${totalCreatives}개\n새 광고그룹은 ${turnOn ? "만든 뒤 바로 켭니다." : "꺼진 상태로 만듭니다."}\n\n실행할까요?`;
     if (!window.confirm(msg)) return;
     setRunning(true);
     setResult(null);
 
-    const adSets: RunAdSet[] = [...reuseAdSets.map((name) => ({ name, existingNo: existing.get(name) })), ...newAdSets.map((name) => {
-      const spec = specByName.get(name);
-      return {
-        name,
-        target: {
-          label: name,
-          rationale: "엑셀 벌크 업로드",
-          genders: spec?.target.genders ?? [],
-          ages: spec?.target.ages ?? [],
-          device: spec?.target.device ?? "ALL",
-          budget: Math.max(MIN_ADSET_BUDGET, Math.round((spec?.budget ?? defaultBudget) / 1000) * 1000),
-        },
-      };
-    })];
+    const imageCache = new Map<string, number>(); // 이미지는 광고계정 단위 — 캠페인끼리 재사용
+    const doneLines: LogLine[] = []; // 끝난 캠페인들의 로그 — 진행 중 캠페인 로그를 뒤에 이어 붙여 보여 준다
+    let current: LogLine[] = [];
+    const total: RunResult = { adSets: [], creatives: [], errors: [], activated: false };
 
-    // 같은 광고그룹·상품에 카피가 여러 행이면 _c1, _c2로 구분
-    const variantIdx = new Map<string, number>();
-    const variantTotal = new Map<string, number>();
-    for (const p of runnable) {
-      const k = `${p.adSetName}|${p.product}`;
-      variantTotal.set(k, (variantTotal.get(k) ?? 0) + 1);
-    }
-    const creatives: RunCreative[] = [];
-    for (const p of runnable) {
-      const k = `${p.adSetName}|${p.product}`;
-      const v = (variantIdx.get(k) ?? 0) + 1;
-      variantIdx.set(k, v);
-      const suffix = (variantTotal.get(k) ?? 1) > 1 ? `_c${v}` : "";
-      p.images.forEach((img, i) => {
-        const nn = String(i + 1).padStart(2, "0");
-        creatives.push({
-          adSetName: p.adSetName.trim(),
-          image: img,
-          templates: p.tpl,
-          copy: p.copy,
-          landingUrl: p.landingUrl,
-          name: (t) =>
-            p.name
-              ? `${p.name}${p.images.length > 1 ? `_${nn}` : ""}${p.tpl.length > 1 ? `_${t.short}` : ""}`
-              : `${p.adSetName.trim()}_${slug(p.product, 20)}_${nn}_${t.short}${suffix}`,
+    for (const [ci, x] of plans.entries()) {
+      const ctx = x.ctx;
+      const ex = existingBy.get(ctx.campaign.no) ?? new Map<string, number>();
+      const head: LogLine = { kind: "info", text: `━━ 캠페인 ${ci + 1}/${plans.length}: ${ctx.campaign.name} (#${ctx.campaign.no})` };
+
+      const adSets: RunAdSet[] = [
+        ...x.reuseAdSets.map((name) => ({ name, existingNo: ex.get(name) })),
+        ...x.newAdSets.map((name) => {
+          const spec = specFor(ctx, name);
+          return {
+            name,
+            // 기본 타겟은 전체, 시트에 적힌 칸(성별·연령·지역·관심사·입찰·일정 …)은 overrides로 GFA 기본값 위에 덮는다
+            target: {
+              label: name,
+              rationale: "엑셀 벌크 업로드",
+              genders: [],
+              ages: [],
+              device: "ALL" as const,
+              budget: spec?.budget ?? Math.max(MIN_ADSET_BUDGET, Math.round(defaultBudget / 1000) * 1000),
+            },
+            overrides: spec?.overrides,
+          };
+        }),
+      ];
+
+      // 같은 광고그룹·상품에 카피가 여러 행이면 _c1, _c2로 구분
+      const variantIdx = new Map<string, number>();
+      const variantTotal = new Map<string, number>();
+      for (const p of x.rows) {
+        const k = `${p.adSetName}|${p.product}`;
+        variantTotal.set(k, (variantTotal.get(k) ?? 0) + 1);
+      }
+      const creatives: RunCreative[] = [];
+      for (const p of x.rows) {
+        const k = `${p.adSetName}|${p.product}`;
+        const v = (variantIdx.get(k) ?? 0) + 1;
+        variantIdx.set(k, v);
+        const suffix = (variantTotal.get(k) ?? 1) > 1 ? `_c${v}` : "";
+        p.images.forEach((img, i) => {
+          const nn = String(i + 1).padStart(2, "0");
+          creatives.push({
+            adSetName: p.adSetName.trim(),
+            image: img,
+            templates: p.tpl,
+            copy: p.copy,
+            landingUrl: p.landingUrl,
+            name: (t) =>
+              p.name
+                ? `${p.name}${p.images.length > 1 ? `_${nn}` : ""}${p.tpl.length > 1 ? `_${t.short}` : ""}`
+                : `${p.adSetName.trim()}_${slug(p.product, 20)}_${nn}_${t.short}${suffix}`,
+          });
         });
-      });
-    }
+      }
 
-    const out = await runSetup({
-      clientId,
-      campaignNo: ctx.campaign.no,
-      campaignName: ctx.campaign.name,
-      startTime: startTimeFor(startDate, ctx.sample.startTime),
-      adSets,
-      creatives,
-      useUtm,
-      turnOn,
-      kind: "bulk",
-      logExtra: { sheet: fileName, rows: runnable.map((p) => p.row), images: images.length },
-      onLog: setLog,
-    });
-    setResult(out);
+      const out = await runSetup({
+        clientId,
+        campaignNo: ctx.campaign.no,
+        campaignName: ctx.campaign.name,
+        startTime: startTimeFor(startDate, ctx.sample.startTime),
+        adSets,
+        creatives,
+        useUtm,
+        turnOn,
+        kind: "bulk",
+        logExtra: { sheet: fileName, rows: x.rows.map((p) => p.row), images: images.length, batch: plans.length > 1 ? { index: ci + 1, of: plans.length } : undefined },
+        imageCache,
+        onLog: (l) => {
+          current = l;
+          setLog([...doneLines, head, ...l]);
+        },
+      });
+      doneLines.push(head, ...current);
+      current = [];
+      total.adSets.push(...out.adSets);
+      total.creatives.push(...out.creatives);
+      total.errors.push(...out.errors.map((e) => (plans.length > 1 ? `[${ctx.campaign.name}] ${e}` : e)));
+      total.activated = total.activated || out.activated;
+    }
+    setResult(total);
     setRunning(false);
   }
 
   const folderProps = { webkitdirectory: "", directory: "" } as Record<string, string>;
   const errorRows = prepared.filter((p) => p.problems.length).length;
+  // 광고그룹 시트에서 '새로 만들' 행만 점검 결과를 보여 준다(기존 광고그룹 행은 참고용)
+  const isExisting = (sp: AdSetSpec) => ctxs.some((c) => (!sp.campaign || sameCampaign(c, sp.campaign)) && c.existingAdSets.some((s) => s.name.trim() === sp.name.trim()));
+  const usedNames = new Set(rows.map((r) => r.adSetName.trim()));
+  const newSpecNotes = specs
+    .filter((sp) => !isExisting(sp))
+    .flatMap((sp) => [
+      ...sp.errors.map((e) => ({ kind: "err" as const, text: `광고그룹 시트 ${sp.row}행 ${sp.name}: ${e}` })),
+      ...sp.warnings.map((w) => ({ kind: "warn" as const, text: `광고그룹 시트 ${sp.row}행 ${sp.name}: ${w}` })),
+      ...sp.readOnlyIgnored.map((w) => ({ kind: "warn" as const, text: `광고그룹 시트 ${sp.row}행 ${sp.name}: ${w}` })),
+      ...(usedNames.has(sp.name.trim()) ? [] : [{ kind: "warn" as const, text: `광고그룹 시트 ${sp.row}행 ${sp.name}: '소재' 시트에 이 광고그룹 행이 없어 만들지 않아요` }]),
+    ]);
 
   return (
     <div className="space-y-6">
@@ -257,9 +383,9 @@ export function BulkUpload({ clientId, ctx, accountNo, canEdit }: { clientId: st
           <div className="space-y-3">
             <Field label="① 엑셀">
               <div className="flex flex-wrap gap-2">
-                <button type="button" onClick={downloadTemplate} className={SECONDARY}>
-                  <i className="ti ti-download mr-1" />
-                  템플릿 내려받기
+                <button type="button" onClick={downloadTemplate} disabled={!!templBusy} className={SECONDARY}>
+                  <i className={`ti ${templBusy ? "ti-loader-2 animate-spin" : "ti-download"} mr-1`} />
+                  {templBusy ? "템플릿 만드는 중…" : "템플릿 내려받기"}
                 </button>
                 <label className={`${PRIMARY} cursor-pointer`}>
                   <i className="ti ti-file-spreadsheet mr-1" />
@@ -267,18 +393,40 @@ export function BulkUpload({ clientId, ctx, accountNo, canEdit }: { clientId: st
                   <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={(e) => onSheet(e.target.files?.[0]).then(() => (e.target.value = ""))} />
                 </label>
               </div>
+              <p className="mt-1.5 text-[13px] text-ink-muted">
+                {templBusy ?? (
+                  <>
+                    템플릿에 선택한 캠페인 {ctxs.length}개와 기존 광고그룹 {ctxs.reduce((s, c) => s + c.existingAdSets.length, 0)}개가 채워져 있어요. &apos;소재&apos; 시트는 쓸 행에 상품명·문구·랜딩만 적으면 되고(빈 행은 건너뜀),
+                    &apos;광고그룹&apos; 시트에는 기존 광고그룹의 타겟·입찰·예산·일정 전 항목이 들어 있어요 — 행을 복사해 이름만 바꾸면 같은 설정으로 새 광고그룹을 만듭니다.
+                  </>
+                )}
+              </p>
             </Field>
             {fileName && (
               <p className="text-[14px] text-ink-soft">
-                <b className="text-ink">{fileName}</b> · 소재 행 {rows.length}개 · 광고그룹 시트 {specs.length}개
+                <b className="text-ink">{fileName}</b> · 소재 행 {rows.length}개 · 광고그룹 시트 {specs.length}행
                 {errorRows > 0 && <span className="text-bad"> · 확인 필요 {errorRows}행</span>}
               </p>
+            )}
+            {fileName && newSpecNotes.length > 0 && (
+              <ul className="space-y-0.5 rounded-lg bg-canvas px-3 py-2 text-[13px]">
+                {newSpecNotes.map((n) => (
+                  <li key={n.text} className={n.kind === "err" ? "text-bad" : "text-warn"}>
+                    {n.text}
+                  </li>
+                ))}
+              </ul>
             )}
             {sheetErr && <p className="text-[14px] text-bad">{sheetErr}</p>}
             <p className="text-[13px] leading-relaxed text-ink-muted">
               캠페인에 이미 있는 광고그룹 이름을 쓰면 그 광고그룹에 소재만 추가하고(켜짐 상태는 건드리지 않음), 없는 이름이면 &apos;광고그룹&apos; 시트 설정으로 새로 만듭니다.
-              이 캠페인의 기존 광고그룹 {ctx.existingAdSets.length}개.
+              {multi ? ` 선택한 캠페인 ${ctxs.length}개의 기존 광고그룹 ${ctxs.reduce((s, c) => s + c.existingAdSets.length, 0)}개.` : ` 이 캠페인의 기존 광고그룹 ${ctxs[0]?.existingAdSets.length ?? 0}개.`}
             </p>
+            {multi && (
+              <p className="rounded-lg bg-[#FFF4EE] px-3 py-2 text-[13px] leading-relaxed text-ink-soft ring-1 ring-[#FAD9CB]">
+                <b className="text-ink">캠페인 {ctxs.length}개 선택됨</b> — 엑셀 &apos;캠페인&apos; 칸을 비우면 그 행이 선택한 캠페인 <b className="text-ink">전부</b>에 들어가고, 캠페인 ID나 이름을 적으면 그 캠페인에만 들어갑니다. ID 목록은 템플릿의 &apos;작성 안내&apos; 시트에 있어요.
+              </p>
+            )}
           </div>
 
           <div className="space-y-3">
@@ -334,6 +482,7 @@ export function BulkUpload({ clientId, ctx, accountNo, canEdit }: { clientId: st
                 <tr className="border-b border-line text-left text-[13px] text-ink-muted">
                   <th className="py-2 pr-2 font-medium" />
                   <th className="py-2 pr-3 font-medium">행</th>
+                  {multi && <th className="py-2 pr-3 font-medium">캠페인</th>}
                   <th className="py-2 pr-3 font-medium">광고그룹</th>
                   <th className="py-2 pr-3 font-medium">상품명</th>
                   <th className="py-2 pr-3 font-medium">이미지</th>
@@ -364,11 +513,40 @@ export function BulkUpload({ clientId, ctx, accountNo, canEdit }: { clientId: st
                         />
                       </td>
                       <td className="py-2.5 pr-3 tabular-nums text-ink-muted">{p.row}</td>
+                      {multi && (
+                        <td className="max-w-[220px] py-2.5 pr-3">
+                          {p.campaigns.length ? (
+                            p.targets.map((t) => (
+                              <p key={t.ctx.campaign.no} className="truncate text-[13px] text-ink" title={`${t.ctx.campaign.name} (#${t.ctx.campaign.no})`}>
+                                {t.ctx.campaign.name}
+                              </p>
+                            ))
+                          ) : (
+                            <span className="whitespace-nowrap rounded-full bg-[#F2F4F7] px-2 py-0.5 text-[12px] text-ink-soft" title={p.targets.map((t) => t.ctx.campaign.name).join(", ")}>
+                              선택한 캠페인 전부 · {p.targets.length}개
+                            </span>
+                          )}
+                        </td>
+                      )}
                       <td className="py-2.5 pr-3">
                         <p className="font-mono text-[13px] text-ink">{p.adSetName}</p>
-                        <span className={`mt-1 inline-block whitespace-nowrap rounded-full px-2 py-0.5 text-[12px] ${p.adSet.existingNo ? "bg-canvas text-ink-soft" : "bg-[#FDF1EC] text-[#C2410C]"}`}>
-                          {p.adSet.existingNo ? `기존 #${p.adSet.existingNo}` : `새로 만듦 · ${won(p.adSet.spec?.budget ?? defaultBudget)}`}
-                        </span>
+                        {(() => {
+                          const reuse = p.targets.filter((t) => t.existingNo);
+                          const fresh = p.targets.length - reuse.length;
+                          const budget = won(p.targets.find((t) => !t.existingNo)?.spec?.budget ?? defaultBudget);
+                          if (p.targets.length === 1)
+                            return (
+                              <span className={`mt-1 inline-block whitespace-nowrap rounded-full px-2 py-0.5 text-[12px] ${reuse.length ? "bg-canvas text-ink-soft" : "bg-[#FDF1EC] text-[#C2410C]"}`}>
+                                {reuse.length ? `기존 #${reuse[0].existingNo}` : `새로 만듦 · ${budget}`}
+                              </span>
+                            );
+                          return (
+                            <span className="mt-1 flex flex-wrap gap-1">
+                              {fresh > 0 && <span className="whitespace-nowrap rounded-full bg-[#FDF1EC] px-2 py-0.5 text-[12px] text-[#C2410C]">새로 만듦 {fresh} · 각 {budget}</span>}
+                              {reuse.length > 0 && <span className="whitespace-nowrap rounded-full bg-canvas px-2 py-0.5 text-[12px] text-ink-soft">기존 {reuse.length}</span>}
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td className="py-2.5 pr-3 text-ink">{p.product}</td>
                       <td className="py-2.5 pr-3">
@@ -448,7 +626,9 @@ export function BulkUpload({ clientId, ctx, accountNo, canEdit }: { clientId: st
                 </Field>
                 <Field label="새 광고그룹 시작일">
                   <input type="date" min={todayKst()} className={INPUT} value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-                  <p className="mt-1 text-[12px] text-ink-muted">비우면 GFA 기본({ctx.sample.startTime?.replace("T", " ") ?? "—"})</p>
+                  <p className="mt-1 text-[12px] text-ink-muted">
+                    {multi ? "비우면 캠페인마다 GFA 기본 시작일" : `비우면 GFA 기본(${ctxs[0]?.sample.startTime?.replace("T", " ") ?? "—"})`}
+                  </p>
                 </Field>
               </div>
               {blurryNames.length > 0 && <p className="text-[13px] text-warn">원본보다 1.5배 넘게 키워져 흐려질 수 있는 이미지 {blurryNames.length}장: {blurryNames.slice(0, 5).join(", ")}{blurryNames.length > 5 ? " …" : ""}</p>}
@@ -467,8 +647,27 @@ export function BulkUpload({ clientId, ctx, accountNo, canEdit }: { clientId: st
                 </span>
               </label>
               <div className="rounded-lg bg-canvas px-4 py-3 text-[14px] text-ink-soft">
-                새 광고그룹 <b className="text-ink">{newAdSets.length}</b>개(일 {won(newBudget)}) · 기존 광고그룹 <b className="text-ink">{reuseAdSets.length}</b>개 · 소재 <b className="text-ink">{totalCreatives}</b>개 · 이미지 업로드 약{" "}
+                {multi && (
+                  <>
+                    캠페인 <b className="text-ink">{plans.length}</b>개 ·{" "}
+                  </>
+                )}
+                새 광고그룹 <b className="text-ink">{newAdSetCount}</b>개(일 {won(newBudget)}) · 기존 광고그룹 <b className="text-ink">{reuseAdSetCount}</b>개 · 소재 <b className="text-ink">{totalCreatives}</b>개 · 이미지 업로드 약{" "}
                 {new Set(runnable.flatMap((p) => p.images.flatMap((i) => p.tpl.map((t) => `${i.id}:${t}`)))).size}건
+                {multi && plans.length > 0 && (
+                  <ul className="mt-2 space-y-0.5 border-t border-line pt-2 text-[13px]">
+                    {plans.map((x) => (
+                      <li key={x.ctx.campaign.no} className="flex justify-between gap-3">
+                        <span className="truncate text-ink" title={x.ctx.campaign.name}>
+                          {x.ctx.campaign.name}
+                        </span>
+                        <span className="whitespace-nowrap tabular-nums text-ink-muted">
+                          새 {x.newAdSets.length} · 기존 {x.reuseAdSets.length} · 소재 {x.creatives}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
               <div className="flex items-center justify-end gap-3">
                 <span className="text-[13px] text-ink-muted">
@@ -483,7 +682,7 @@ export function BulkUpload({ clientId, ctx, accountNo, canEdit }: { clientId: st
                           : ""}
                 </span>
                 <button type="button" onClick={run} disabled={!canEdit || running || !runnable.length} className="rounded-lg bg-ink px-5 py-2.5 text-[15px] font-semibold text-white hover:bg-ink-soft disabled:opacity-40">
-                  {running ? "업로드 중…" : `🚀 GFA에 벌크 업로드 (소재 ${totalCreatives}개)`}
+                  {running ? "업로드 중…" : multi ? `🚀 캠페인 ${plans.length}개에 벌크 업로드 (소재 ${totalCreatives}개)` : `🚀 GFA에 벌크 업로드 (소재 ${totalCreatives}개)`}
                 </button>
               </div>
             </div>

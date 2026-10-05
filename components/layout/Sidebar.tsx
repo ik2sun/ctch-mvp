@@ -61,10 +61,10 @@ export function Sidebar({ email, role }: { email: string; role: Role }) {
         className={`group relative flex items-center gap-3 rounded-lg py-1.5 text-[15px] transition ${depth > 0 ? "pl-7 pr-3" : "px-2.5"} ${
           active ? "font-semibold text-ink" : "text-ink-soft hover:bg-canvas hover:text-ink"
         }`}
-        style={active ? { background: `${color}12` } : undefined}
+        style={active ? { background: `${color}17` } : undefined}
       >
         {/* 현재 메뉴 — 카테고리 색 왼쪽 막대 */}
-        {active && <span className="absolute inset-y-1.5 left-0 w-[3px] rounded-r" style={{ background: color }} aria-hidden />}
+        {active && <span className="absolute inset-y-1 left-0 w-1 rounded-r-full" style={{ background: color }} aria-hidden />}
         <IconTile icon={item.icon} color={color} active={active} small={depth > 0} />
         <span className="flex-1">{item.label}</span>
       </Link>

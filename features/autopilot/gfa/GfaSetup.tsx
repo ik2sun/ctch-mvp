@@ -1,6 +1,6 @@
 "use client";
 
-// 캠페인 오토파일럿 > 자동 세팅(GFA) — 캠페인 선택 → [AI 자동 세팅 | 엑셀 벌크 업로드]
+// 캠페인 오토파일럿 > 자동 대량 세팅(GFA) — 캠페인 선택(여러 개 가능) → [엑셀 벌크 업로드(캠페인 여러 개) | AI 자동 세팅(캠페인 1개)]
 // AI: 브리프·이미지 → AI 세팅안(수정 가능) → [세팅 실행] / 벌크: BulkUpload.tsx. 실행은 둘 다 runner.ts
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
@@ -34,6 +34,8 @@ import { BulkUpload } from "./BulkUpload";
 import { CELL, CHIP, CHIP_ON, Field, INPUT, RunLog, todayKst as today, won } from "./ui";
 
 const MAX_IMAGES = 6;
+// 이미지 단일 소재로 세팅할 수 없는 목적 — 카드에 자물쇠와 함께 보여 준다
+const UNSUPPORTED_REASON = "ADVoost 쇼핑·쇼핑 프로모션·카탈로그는 상품 피드로, 동영상 조회는 영상 소재로, 앱 설치는 앱 정보로 만드는 캠페인이라 이미지 소재 자동 세팅을 지원하지 않아요.";
 
 const EMPTY_BRIEF: SetupBrief = { product: "", offer: "", audience: "", landingUrl: "", dailyBudget: 100000, adSetCount: 0, copyCount: 2, startDate: "", notes: "" };
 
@@ -47,12 +49,19 @@ export function GfaSetup() {
   const [accountNo, setAccountNo] = useState("");
   const [campErr, setCampErr] = useState<{ msg: string; code?: string } | null>(null);
   const [campLoading, setCampLoading] = useState(false);
-  const [onlyActive, setOnlyActive] = useState<"all" | "on">("all");
-  const [campaignNo, setCampaignNo] = useState<number | null>(null);
-  const [ctx, setCtx] = useState<GfaContext | null>(null);
-  const [ctxLoading, setCtxLoading] = useState(false);
+  const [onlyActive, setOnlyActive] = useState<"all" | "on" | "off">("all");
+  const [query, setQuery] = useState("");
+  // 여러 캠페인 선택(고른 순서 유지) — 벌크 업로드는 전부, AI 자동 세팅은 1개일 때만
+  const [picked, setPicked] = useState<number[]>([]);
+  const [ctxs, setCtxs] = useState<Record<number, GfaContext>>({});
+  const [ctxLoading, setCtxLoading] = useState<number[]>([]);
 
-  const [mode, setMode] = useState<"ai" | "bulk">("bulk");
+  const [modeChoice, setMode] = useState<"ai" | "bulk">("bulk");
+  const mode = picked.length > 1 ? "bulk" : modeChoice;
+  const campaignNo = picked.length === 1 ? picked[0] : null;
+  const ctx = campaignNo ? ctxs[campaignNo] ?? null : null;
+  const pickedCtxs = picked.map((n) => ctxs[n]).filter((c): c is GfaContext => !!c && SUPPORTED_OBJECTIVES.includes(c.campaign.objective));
+  const allLoaded = picked.length > 0 && picked.every((n) => ctxs[n]);
 
   // 2. 브리프·이미지
   const [brief, setBrief] = useState<SetupBrief>(EMPTY_BRIEF);
@@ -90,30 +99,56 @@ export function GfaSetup() {
   // 광고주가 바뀌면 처음부터
   useEffect(() => {
     setCampaigns(null);
-    setCampaignNo(null);
-    setCtx(null);
+    setPicked([]);
+    setCtxs({});
     setPlan(null);
     setResult(null);
     setLog([]);
     loadCampaigns();
   }, [loadCampaigns]);
 
-
-  async function pickCampaign(no: number) {
-    if (!clientId || running) return;
-    setCampaignNo(no);
-    setCtx(null);
+  // 선택이 바뀌면 AI 세팅안·결과는 비운다(세팅안은 캠페인 1개 기준)
+  function changePicked(next: number[]) {
+    setPicked(next);
     setPlan(null);
     setResult(null);
     setLog([]);
-    setCtxLoading(true);
-    try {
-      setCtx(await post<GfaContext>({ action: "context", clientId, campaignNo: no }));
-    } catch (e) {
-      setCampErr({ msg: (e as Error).message });
-    } finally {
-      setCtxLoading(false);
-    }
+  }
+
+  async function loadContexts(nos: number[]) {
+    if (!clientId) return;
+    const need = nos.filter((n) => !ctxs[n]);
+    if (!need.length) return;
+    setCtxLoading((s) => [...s, ...need]);
+    await Promise.all(
+      need.map(async (no) => {
+        try {
+          const c = await post<GfaContext>({ action: "context", clientId, campaignNo: no });
+          setCtxs((m) => ({ ...m, [no]: c }));
+        } catch (e) {
+          setCampErr({ msg: `캠페인 #${no} 정보를 못 불러왔어요 — ${(e as Error).message}` });
+          setPicked((p) => p.filter((x) => x !== no));
+        } finally {
+          setCtxLoading((s) => s.filter((x) => x !== no));
+        }
+      }),
+    );
+  }
+
+  function toggleCampaign(no: number) {
+    if (!clientId || running) return;
+    if (picked.includes(no)) return changePicked(picked.filter((x) => x !== no));
+    changePicked([...picked, no]);
+    loadContexts([no]);
+  }
+
+  // 지금 보이는(검색·필터 결과) 캠페인 중 세팅 가능한 것 전부 선택 / 선택 해제
+  function selectShown(nos: number[]) {
+    if (running) return;
+    const add = nos.filter((n) => !picked.includes(n));
+    if (!add.length) return;
+    changePicked([...picked, ...add]);
+    loadContexts(add);
   }
 
   async function addImages(files: FileList | null) {
@@ -131,7 +166,7 @@ export function GfaSetup() {
     try {
       const r = await post<{ plan: SetupPlan; context: GfaContext }>({ action: "plan", clientId, campaignNo, brief, imageCount: images.length });
       setPlan(r.plan);
-      setCtx(r.context);
+      setCtxs((m) => ({ ...m, [campaignNo]: r.context }));
     } catch (e) {
       setPlanErr((e as Error).message);
     } finally {
@@ -191,73 +226,299 @@ export function GfaSetup() {
   }
 
   // ── 화면 ──────────────────────────────────────────
-  const shownCampaigns = (campaigns ?? []).filter((c) => onlyActive === "all" || c.activated);
+  // 검색 — 이름·캠페인 ID, 대소문자·공백 무시. 상태 칩 개수는 검색 결과 기준
+  const norm = (t: string) => t.toLowerCase().replace(/\s+/g, "");
+  const q = norm(query);
+  const searched = (campaigns ?? []).filter((c) => !q || norm(c.name).includes(q) || String(c.no).includes(q));
+  const shownCampaigns = searched.filter((c) => onlyActive === "all" || (onlyActive === "on" ? c.activated : !c.activated));
 
   return (
     <div className="space-y-6">
-      <ol className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[14px] text-ink-muted">
-        {["① 캠페인 선택", mode === "bulk" ? "② 엑셀·이미지 불러오기" : "② 브리프·이미지 → AI 세팅안", "③ 확인·수정", "④ [GFA에 … 실행] 버튼 + 확인 = 승인"].map((t, i, a) => (
-          <li key={t} className="flex items-center gap-2">
-            <span className={i === 3 ? "font-semibold text-ink" : ""}>{t}</span>
-            {i < a.length - 1 && <span aria-hidden>›</span>}
-          </li>
-        ))}
+      {/* 진행 단계 */}
+      <ol className="flex flex-wrap items-center gap-2">
+        {[
+          "캠페인 선택",
+          mode === "bulk" ? "엑셀·이미지 불러오기" : "브리프·이미지 → AI 세팅안",
+          "확인·수정",
+          "실행 + 확인 = 승인",
+        ].map((t, i, a) => {
+          const done = i === 0 && allLoaded;
+          const current = i === 0 ? !allLoaded : i === 1 && allLoaded;
+          return (
+            <li key={t} className="flex items-center gap-2">
+              <span
+                className={`flex items-center gap-2 whitespace-nowrap rounded-full px-3 py-1.5 text-[14px] ${
+                  current ? "bg-white font-semibold text-ink shadow-[0_1px_3px_rgba(16,24,40,0.08)] ring-1 ring-[#F6C3AE]" : done ? "bg-white/70 text-ink-soft ring-1 ring-line" : "text-ink-muted"
+                }`}
+              >
+                <span
+                  className={`flex h-5 w-5 items-center justify-center rounded-full text-[12px] font-bold ${
+                    done ? "bg-[#12B76A] text-white" : current ? "bg-[#eb6834] text-white" : "bg-[#E4E7EC] text-ink-muted"
+                  }`}
+                >
+                  {done ? <i className="ti ti-check text-[13px]" aria-hidden /> : i + 1}
+                </span>
+                {t}
+              </span>
+              {i < a.length - 1 && <i className="ti ti-chevron-right text-[14px] text-ink-faint" aria-hidden />}
+            </li>
+          );
+        })}
       </ol>
 
       {/* 1. 캠페인 */}
-      <Card
-        title="1. 캠페인 선택"
-        sub={accountNo ? `GFA 광고계정 ${accountNo} — GFA에서 만들어 둔 캠페인을 고르면 나머지는 자동으로 세팅합니다` : "GFA에서 만들어 둔 캠페인을 고르세요"}
-        right={
-          <div className="flex items-center gap-2">
-            <Segmented value={onlyActive} options={[{ key: "all", label: "전체" }, { key: "on", label: "켜진 것만" }]} onChange={setOnlyActive} />
-            <button type="button" onClick={loadCampaigns} disabled={campLoading} className="rounded-lg border border-line px-3 py-1.5 text-[14px] text-ink-soft hover:bg-canvas disabled:opacity-50">
-              {campLoading ? "불러오는 중…" : "새로고침"}
+      <section className="rounded-2xl border border-[#EAECF0] bg-white p-6 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="flex min-w-0 items-start gap-3">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#FFF1EA] text-[16px] font-bold text-[#eb6834]">1</span>
+            <div className="min-w-0">
+              <h3 className="text-[18px] font-bold text-ink">캠페인 선택</h3>
+              <p className="mt-0.5 text-[14px] text-ink-muted">
+                {accountNo ? (
+                  <>
+                    GFA 광고계정 <span className="tabular-nums">{accountNo}</span> · GFA에서 만들어 둔 캠페인을 고르세요(여러 개 선택 가능) — 나머지는 자동으로 세팅합니다
+                  </>
+                ) : (
+                  "GFA에서 만들어 둔 캠페인을 고르세요"
+                )}
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="relative flex items-center">
+              <i className="ti ti-search pointer-events-none absolute left-3.5 text-[16px] text-ink-faint" aria-hidden />
+              <input
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => e.key === "Escape" && setQuery("")}
+                placeholder="캠페인 이름·ID 검색"
+                aria-label="캠페인 검색"
+                className="w-[240px] rounded-full border border-line bg-white py-2 pl-10 pr-4 text-[14px] text-ink outline-none transition placeholder:text-ink-faint focus:border-[#eb6834] focus:shadow-[0_0_0_3px_rgba(235,104,52,0.12)]"
+              />
+            </label>
+            <div className="inline-flex rounded-full bg-[#F2F4F7] p-1">
+              {(
+                [
+                  { key: "all", label: "전체", n: campaigns ? searched.length : undefined },
+                  { key: "on", label: "ON", n: campaigns ? searched.filter((c) => c.activated).length : undefined },
+                  { key: "off", label: "OFF", n: campaigns ? searched.filter((c) => !c.activated).length : undefined },
+                ] as const
+              ).map((o) => (
+                <button
+                  key={o.key}
+                  type="button"
+                  onClick={() => setOnlyActive(o.key)}
+                  aria-pressed={onlyActive === o.key}
+                  className={`flex items-center gap-1.5 whitespace-nowrap rounded-full px-4 py-1.5 text-[14px] transition ${
+                    onlyActive === o.key ? "bg-white font-semibold text-ink shadow-[0_1px_3px_rgba(16,24,40,0.12)]" : "text-ink-muted hover:text-ink"
+                  }`}
+                >
+                  {o.label}
+                  {o.n !== undefined && <span className={`text-[12px] tabular-nums ${onlyActive === o.key ? "text-[#eb6834]" : "text-ink-faint"}`}>{o.n}</span>}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={loadCampaigns}
+              disabled={campLoading}
+              title="캠페인 목록 새로고침"
+              className="flex items-center gap-1.5 whitespace-nowrap rounded-full border border-line bg-white px-4 py-2 text-[14px] text-ink-soft transition hover:border-[#F6C3AE] hover:text-ink disabled:opacity-50"
+            >
+              <i className={`ti ti-refresh text-[15px] ${campLoading ? "animate-spin" : ""}`} aria-hidden />
+              {campLoading ? "불러오는 중" : "새로고침"}
             </button>
           </div>
-        }
-      >
+        </div>
+
+        {/* 선택 바 — 선택 개수·선택한 캠페인 칩·모두 선택/해제 */}
+        {campaigns && campaigns.length > 0 && (
+          <div
+            className={`mt-5 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl px-4 py-3 transition ${
+              picked.length ? "bg-[#FFF4EE] ring-1 ring-[#FAD9CB]" : "bg-[#F9FAFB] ring-1 ring-[#F2F4F7]"
+            }`}
+          >
+            {picked.length ? (
+              <span className="flex items-center gap-2 whitespace-nowrap text-[15px] text-ink">
+                <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-[#eb6834] px-1.5 text-[13px] font-bold tabular-nums text-white">{picked.length}</span>
+                <b>개 캠페인 선택됨</b>
+              </span>
+            ) : (
+              <span className="flex items-center gap-2 text-[14px] text-ink-muted">
+                <i className="ti ti-hand-click text-[16px]" aria-hidden />
+                캠페인을 눌러 고르세요 — 여러 개를 골라 한 번에 벌크 업로드할 수 있어요
+              </span>
+            )}
+            {picked.length > 0 && (
+              <div className="flex min-w-0 flex-1 flex-wrap gap-1.5">
+                {picked.map((no) => {
+                  const c = campaigns.find((x) => x.no === no);
+                  return (
+                    <span key={no} className="inline-flex max-w-[260px] items-center gap-1 rounded-full bg-white py-0.5 pl-3 pr-1 text-[13px] text-ink ring-1 ring-[#FAD9CB]">
+                      <span className="truncate" title={c ? `${c.name} (#${no})` : `#${no}`}>
+                        {c?.name ?? `#${no}`}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => toggleCampaign(no)}
+                        disabled={running}
+                        aria-label={`${c?.name ?? no} 선택 해제`}
+                        className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-ink-muted hover:bg-[#FDEEE8] hover:text-ink disabled:opacity-40"
+                      >
+                        <i className="ti ti-x text-[12px]" aria-hidden />
+                      </button>
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+            <div className="ml-auto flex items-center gap-1.5">
+              {(() => {
+                const selectable = shownCampaigns.filter((c) => SUPPORTED_OBJECTIVES.includes(c.objective)).map((c) => c.no);
+                const rest = selectable.filter((n) => !picked.includes(n)).length;
+                return (
+                  <button
+                    type="button"
+                    onClick={() => selectShown(selectable)}
+                    disabled={running || !rest}
+                    className="whitespace-nowrap rounded-full px-3 py-1 text-[13px] font-semibold text-[#C2410C] hover:bg-white disabled:font-normal disabled:text-ink-faint disabled:hover:bg-transparent"
+                  >
+                    {q || onlyActive !== "all" ? "보이는 캠페인 모두 선택" : "모두 선택"}
+                    {rest > 0 && <span className="ml-1 tabular-nums">+{rest}</span>}
+                  </button>
+                );
+              })()}
+              {picked.length > 0 && (
+                <button type="button" onClick={() => !running && changePicked([])} disabled={running} className="whitespace-nowrap rounded-full px-3 py-1 text-[13px] text-ink-soft hover:bg-white hover:text-ink disabled:opacity-40">
+                  선택 해제
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {campErr && (
-          <p className="mb-3 rounded-lg bg-[#FEF2F2] px-4 py-3 text-[14px] text-bad">
+          <p className="mt-5 flex items-center gap-2 rounded-xl bg-[#FEF3F2] px-4 py-3 text-[14px] text-bad">
+            <i className="ti ti-alert-circle text-[16px]" aria-hidden />
             {campErr.msg}
             {campErr.code === "NO_AD_ACCOUNT" && (
-              <Link href="/clients" className="ml-2 font-semibold underline">
+              <Link href="/clients" className="ml-1 font-semibold underline">
                 광고주 관리로 가기
               </Link>
             )}
           </p>
         )}
-        {campLoading && !campaigns && <p className="text-[15px] text-ink-muted">캠페인 목록을 불러오는 중…</p>}
-        {campaigns && !shownCampaigns.length && <p className="text-[15px] text-ink-muted">캠페인이 없어요. GFA에서 캠페인을 먼저 만들고 새로고침하세요.</p>}
-        <div className="grid max-h-[360px] gap-2 overflow-y-auto sm:grid-cols-2 xl:grid-cols-3">
-          {shownCampaigns.map((c) => {
-            const ok = SUPPORTED_OBJECTIVES.includes(c.objective);
-            const active = c.no === campaignNo;
-            return (
-              <button
-                key={c.no}
-                type="button"
-                disabled={!ok || running}
-                onClick={() => pickCampaign(c.no)}
-                className={`rounded-lg border px-4 py-3 text-left transition ${active ? "border-[#eb6834] bg-[#FDF1EC]" : "border-line hover:bg-canvas"} disabled:cursor-not-allowed disabled:opacity-50`}
-              >
-                <p className="truncate text-[15px] font-semibold text-ink" title={c.name}>
-                  {c.name}
-                </p>
-                <p className="mt-1 flex flex-wrap gap-x-2 text-[13px] text-ink-muted">
-                  <span>#{c.no}</span>
-                  <span>{OBJECTIVE_LABEL[c.objective] ?? c.objective}</span>
-                  <span>{c.activated ? "켜짐" : "꺼짐"}</span>
-                  {c.cbo && <span>CBO</span>}
-                  {!ok && <span>· 자동 세팅 미지원 목적</span>}
-                </p>
+        {campLoading && !campaigns && (
+          <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="h-[132px] animate-pulse rounded-xl bg-[#F2F4F7]" />
+            ))}
+          </div>
+        )}
+        {campaigns && !shownCampaigns.length && (
+          <div className="mt-5 flex flex-col items-center gap-2 rounded-xl border border-dashed border-line py-10 text-center">
+            <i className={`ti ${q ? "ti-search-off" : "ti-folder-off"} text-[28px] text-ink-faint`} aria-hidden />
+            <p className="text-[15px] text-ink-muted">{q
+                ? `'${query.trim()}'에 맞는 ${onlyActive === "on" ? "켜진 " : onlyActive === "off" ? "꺼진 " : ""}캠페인이 없어요.`
+                : onlyActive === "on"
+                  ? "켜진 캠페인이 없어요."
+                  : onlyActive === "off"
+                    ? "꺼진 캠페인이 없어요."
+                    : "캠페인이 없어요. GFA에서 캠페인을 먼저 만들고 새로고침하세요."}
+            </p>
+            {q && (
+              <button type="button" onClick={() => setQuery("")} className="mt-1 rounded-full border border-line bg-white px-4 py-1.5 text-[14px] text-ink-soft hover:text-ink">
+                검색 지우기
               </button>
-            );
-          })}
-        </div>
-        {ctxLoading && <p className="mt-3 text-[14px] text-ink-muted">캠페인 정보를 불러오는 중…</p>}
-        {ctx && (
-          <div className="mt-4 flex flex-wrap gap-x-6 gap-y-1 rounded-lg bg-canvas px-4 py-3 text-[14px] text-ink-soft">
+            )}
+          </div>
+        )}
+
+        {shownCampaigns.length > 0 && (
+          // 카드가 떠오를 때 그림자가 잘리지 않게 안쪽 여백을 둔다
+          <div className="-mx-2 mt-3 grid max-h-[580px] gap-4 overflow-y-auto px-2 pb-2 pt-3 sm:grid-cols-2 xl:grid-cols-3">
+            {shownCampaigns.map((c) => {
+              const ok = SUPPORTED_OBJECTIVES.includes(c.objective);
+              const active = picked.includes(c.no);
+              const loading = ctxLoading.includes(c.no);
+              return (
+                <button
+                  key={c.no}
+                  type="button"
+                  disabled={!ok || running}
+                  onClick={() => toggleCampaign(c.no)}
+                  aria-pressed={active}
+                  title={ok ? undefined : UNSUPPORTED_REASON}
+                  className={`group relative flex flex-col rounded-xl border p-5 text-left transition duration-200 ${
+                    !ok
+                      ? "cursor-not-allowed border-dashed border-[#D0D5DD] bg-[#FAFAFB]"
+                      : active
+                      ? "border-[#eb6834] shadow-[0_0_0_3px_rgba(235,104,52,0.14),0_8px_20px_-8px_rgba(235,104,52,0.35)]"
+                      : "border-[#EAECF0] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)] enabled:hover:-translate-y-0.5 enabled:hover:border-[#F6C3AE] enabled:hover:shadow-[0_10px_24px_-10px_rgba(16,24,40,0.18)]"
+                  } disabled:cursor-not-allowed ${ok ? "disabled:opacity-55" : ""}`}
+                >
+                  {/* 선택 체크(여러 개 선택 가능) — 미지원 목적은 자물쇠 */}
+                  {!ok ? (
+                    <span className="absolute right-4 top-4 flex h-6 w-6 items-center justify-center rounded-md bg-[#F2F4F7] text-ink-faint" aria-hidden>
+                      <i className="ti ti-lock text-[14px]" />
+                    </span>
+                  ) : (
+                  <span
+                    className={`absolute right-4 top-4 flex h-6 w-6 items-center justify-center rounded-md transition ${
+                      active ? "bg-[#eb6834] text-white" : "border-2 border-[#D0D5DD] bg-white text-transparent group-hover:border-[#F6C3AE]"
+                    }`}
+                    aria-hidden
+                  >
+                    <i className={`ti ${loading ? "ti-loader-2 animate-spin" : "ti-check"} text-[14px]`} />
+                  </span>
+                  )}
+
+                  {/* 상태 뱃지 */}
+                  {c.activated ? (
+                    <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-[#ECFDF3] px-2.5 py-0.5 text-[12px] font-semibold text-[#067647] ring-1 ring-[#ABEFC6]">
+                      <span className="relative flex h-2 w-2">
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#17B26A] opacity-60" />
+                        <span className="relative inline-flex h-2 w-2 rounded-full bg-[#17B26A]" />
+                      </span>
+                      활성
+                    </span>
+                  ) : (
+                    <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-[#F2F4F7] px-2.5 py-0.5 text-[12px] font-semibold text-ink-muted ring-1 ring-[#E4E7EC]">
+                      <span className="h-2 w-2 rounded-full bg-[#98A2B3]" />
+                      비활성
+                    </span>
+                  )}
+
+                  <p className={`mt-3 truncate pr-8 text-[16px] font-bold ${ok ? "text-ink" : "text-ink-muted"}`} title={c.name}>
+                    {c.name}
+                  </p>
+                  <p className="mt-1 text-[13px] tabular-nums text-ink-muted">ID {c.no}</p>
+
+                  <div className="mt-4 flex flex-wrap items-center gap-1.5 border-t border-[#F2F4F7] pt-3 text-[12px]">
+                    <span className={`rounded-md px-2 py-0.5 font-medium ${ok ? "bg-[#FFF1EA] text-[#B93815]" : "bg-[#F2F4F7] text-ink-muted"}`}>{OBJECTIVE_LABEL[c.objective] ?? c.objective}</span>
+                    {c.cbo && <span className="rounded-md bg-[#F2F4F7] px-2 py-0.5 font-medium text-ink-soft">CBO</span>}
+                    {!ok && (
+                      <span className="flex items-center gap-1 text-ink-muted">
+                        <i className="ti ti-info-circle text-[13px]" aria-hidden />
+                        {c.objective === "WATCH_VIDEO" ? "영상 소재형" : c.objective === "INSTALL_APP" ? "앱 설치형" : "상품 피드형"}이라 자동 세팅 미지원
+                      </span>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {ctxLoading.length > 0 && (
+          <p className="mt-5 flex items-center gap-2 text-[14px] text-ink-muted">
+            <i className="ti ti-loader-2 animate-spin" aria-hidden />
+            캠페인 정보를 불러오는 중… ({ctxLoading.length}개)
+          </p>
+        )}
+        {picked.length === 1 && ctx && (
+          <div className="mt-5 flex flex-wrap gap-x-6 gap-y-1 rounded-xl bg-[#F9FAFB] px-4 py-3 text-[14px] text-ink-soft ring-1 ring-[#F2F4F7]">
             <span>
               목적 <b className="text-ink">{OBJECTIVE_LABEL[ctx.campaign.objective] ?? ctx.campaign.objective}</b>
             </span>
@@ -271,18 +532,76 @@ export function GfaSetup() {
             {unsupported && <span className="text-bad">이 목적은 아직 자동 세팅을 지원하지 않아요.</span>}
           </div>
         )}
-      </Card>
+        {picked.length > 1 && pickedCtxs.length > 0 && (
+          <div className="mt-5 overflow-x-auto rounded-xl ring-1 ring-[#F2F4F7]">
+            <table className="w-full min-w-[640px] text-[14px]">
+              <thead className="bg-[#F9FAFB] text-left text-[13px] text-ink-muted">
+                <tr>
+                  <th className="px-4 py-2 font-medium">선택한 캠페인</th>
+                  <th className="px-4 py-2 font-medium">목적</th>
+                  <th className="px-4 py-2 font-medium">입찰 (GFA 기본값 그대로)</th>
+                  <th className="px-4 py-2 text-right font-medium">기존 광고그룹</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pickedCtxs.map((c) => (
+                  <tr key={c.campaign.no} className="border-t border-[#F2F4F7]">
+                    <td className="max-w-[320px] px-4 py-2">
+                      <p className="truncate font-semibold text-ink" title={c.campaign.name}>
+                        {c.campaign.name}
+                      </p>
+                      <p className="text-[12px] tabular-nums text-ink-muted">ID {c.campaign.no}</p>
+                    </td>
+                    <td className="px-4 py-2 text-ink-soft">{OBJECTIVE_LABEL[c.campaign.objective] ?? c.campaign.objective}</td>
+                    <td className="px-4 py-2 text-ink-soft">
+                      {c.sample.bidGoal ?? "—"} · {c.sample.bidType ?? "—"} · {c.sample.bidStrategy ?? "—"}
+                    </td>
+                    <td className="px-4 py-2 text-right tabular-nums text-ink">{c.existingAdSets.length}개</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
 
-      {ctx && !unsupported && clientId && (
+      {allLoaded && pickedCtxs.length > 0 && clientId && (
         <div className="flex flex-wrap items-center gap-3">
-          <Segmented value={mode} options={[{ key: "bulk", label: "📄 엑셀 벌크 업로드" }, { key: "ai", label: "✨ AI 자동 세팅" }]} onChange={(m) => !running && setMode(m)} />
+          <div className="inline-flex rounded-full bg-white p-1 shadow-[0_1px_2px_rgba(16,24,40,0.05)] ring-1 ring-[#EAECF0]">
+            {(
+              [
+                { key: "bulk", label: "엑셀 벌크 업로드", icon: "file-spreadsheet" },
+                { key: "ai", label: "AI 자동 세팅", icon: "sparkles" },
+              ] as const
+            ).map((o) => (
+              <button
+                key={o.key}
+                type="button"
+                onClick={() => !running && setMode(o.key)}
+                disabled={o.key === "ai" && picked.length > 1}
+                title={o.key === "ai" && picked.length > 1 ? "AI 자동 세팅은 캠페인 1개를 골랐을 때만 쓸 수 있어요" : undefined}
+                aria-pressed={mode === o.key}
+                className={`flex items-center gap-1.5 whitespace-nowrap rounded-full px-4 py-1.5 text-[14px] transition disabled:cursor-not-allowed disabled:opacity-40 ${
+                  mode === o.key ? "bg-[#eb6834] font-semibold text-white shadow-[0_1px_3px_rgba(235,104,52,0.4)]" : "text-ink-muted enabled:hover:text-ink"
+                }`}
+              >
+                <i className={`ti ti-${o.icon} text-[15px]`} aria-hidden />
+                {o.label}
+              </button>
+            ))}
+          </div>
           <span className="text-[14px] text-ink-muted">
-            {mode === "bulk" ? "엑셀 한 장 + 이미지 폴더로 소재를 한 번에 — 이미지는 파일명의 상품명으로 자동 매칭" : "브리프만 넣으면 AI가 광고그룹·타겟·예산·카피를 설계"}
+            {mode === "bulk"
+              ? picked.length > 1
+                ? `캠페인 ${picked.length}개에 엑셀 한 장으로 한 번에 — AI 자동 세팅은 캠페인 1개일 때만`
+                : "엑셀 한 장 + 이미지 폴더로 소재를 한 번에 — 이미지는 파일명의 상품명으로 자동 매칭"
+              : "브리프만 넣으면 AI가 광고그룹·타겟·예산·카피를 설계"}
           </span>
         </div>
       )}
 
-      {ctx && !unsupported && clientId && mode === "bulk" && <BulkUpload key={ctx.campaign.no} clientId={clientId} ctx={ctx} accountNo={accountNo} canEdit={canEdit} />}
+      {/* 선택을 바꿔도 엑셀·이미지는 유지(key 없음) */}
+      {allLoaded && pickedCtxs.length > 0 && clientId && mode === "bulk" && <BulkUpload clientId={clientId} ctxs={pickedCtxs} accountNo={accountNo} canEdit={canEdit} />}
 
       {/* 2. 브리프 */}
       {ctx && !unsupported && mode === "ai" && (
