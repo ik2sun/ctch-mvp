@@ -1,6 +1,7 @@
 // 캠페인 매니저 대화 — 서버 전용. 현재 광고주 한 곳의 캠페인 매니저로 동작한다. 스트리밍 수동 도구 루프:
 //  - load_skill(클라이언트 도구): 퍼포먼스 전문 스킬 본문(시스템 프롬프트에는 이름·설명만)
-//  - get_campaign_performance / get_campaign_daily: 연동 매체 캠페인 성과(서버가 매체 API 조회, 10분 캐시)
+//  - [리포트 분석 켜짐일 때만] get_campaign_performance(직전 같은 기간 비교 포함) / get_campaign_daily: 연동 매체(메타·네이버 SA·GFA·카카오·구글 Ads) 캠페인 성과
+//    get_creative_report: 메타 소재 판정·유형별·피로도(소재 분석과 같은 엔진) / get_audience_report: 메타 성별·연령 실제 성과 — 서버가 매체 API 조회, 10분 캐시
 //  - search_emails / read_email: 담당자 메일함에서 수집한 광고주 메일(pm_emails)
 //  - get_market_signals: CTCH 경쟁사·브랜드 키워드 모니터링 + 시장 메모
 //  - web_search(서버 도구): 시장·업계·매체 최신 정보
@@ -10,7 +11,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { SKILLS, skillByName } from "./skills";
-import { campaignDaily, campaignReport, loadCampaigns } from "./campaigns";
+import { campaignDaily, campaignReport, loadCampaigns, loadPreviousCampaigns } from "./campaigns";
+import { audienceReport, creativeReport } from "./reportTools";
 import { marketSignals } from "./market";
 import { membersText, type ClientProfile } from "./store";
 import { PM_MODEL, type Brief, type CampaignOwner, type ChatEvent, type ChatTurn, type PmSettings } from "./types";
@@ -22,8 +24,20 @@ const PERSONA = `너는 대행사 NMG에서 지금 선택된 광고주를 전담
 
 일하는 방식
 - 결론부터. 첫 문장에 판단이나 답, 그다음 근거, 마지막에 할 일을 "오늘/이번 주/다음 점검"과 담당자를 붙여 쓴다.
-- 근거는 세 가지로 나눠 밝힌다: ① 메일(날짜·제목·보낸 사람) ② 매체 데이터(도구로 조회한 수치) ③ 시장(웹 검색 출처·CTCH 모니터링). 확인 안 된 것은 확인 안 됐다고 쓴다.
-- 성과·예산·이상 징후 질문이면 get_campaign_performance로 먼저 조회한다. 기간을 말하지 않으면 최근 30일. 한 캠페인을 깊게 볼 때는 get_campaign_daily.
+- 근거는 네 갈래로 나눠 밝힌다: [메일] 날짜·제목·보낸 사람 / [리포트] 도구로 조회한 실제 수치와 기간 / [시장] 웹 검색 출처·CTCH 모니터링 / [대화] 질문자가 이 대화에서 알려 준 사정(프로모션 일정, 예산 변경, 광고주 반응 등). 확인 안 된 것은 확인 안 됐다고 쓰고, 이번 대화에서 꺼진 근거는 '꺼짐'으로 적는다.
+- [대화]에서 들은 내용은 사실로 받아들여 판단에 반영하되, 메일·리포트와 맞지 않으면 그 차이를 짚는다.
+- 리포트 분석이 켜져 있으면 성과·예산·소재·타겟·이상 징후에 관한 판단은 반드시 리포트 도구로 먼저 조회한 뒤 말한다(기억이나 메일 속 수치로 대신하지 않는다). 기간을 말하지 않으면 최근 30일.
+  · 매체·캠페인 성과·변화 → get_campaign_performance(변화·추이를 물으면 compare_previous=true). 한 캠페인의 일별 → get_campaign_daily
+  · 소재(무엇을 키우고 끌지, 어떤 유형이 잘 되나, 피로) → get_creative_report
+  · 성별·연령·타겟 → get_audience_report(특정 소재·캠페인이면 creative_contains)
+- 리포트 분석이 꺼져 있으면 매체 수치를 조회할 수 없다. 수치가 필요한 판단은 '리포트 분석을 켜면 확인할 수 있다'고 밝히고, 메일·대화에 나온 수치만 출처와 함께 쓴다.
+
+종합 답변 — '종합', '진단', '정리', '보고', '계획', '다음 주 할 일' 같은 요청이면 아래 순서로 쓴다
+1) 결론(2~3문장): 지금 가장 중요한 판단
+2) 근거: [메일] / [리포트] / [시장] / [대화] 네 줄 묶음 — 각 묶음에 핵심 2~4개, 없으면 '없음', 꺼졌으면 '꺼짐'
+3) 어긋나는 점: 메일로 합의·요청한 것과 실제 리포트가 다른 곳, 대화에서 들은 계획과 집행 데이터가 다른 곳(없으면 생략)
+4) 할 일: 오늘 / 이번 주 / 다음 점검, 항목마다 담당자와 확인할 수치
+종합 요청에서 리포트가 켜져 있으면 get_campaign_performance(compare_previous=true)와 get_creative_report를 함께 조회하고, 시장 질문이 섞이면 get_market_signals도 본다.
 - 광고주가 요청·합의한 내용, 일정, 담당자, 과거 경위는 아래 '메일 정리'를 먼저 보고, 세부나 원문이 필요하면 search_emails → read_email.
 - 시장·경쟁·업계 동향은 get_market_signals와 웹 검색으로 확인하고 출처를 밝힌다.
 - 할 일·이슈에는 담당자를 붙인다. 담당자는 아래 '프로젝트 사람'의 NMG 사람 중 그 건을 메일로 주고받은 사람으로 판단하고(search_emails로 확인), 알 수 없으면 '담당자 미지정'. 메일 속 사람이 광고주인지 NMG인지도 이 목록으로 판단한다.
@@ -32,14 +46,15 @@ const PERSONA = `너는 대행사 NMG에서 지금 선택된 광고주를 전담
 - 광고주에게 보낼 메일 초안을 요청받으면 메일 정리의 합의·요청 사항과 수치를 반영해 정중하고 간결하게 쓴다(발송은 사람이 한다).
 - 전문 주제가 나오면 load_skill로 해당 스킬을 먼저 읽는다. 한 대화에서 이미 읽은 스킬은 다시 읽지 않는다.
 - CTCH 메뉴가 도움이 되면 안내한다: 대시보드, 실시간 리포트, 소재 분석, 미디어믹스 최적화(예산 배분·동기화), 상관관계 분석, SA 관리(입찰 시뮬레이터·경쟁사·브랜드 키워드 모니터링), UTM 자동화(AI 마케팅 에이전트 하위).
+- 도구 이름(get_…·search_emails 등)은 답변에 쓰지 않는다. 사람에게는 '캠페인 리포트', '소재 리포트', '성별·연령 리포트', '메일 검색'처럼 말한다.
 - 한국어로, 동료에게 말하듯 간결하게. 표는 비교가 있을 때만. 과장·감탄사·이모지 없이.`;
 
 const NO_PROPS = { type: "object" as const, properties: {}, required: [] as string[], additionalProperties: false };
 
-const DATA_TOOLS: Anthropic.Beta.BetaTool[] = [
+const REPORT_TOOLS: Anthropic.Beta.BetaTool[] = [
   {
     name: "get_campaign_performance",
-    description: "현재 광고주의 연동 매체(메타·네이버 SA·GFA·카카오모먼트) 캠페인 성과를 조회한다. 매체 합계, 캠페인별 기간 합계, 최근 7일 vs 직전 7일 변화, 캠페인 담당자를 돌려준다. 필터는 빈 문자열이면 전체.",
+    description: "현재 광고주의 연동 매체(메타·네이버 SA·GFA·카카오모먼트·구글 Ads) 캠페인 성과를 조회한다. 매체 합계, 캠페인별 기간 합계, 최근 7일 vs 직전 7일 변화, 캠페인 담당자를 돌려준다. 필터는 빈 문자열이면 전체.",
     strict: true,
     input_schema: {
       type: "object",
@@ -48,8 +63,9 @@ const DATA_TOOLS: Anthropic.Beta.BetaTool[] = [
         media: { type: "string", description: "meta | naver | gfa | kakao 또는 빈 문자열" },
         name_contains: { type: "string", description: "캠페인 이름에 포함된 문자열 또는 빈 문자열" },
         owner_email: { type: "string", description: "담당자 이메일 또는 빈 문자열" },
+        compare_previous: { type: "boolean", description: "true면 직전 같은 기간(예: 최근 30일이면 그 앞 30일)과 매체별 비교를 함께" },
       },
-      required: ["days", "media", "name_contains", "owner_email"],
+      required: ["days", "media", "name_contains", "owner_email", "compare_previous"],
       additionalProperties: false,
     },
   },
@@ -64,6 +80,40 @@ const DATA_TOOLS: Anthropic.Beta.BetaTool[] = [
       additionalProperties: false,
     },
   },
+  {
+    name: "get_creative_report",
+    description: "메타 소재 단위 리포트(CTCH 소재 분석과 같은 엔진): 판정(키우기·지켜보기·끄기·예산 못 받음·신규, 목표 ROAS 기준), 소재 유형별 성과(성과 맵 기준), 소재별 광고비·ROAS·CPA·CTR·CVR, 피로 의심. 처음 조회는 20~40초.",
+    strict: true,
+    input_schema: {
+      type: "object",
+      properties: {
+        days: { type: "integer", description: "최근 며칠(어제까지) 7~60, 보통 14" },
+        sort: { type: "string", description: "spend(광고비 순) | best(ROAS 높은 순) | worst(ROAS 낮은 순)" },
+        name_contains: { type: "string", description: "소재·캠페인 이름에 포함된 문자열 또는 빈 문자열" },
+        limit: { type: "integer", description: "소재 목록 개수 5~40" },
+      },
+      required: ["days", "sort", "name_contains", "limit"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "get_audience_report",
+    description: "메타 성별·연령 실제 성과(광고 관리자 '분석 기준 > 연령 및 성별'). 구간별 광고비·ROAS·전환·CPA·CTR과 평균 대비 확실히 높/낮음 표시. creative_contains를 주면 그 소재·캠페인만.",
+    strict: true,
+    input_schema: {
+      type: "object",
+      properties: {
+        days: { type: "integer", description: "최근 며칠(어제까지) 7~90, 보통 30" },
+        by: { type: "string", description: "gender | age | gender_age" },
+        creative_contains: { type: "string", description: "소재·캠페인 이름에 포함된 문자열 또는 빈 문자열(계정 전체)" },
+      },
+      required: ["days", "by", "creative_contains"],
+      additionalProperties: false,
+    },
+  },
+];
+
+const CONTEXT_TOOLS: Anthropic.Beta.BetaTool[] = [
   {
     name: "search_emails",
     description: "담당자 메일함에서 수집한 이 광고주 관련 메일을 검색한다. 결과는 최신순 목록(id·날짜·방향·보낸 사람·제목·앞부분). 원문은 read_email로 읽는다.",
@@ -107,8 +157,10 @@ const LOAD_SKILL: Anthropic.Beta.BetaTool = {
 };
 
 const TOOL_LABEL: Record<string, string> = {
-  get_campaign_performance: "캠페인 성과 조회",
-  get_campaign_daily: "캠페인 일별 조회",
+  get_campaign_performance: "리포트 · 캠페인 성과",
+  get_campaign_daily: "리포트 · 캠페인 일별",
+  get_creative_report: "리포트 · 소재 판정",
+  get_audience_report: "리포트 · 성별·연령",
   search_emails: "메일 검색",
   read_email: "메일 원문",
   get_market_signals: "시장·경쟁 신호",
@@ -117,6 +169,7 @@ const TOOL_LABEL: Record<string, string> = {
 export type ChatInput = {
   turns: ChatTurn[];
   webSearch: boolean;
+  reportAnalysis: boolean; // 실제 매체 API 리포트 도구 사용 여부
   briefs: Brief[];
   supabase: SupabaseClient;
   ownerId: string;
@@ -140,6 +193,7 @@ function systemPrompt(input: ChatInput): Anthropic.Beta.BetaTextBlockParam[] {
   const today = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
   const clientBlock = [
     `오늘 날짜(한국): ${today}`,
+    `이번 대화에서 쓸 수 있는 근거: [메일] 켜짐 · [리포트] ${input.reportAnalysis ? "켜짐(매체 API 조회 가능)" : "꺼짐(매체 수치 조회 불가)"} · [시장] CTCH 모니터링 켜짐 · 웹 검색 ${input.webSearch ? "켜짐" : "꺼짐"} · [대화] 질문자가 알려 준 내용`,
     "",
     `# 담당 광고주: ${c.name}`,
     `업종 ${c.industry || "—"} · 월 예산 ${c.monthly_budget ? `${Number(c.monthly_budget).toLocaleString("ko-KR")}원` : "—"} · 광고주 관리상 담당 ${c.manager || "—"}${c.memo ? `\n메모: ${c.memo}` : ""}`,
@@ -172,9 +226,17 @@ async function runTool(name: string, raw: unknown, input: ChatInput): Promise<st
   const db = createAdminClient();
   switch (name) {
     case "get_campaign_performance": {
-      const data = await loadCampaigns(input.supabase, input.client.id, input.ownerId, clampInt(a.days, 7, 90, 30));
-      return campaignReport(data, input.owners, 40, { media: str("media") || undefined, nameContains: str("name_contains") || undefined, owner: str("owner_email") || undefined });
+      const days = clampInt(a.days, 7, 90, 30);
+      const [data, prev] = await Promise.all([
+        loadCampaigns(input.supabase, input.client.id, input.ownerId, days),
+        a.compare_previous === true ? loadPreviousCampaigns(input.supabase, input.client.id, input.ownerId, days).catch(() => null) : Promise.resolve(null),
+      ]);
+      return campaignReport(data, input.owners, 40, { media: str("media") || undefined, nameContains: str("name_contains") || undefined, owner: str("owner_email") || undefined }, prev);
     }
+    case "get_creative_report":
+      return creativeReport(input.supabase, input.client.id, input.ownerId, { days: clampInt(a.days, 7, 60, 14), sort: str("sort") || "spend", nameContains: str("name_contains"), limit: clampInt(a.limit, 5, 40, 15) });
+    case "get_audience_report":
+      return audienceReport(input.supabase, input.client.id, input.ownerId, { days: clampInt(a.days, 7, 90, 30), by: ["gender", "age", "gender_age"].includes(str("by")) ? str("by") : "gender_age", creativeContains: str("creative_contains") });
     case "get_campaign_daily": {
       const q = str("name_contains");
       if (!q) return "name_contains가 비었어요.";
@@ -220,7 +282,8 @@ export async function runChat(input: ChatInput, emit: (e: ChatEvent) => void, si
   while (turns.length && turns[0].role !== "user") turns.shift();
   const messages: Anthropic.Beta.BetaMessageParam[] = turns.map((t) => ({ role: t.role, content: t.content }));
 
-  const tools: Anthropic.Beta.BetaToolUnion[] = [LOAD_SKILL, ...DATA_TOOLS];
+  // 리포트 분석이 꺼지면 매체 API 도구를 아예 주지 않는다(메일·시장·스킬만)
+  const tools: Anthropic.Beta.BetaToolUnion[] = [LOAD_SKILL, ...(input.reportAnalysis ? REPORT_TOOLS : []), ...CONTEXT_TOOLS];
   if (input.webSearch) {
     // 기본형 web_search — 이 프로젝트 실측(2026-09-29)에서 동적 필터링형(20260209)은 인용이 비고 2분 넘게 걸렸다
     tools.push({ type: "web_search_20250305", name: "web_search", max_uses: 4, user_location: { type: "approximate", country: "KR", timezone: "Asia/Seoul" } });
@@ -284,6 +347,7 @@ export async function runChat(input: ChatInput, emit: (e: ChatEvent) => void, si
           loaded.add(skill.name);
           return { type: "tool_result", tool_use_id: t.id, content: skill.content };
         }
+        if (!input.reportAnalysis && REPORT_TOOLS.some((x) => x.name === t.name)) return { type: "tool_result", tool_use_id: t.id, is_error: true, content: "리포트 분석이 꺼져 있어요." };
         emit({ type: "tool", label: TOOL_LABEL[t.name] ?? t.name });
         try {
           return { type: "tool_result", tool_use_id: t.id, content: (await runTool(t.name, t.input, input)).slice(0, 60000) };

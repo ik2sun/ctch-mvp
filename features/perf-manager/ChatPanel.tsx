@@ -1,6 +1,7 @@
 "use client";
 
 // 캠페인 매니저 대화창 — 현재 광고주 기준. 스트리밍(NDJSON), 스킬·데이터 도구·검색 표시, 출처. 대화는 화면 메모리에만(새로고침·광고주 전환 시 사라짐).
+// 근거 토글: 웹 검색 · 리포트 분석(실제 매체 API — 캠페인·소재·성별·연령), 둘 다 기본 켜짐·이 브라우저에 기억. [종합 진단]은 메일·리포트·시장·대화를 묶은 답을 요청.
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -19,6 +20,26 @@ export const ChatPanel = forwardRef<
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [webSearch, setWebSearch] = useState(true);
+  const [reportAnalysis, setReportAnalysis] = useState(true);
+  // 토글은 이 브라우저에 기억(사람마다 쓰는 방식이 달라서)
+  useEffect(() => {
+    try {
+      const v = JSON.parse(localStorage.getItem("ctch_pm_toggles") ?? "null");
+      if (v && typeof v.webSearch === "boolean") setWebSearch(v.webSearch);
+      if (v && typeof v.reportAnalysis === "boolean") setReportAnalysis(v.reportAnalysis);
+    } catch {
+      /* 무시 */
+    }
+  }, []);
+  const setToggle = (k: "webSearch" | "reportAnalysis", v: boolean) => {
+    if (k === "webSearch") setWebSearch(v);
+    else setReportAnalysis(v);
+    try {
+      localStorage.setItem("ctch_pm_toggles", JSON.stringify({ webSearch: k === "webSearch" ? v : webSearch, reportAnalysis: k === "reportAnalysis" ? v : reportAnalysis }));
+    } catch {
+      /* 무시 */
+    }
+  };
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
@@ -47,7 +68,7 @@ export const ChatPanel = forwardRef<
       const res = await fetch("/api/perf-manager/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ clientId, turns: history, webSearch }),
+        body: JSON.stringify({ clientId, turns: history, webSearch, reportAnalysis }),
         signal: ac.signal,
       });
       if (!res.ok || !res.body) {
@@ -94,7 +115,7 @@ export const ChatPanel = forwardRef<
           </span>
           <div className="leading-tight">
             <p className="text-[15px] font-semibold text-ink">{clientName ? `${clientName} 캠페인 매니저` : "캠페인 매니저"}</p>
-            <p className="text-[12px] text-ink-muted">메일·매체 성과·시장을 보고 답해요 · 대화는 저장되지 않아요</p>
+            <p className="text-[12px] text-ink-muted">메일 · {reportAnalysis ? "리포트(실제 데이터)" : "리포트 꺼짐"} · {webSearch ? "웹 검색" : "웹 검색 꺼짐"} · 대화 내용을 종합해 답해요 · 저장되지 않아요</p>
           </div>
         </div>
         <div className="flex items-center gap-1">
@@ -117,7 +138,7 @@ export const ChatPanel = forwardRef<
         {msgs.length === 0 ? (
           <div>
             <p className="text-[15px] leading-relaxed text-ink-soft">
-              {clientName ?? "광고주"}의 캠페인 매니저예요. 주고받은 메일, 연동 매체의 캠페인 성과, 시장·경쟁 동향을 직접 찾아보고 담당자별 할 일까지 정리해요.
+              {clientName ?? "광고주"}의 캠페인 매니저예요. 주고받은 메일, 연동 매체의 실제 리포트(캠페인·소재·성별·연령), 시장·경쟁 동향, 그리고 여기서 알려 주시는 사정을 종합해 판단하고 담당자별 할 일까지 정리해요.
             </p>
             <ul className="mt-3 space-y-1.5">
               {CM_SUGGESTIONS.map((s) => (
@@ -146,8 +167,8 @@ export const ChatPanel = forwardRef<
                       </span>
                     ))}
                     {m.tools?.map((t) => (
-                      <span key={t} className="inline-flex items-center gap-1 rounded-md bg-canvas px-1.5 py-0.5 text-[12px] text-ink-soft">
-                        <i className="ti ti-database text-[12px]" aria-hidden />
+                      <span key={t} className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[12px] ${t.startsWith("리포트") ? "bg-[#FFF3EF] text-[#C2410C]" : "bg-canvas text-ink-soft"}`}>
+                        <i className={`ti ${t.startsWith("리포트") ? "ti-chart-bar" : t.startsWith("메일") ? "ti-mail" : "ti-database"} text-[12px]`} aria-hidden />
                         {t}
                       </span>
                     ))}
@@ -190,7 +211,18 @@ export const ChatPanel = forwardRef<
 
       <div className="border-t border-line px-3 py-3">
         <div className="mb-2 flex flex-wrap items-center gap-1.5 text-[12px]">
-          <Toggle on={webSearch} onChange={setWebSearch} icon="ti-world-search" label="웹 검색(최신 정보)" />
+          <Toggle on={reportAnalysis} onChange={(v) => setToggle("reportAnalysis", v)} icon="ti-chart-bar" label="리포트 분석(실제 데이터)" title="연동 매체 API로 캠페인·소재·성별·연령 성과를 직접 조회해 근거로 써요(조회 10~40초)" />
+          <Toggle on={webSearch} onChange={(v) => setToggle("webSearch", v)} icon="ti-world-search" label="웹 검색(최신 정보)" />
+          <button
+            type="button"
+            onClick={() => send(COMPOSITE_PROMPT(reportAnalysis, webSearch))}
+            disabled={busy || !clientId}
+            title="메일·리포트·시장·이 대화에서 알려 준 내용을 종합해 진단과 이번 주 할 일을 받아요"
+            className="ml-auto inline-flex items-center gap-1 rounded-full border border-[#F45B35]/50 bg-[#FFF3EF] px-2.5 py-0.5 font-medium text-[#C2410C] transition hover:border-[#F45B35] disabled:opacity-40"
+          >
+            <i className="ti ti-clipboard-check text-[12px]" aria-hidden />
+            종합 진단
+          </button>
         </div>
         <div className="flex items-end gap-2 rounded-xl border border-line px-3 py-2 focus-within:border-signal/60">
           <textarea
@@ -225,14 +257,18 @@ export const ChatPanel = forwardRef<
   );
 });
 
-function Toggle({ on, onChange, icon, label, disabled }: { on: boolean; onChange: (v: boolean) => void; icon: string; label: string; disabled?: boolean }) {
+// [종합 진단] 요청 — 켜진 근거만 언급(꺼진 근거는 매니저가 '꺼짐'으로 표기)
+const COMPOSITE_PROMPT = (report: boolean, web: boolean) =>
+  `종합 진단해 줘. 주고받은 메일(합의·요청·일정)${report ? ", 최근 30일 매체 리포트(직전 30일 대비)와 소재 판정" : ""}${web ? ", 시장·업계 최신 동향" : ", CTCH 시장 모니터링"}, 그리고 이 대화에서 내가 말한 내용을 모두 합쳐서 지금 상황의 결론, 근거(메일/리포트/시장/대화), 어긋나는 점, 오늘·이번 주 할 일(담당자 포함)을 정리해 줘.`;
+
+function Toggle({ on, onChange, icon, label, disabled, title }: { on: boolean; onChange: (v: boolean) => void; icon: string; label: string; disabled?: boolean; title?: string }) {
   return (
     <button
       type="button"
       aria-pressed={on}
       disabled={disabled}
       onClick={() => onChange(!on)}
-      title={on ? `${label} 켜짐 — 누르면 꺼요` : `${label} 꺼짐 — 누르면 켜요`}
+      title={`${title ? `${title} — ` : ""}${on ? `${label} 켜짐, 누르면 꺼요` : `${label} 꺼짐, 누르면 켜요`}`}
       className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 transition disabled:cursor-not-allowed disabled:opacity-40 ${on ? "border-signal bg-signal font-medium text-white hover:bg-signal-strong" : "border-line bg-surface text-ink-muted hover:border-signal/40 hover:text-signal"}`}
     >
       <i className={`ti ${on ? "ti-check" : icon} text-[12px]`} aria-hidden />

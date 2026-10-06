@@ -9,7 +9,7 @@ import { EMPTY_SETTINGS, type ChatEvent, type ChatTurn } from "@/features/perf-m
 export const maxDuration = 300;
 
 export async function POST(req: Request) {
-  const body = (await req.json().catch(() => null)) as { clientId?: string; turns?: ChatTurn[]; webSearch?: boolean } | null;
+  const body = (await req.json().catch(() => null)) as { clientId?: string; turns?: ChatTurn[]; webSearch?: boolean; reportAnalysis?: boolean } | null;
   const access = await requireClientAccess(body?.clientId);
   if (access instanceof NextResponse) return access;
   if (!process.env.ANTHROPIC_API_KEY) return Response.json({ error: "ANTHROPIC_API_KEY가 설정되지 않았어요." }, { status: 500 });
@@ -39,6 +39,7 @@ export async function POST(req: Request) {
           {
             turns,
             webSearch: !!body?.webSearch,
+            reportAnalysis: body?.reportAnalysis !== false, // 기본 켜짐
             briefs,
             supabase: access.supabase,
             ownerId: access.ownerId,
