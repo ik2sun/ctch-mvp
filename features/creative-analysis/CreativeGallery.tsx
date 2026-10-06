@@ -39,13 +39,7 @@ export function Thumb({ row, className = "", fit = "cover" }: { row: Enriched; c
 
 export function NameChips({ row, max = 4 }: { row: Enriched; max?: number }) {
   const p = row.parsed;
-  const chips = [
-    p.type !== "미분류" ? p.type : null,
-    p.tvc ?? p.theme,
-    p.influencer ? `@${p.influencer}` : p.model,
-    ...p.products,
-    p.videoLength,
-  ].filter((x): x is string => !!x);
+  const chips = [p.mapValue ?? null, ...(p.fields ?? []).filter((f) => f.kind === "text").flatMap((f) => f.values)].filter((x): x is string => !!x);
   return (
     <div className="flex flex-wrap gap-1">
       {[...new Set(chips)].slice(0, max).map((c) => (
@@ -158,7 +152,7 @@ export function CreativeGallery({
   onOpen: (r: Enriched) => void;
   dict: NamingDict;
   winnerIds: Set<string>;
-  theme?: { keys: string[]; label: string } | null; // 성과 맵에서 고른 테마(들)
+  theme?: { keys: string[]; label: string; match?: (r: Enriched) => boolean } | null; // 성과 맵에서 고른 테마(들) — 조합 모드면 match로 판별
   onClearTheme?: () => void;
   decisions?: Map<string, Decision>; // 판정 엔진 결과 — 있으면 등급 대신 상태 칩
 }) {
@@ -171,9 +165,9 @@ export function CreativeGallery({
     const qq = q.trim().toLowerCase();
     const f = rows.filter(
       (r) =>
-        (!theme || theme.keys.includes(themeOf(r).key)) &&
+        (!theme || (theme.match ? theme.match(r) : theme.keys.includes(themeOf(r).key))) &&
         (grade === "all" || (grade === "winner" ? winnerIds.has(r.id) : r.grade === grade)) &&
-        (!qq || r.name.toLowerCase().includes(qq) || r.adsetName.toLowerCase().includes(qq) || (r.parsed.theme ?? "").toLowerCase().includes(qq) || (r.parsed.influencer ?? "").includes(qq)),
+        (!qq || r.name.toLowerCase().includes(qq) || r.adsetName.toLowerCase().includes(qq) || (r.parsed.fields ?? []).some((f) => f.values.some((v) => v.toLowerCase().includes(qq)))),
     );
     const v = (r: Enriched): number =>
       sort === "cost" ? r.cost : sort === "score" ? (r.judged ? (r.score ?? -1) : -2) : sort === "revenue" ? r.revenue : sort === "ctr" ? (r.judged ? (r.ctr ?? -1) : -2) : sort === "cpa" ? -(r.cpa ?? Number.MAX_VALUE) : -(r.ageDays ?? 9999);

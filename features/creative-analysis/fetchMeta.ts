@@ -9,13 +9,36 @@ const DAILY_TOP = 40;
 const AD_FIELDS =
   "name,effective_status,created_time,preview_shareable_link,creative{id,object_type,image_url,image_hash,video_id,title,body,call_to_action_type,url_tags,asset_feed_spec{bodies,titles,images,videos,link_urls{website_url}},object_story_spec{link_data{message,name,link,image_hash,child_attachments},video_data{message,title,video_id,call_to_action{value{link}}}}}";
 
-// UTM — 메타는 소재의 url_tags("utm_source=…&utm_campaign=…")로 붙이거나 랜딩 URL에 직접 넣는다. 둘 다 보고 url_tags 우선.
-function utmOf(ad: Raw | undefined): CreativeRow["utm"] {
+// 랜딩 URL — 링크·영상 CTA·다이내믹 소재 첫 웹사이트 URL(파트너십·기존 게시물 광고는 여기 없어서 비어 있을 수 있음)
+function linkOf(ad: Raw | undefined): string {
   const c = (ad?.creative ?? {}) as Raw;
   const oss = (c.object_story_spec ?? {}) as { link_data?: { link?: string }; video_data?: { call_to_action?: { value?: { link?: string } } } };
   const afs = (c.asset_feed_spec ?? {}) as { link_urls?: { website_url?: string }[] };
+  return oss.link_data?.link ?? oss.video_data?.call_to_action?.value?.link ?? afs.link_urls?.[0]?.website_url ?? "";
+}
+const isMacro = (v: string) => /\{\{.*\}\}/.test(v);
+
+// 실제로 열리는 주소 = 랜딩 URL + 소재 url_tags(메타가 뒤에 붙임). {{…}} 매크로 값은 빼고, http(s)만
+function landingOf(ad: Raw | undefined): string | null {
+  const link = linkOf(ad);
+  if (!link) return null;
+  try {
+    const u = new URL(link);
+    if (!/^https?:$/.test(u.protocol)) return null;
+    const tags = (ad?.creative as Raw | undefined)?.url_tags;
+    if (typeof tags === "string") new URLSearchParams(tags.replace(/^[?&]/, "")).forEach((v, k) => !isMacro(v) && u.searchParams.set(k, v));
+    for (const [k, v] of [...u.searchParams]) if (isMacro(v)) u.searchParams.delete(k);
+    return u.toString();
+  } catch {
+    return null;
+  }
+}
+
+// UTM — 메타는 소재의 url_tags("utm_source=…&utm_campaign=…")로 붙이거나 랜딩 URL에 직접 넣는다. 둘 다 보고 url_tags 우선.
+function utmOf(ad: Raw | undefined): CreativeRow["utm"] {
+  const c = (ad?.creative ?? {}) as Raw;
   const params = new URLSearchParams();
-  const link = oss.link_data?.link ?? oss.video_data?.call_to_action?.value?.link ?? afs.link_urls?.[0]?.website_url ?? "";
+  const link = linkOf(ad);
   try {
     if (link) new URL(link).searchParams.forEach((v, k) => params.set(k.toLowerCase(), v));
   } catch {
@@ -92,6 +115,7 @@ function creativeInfo(ad: Raw | undefined) {
   return {
     format,
     utm: utmOf(ad),
+    landingUrl: landingOf(ad),
     thumbnailUrl: (c.image_url as string) ?? null,
     title: (c.title as string) ?? afs.titles?.[0]?.text ?? oss.link_data?.name ?? oss.video_data?.title ?? null,
     body: (c.body as string) ?? afs.bodies?.[0]?.text ?? oss.link_data?.message ?? oss.video_data?.message ?? null,

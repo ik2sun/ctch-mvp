@@ -7,6 +7,7 @@ import type { NamingDict } from "./naming";
 
 // ── 목표 코드(CV·TR…) ─────────────────────────────
 export function objectiveCode(r: Enriched, dict: NamingDict): string | null {
+  if (r.parsed.objectiveCode) return r.parsed.objectiveCode; // 해석기가 찾은 위치(순서 모드 포함)
   const tok = r.name.toLowerCase().split("_")[1];
   if (tok && dict.objectives[tok]) return tok;
   const label = r.parsed.objective;
@@ -16,7 +17,7 @@ export function objectiveCode(r: Enriched, dict: NamingDict): string | null {
 
 // ── A/B 묶음 ─────────────────────────────
 export function abKey(name: string): { prefix: string; variant: string } | null {
-  const toks = name.trim().split("_").filter(Boolean);
+  const toks = name.trim().split(/[_\-|]+/).filter(Boolean); // 구분자가 다른 광고주(-, |)도 묶는다
   if (toks.length < 3) return null;
   const tail: string[] = [];
   while (toks.length > 2 && /^(\d{1,3}|[a-z])$/i.test(toks[toks.length - 1])) tail.unshift(toks.pop()!);
@@ -61,8 +62,10 @@ export function abGroups(rows: Enriched[]): AbGroup[] {
 // ── 테마(콘텐츠·상품) ─────────────────────────────
 export function themeOf(r: Enriched): { key: string; label: string } {
   const p = r.parsed;
+  if (p.ruleSet) return p.mapValue ? { key: `m:${p.mapValue}`, label: p.mapValue } : { key: "m:", label: "기타" }; // 광고주 규칙 — 성과 맵 기준 항목
   if (p.tvc) return { key: `tvc:${p.tvc}`, label: p.tvc };
-  if (p.themeCode || p.theme) return { key: `t:${p.themeCode ?? p.theme}`, label: p.theme ?? p.themeCode! };
+  // 의미(라벨) 기준으로 묶는다 — 규칙에서 코드 여러 개에 같은 의미(예: springsale·spring_sale → 봄세일)를 주면 한 테마로
+  if (p.themeCode || p.theme) return { key: `t:${p.theme ?? p.themeCode}`, label: p.theme ?? p.themeCode! };
   if (p.influencer) return { key: `inf:${p.influencer}`, label: `@${p.influencer}` };
   if (p.products.length) return { key: `p:${p.products[0]}`, label: p.products[0] };
   return { key: `type:${p.type}`, label: p.type === "미분류" ? "기타" : p.type };
@@ -103,12 +106,13 @@ export type FacetKey = "source" | "medium" | "campaign" | "placement";
 export const FACETS: { key: FacetKey; label: string; hint: string }[] = [
   { key: "source", label: "매체", hint: "utm_source" },
   { key: "medium", label: "광고 형태", hint: "utm_medium" },
-  { key: "campaign", label: "캠페인", hint: "utm_campaign — pm(프로모션)·ongoing(상시)" },
+  { key: "campaign", label: "캠페인", hint: "utm_campaign — 값의 뜻·유형은 분석 규칙의 UTM 규칙 시트" },
   { key: "placement", label: "지면", hint: "utm_content 첫 조각(예: infeed)" },
 ];
 const CAMPAIGN_LABEL = (v: string) => (/^ongoing|상시/i.test(v) ? "상시(ongoing)" : /^(pm|promo)/i.test(v) ? "프로모션(pm)" : v);
 
 export function facetValue(r: Enriched, f: FacetKey): string {
+  if (r.utmLabel !== undefined) return r.utmLabel?.[f] ?? NONE; // 광고주 UTM 규칙 적용분
   const u = r.utm;
   if (!u) return NONE;
   if (f === "source") return u.source ?? NONE;

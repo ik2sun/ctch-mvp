@@ -48,8 +48,9 @@ function median(v: number[]): number | null {
   return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
 }
 
-// 캠페인 유형 — UTM 캠페인 값 → 소재명(TVC) → 캠페인 이름 순
+// 캠페인 유형 — UTM 규칙의 캠페인 유형 → UTM 캠페인 값 → 소재명(TVC) → 캠페인 이름 순
 export function campaignKind(r: Enriched): CampaignKind {
+  if (r.utmLabel?.kind) return r.utmLabel.kind;
   const utm = facetValue(r, "campaign");
   if (utm.startsWith("프로모션")) return "promo";
   if (utm.startsWith("상시")) return "ongoing";

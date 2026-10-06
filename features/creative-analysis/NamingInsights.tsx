@@ -15,25 +15,26 @@ const pct = (v: number | null, d = 0) => (v == null ? "—" : `${(v * 100).toFix
 const OBJ_ICON: Record<string, string> = { cv: "🎯", tr: "🔗", eg: "💬", bd: "✨", ba: "📣" };
 
 // ── ① 태그 칩 ─────────────────────────────
+const FIELD_ICON: Record<string, string> = { 목표: "🎯", 콘텐츠: "👟", TVC: "🎬", 상품: "🏷️", 모델: "👤", 인플루언서: "", "영상 길이": "⏱️" };
 export function ParsedTags({ row, dict, max = 4 }: { row: Enriched; dict: NamingDict; max?: number }) {
   const p = row.parsed;
-  const code = objectiveCode(row, dict);
-  const obj = code ? `${OBJ_ICON[code] ?? "🎯"} ${dict.objectives[code] ?? code}(${code.toUpperCase()})` : null;
-  const theme = p.tvc ?? p.theme ?? (p.influencer ? `@${p.influencer}` : null);
-  const product = p.products[0] ?? null;
+  const code = p.ruleSet ? null : objectiveCode(row, dict);
   const ab = abKey(row.name);
   const serial = p.serial ?? ab?.variant ?? null;
-  const chips: { t: string; cls: string }[] = [
-    obj ? { t: obj, cls: "bg-signal-soft text-signal" } : null,
-    theme ? { t: `👟 ${theme}`, cls: "bg-[#FFF3EF] text-[#9A3412]" } : null,
-    product && product !== theme ? { t: `🏷️ ${product}`, cls: "bg-canvas text-ink-soft" } : null,
-    p.model && p.model !== theme ? { t: `👤 ${p.model}`, cls: "bg-canvas text-ink-soft" } : null,
-    serial ? { t: `📷 소재 ${serial}`, cls: "bg-canvas text-ink-muted" } : null,
-  ].filter((x): x is { t: string; cls: string } => !!x);
+  // 항목 값 칩(규칙 파일 항목 이름 그대로, 성과 맵 기준 항목 먼저) — 내장 해석이면 목표는 코드도 함께
+  const fields = (p.fields ?? []).filter((f) => f.kind === "text" && f.values.length);
+  const ordered = [...fields.filter((f) => f.values[0] === p.mapValue), ...fields.filter((f) => f.values[0] !== p.mapValue)];
+  const chips: { t: string; cls: string; title?: string }[] = [];
+  for (const f of ordered)
+    for (const v of f.values) {
+      const t = f.name === "목표" && code ? `${OBJ_ICON[code] ?? "🎯"} ${v}(${code.toUpperCase()})` : `${FIELD_ICON[f.name] ?? "🔖"} ${v}`.trim();
+      if (!chips.some((c) => c.t === t)) chips.push({ t, title: f.name, cls: chips.length === 0 ? "bg-[#FFF3EF] text-[#9A3412]" : f.name === "목표" ? "bg-signal-soft text-signal" : "bg-canvas text-ink-soft" });
+    }
+  if (serial) chips.push({ t: `📷 소재 ${serial}`, cls: "bg-canvas text-ink-muted" });
   return (
     <div className="flex flex-wrap gap-1" title={row.name}>
       {chips.slice(0, max).map((c) => (
-        <span key={c.t} className={`max-w-full truncate whitespace-nowrap rounded-md px-1.5 py-0.5 text-[12px] font-medium ${c.cls}`}>
+        <span key={c.t} title={c.title} className={`max-w-full truncate whitespace-nowrap rounded-md px-1.5 py-0.5 text-[12px] font-medium ${c.cls}`}>
           {c.t}
         </span>
       ))}

@@ -1,6 +1,8 @@
 // 소재 분석 계산 — 순수 함수. 수치는 API 값만 쓰고, 비교는 같은 캠페인 목표 그룹 안에서만 한다.
 import type { AdsetSetting, CampaignSetting, CreativeRow, ObjectiveGroup } from "./types";
-import { parseAdName, parseAdsetName, type NamingDict, type ParsedAdName } from "./naming";
+import { parseAdsetName, type NamingDict, type ParsedAdName } from "./naming";
+import { fieldDims, parseName } from "./nameSchema";
+import type { UtmLabel } from "./namingRules";
 
 export type Grade = "top" | "good" | "mid" | "low" | "hold"; // 상위10% · 상위25% · 보통 · 하위25% · 판단 보류
 
@@ -32,6 +34,8 @@ export type Enriched = CreativeRow & {
   judged: boolean;
   grade: Grade;
   score: number | null; // 그룹 내 순위 지표(전환=ROAS, 상위퍼널=CTR)
+  utmLabel?: UtmLabel | null; // 광고주 UTM 규칙으로 읽은 값(화면에서 붙임 — namingRules.labelUtm)
+  demo?: { age: string; gender: string }; // 실제 성별·연령 구간으로 쪼갠 행이면 그 구간(combos.expandDemo) — 지표도 그 구간 값
 };
 
 const div = (a: number, b: number) => (b > 0 ? a / b : null);
@@ -78,7 +82,7 @@ export function enrich(
   const campById = new Map(campaigns.map((c) => [c.id, c]));
   const until = Date.parse(`${periodUntil}T00:00:00`);
   const rows: Enriched[] = creatives.map((c) => {
-    const parsed = parseAdName(c.name, dict);
+    const parsed = parseName(c.name, c.campaignName, dict); // 규칙 파일이 있으면 그 규칙(캠페인으로 세트 선택), 없으면 내장 해석
     const campaign = campById.get(c.campaignId) ?? null;
     const adset = adsetById.get(c.adsetId) ?? null;
     const group: ObjectiveGroup = campaign?.group ?? (parsed.objective === "전환" ? "sales" : "upper");
@@ -135,16 +139,14 @@ export type Dimension = { key: string; label: string; get: (r: Enriched) => stri
 const ageBucket = (d: number | null) => (d == null ? null : d <= 7 ? "1주 이내" : d <= 30 ? "8~30일" : d <= 90 ? "31~90일" : "90일 초과");
 const FORMAT_LABEL: Record<string, string> = { video: "영상", image: "이미지", dynamic: "다이내믹(여러 에셋)", carousel: "캐러셀", other: "기타" };
 
-export const CREATIVE_DIMENSIONS: Dimension[] = [
-  { key: "type", label: "소재 유형", get: (r) => r.parsed.type },
-  { key: "theme", label: "콘텐츠·테마", get: (r) => r.parsed.theme },
-  { key: "model", label: "모델", get: (r) => r.parsed.model ?? (r.parsed.type === "TVC" ? "TVC(모델 미상)" : "모델 없음") },
-  { key: "product", label: "상품·랜딩", get: (r) => (r.parsed.products.length ? r.parsed.products : null) },
-  { key: "influencer", label: "인플루언서", get: (r) => (r.parsed.type === "파트너십" ? (r.parsed.influencer ?? "핸들 미상") : null) },
-  { key: "format", label: "포맷", get: (r) => FORMAT_LABEL[r.format] ?? r.format },
-  { key: "length", label: "영상 길이", get: (r) => (r.format === "video" ? (r.parsed.videoLength ?? "길이 표기 없음") : null) },
-  { key: "age", label: "집행 기간", get: (r) => ageBucket(r.ageDays) },
-];
+// 소재명 요소 — 광고주 규칙의 텍스트 항목(이름 그대로) + 포맷 + 집행 기간. 내장 해석이면 목표·콘텐츠·상품·모델·TVC·인플루언서·영상 길이
+export function creativeDims(rows: Enriched[]): Dimension[] {
+  return [
+    ...fieldDims(rows),
+    { key: "format", label: "포맷", get: (r) => FORMAT_LABEL[r.format] ?? r.format },
+    { key: "age", label: "집행 기간", get: (r) => ageBucket(r.ageDays) },
+  ];
+}
 
 export const TARGET_DIMENSIONS: Dimension[] = [
   { key: "audience", label: "타겟 유형", get: (r) => r.target?.audienceType ?? null },
@@ -232,13 +234,18 @@ export function breakdown(rows: Enriched[], dim: Dimension): Bucket[] {
 // ── 피로도 — 일별이 있는 소재(광고비 상위)만 ─────────────────
 export type Fatigue = { row: Enriched; ctrFirst: number; ctrLast: number; drop: number; days: number };
 
-export function fatigue(rows: Enriched[]): Fatigue[] {
+// 피로도 기준 — 화면에서 바꿀 수 있음(기본: 7일 이상 집행 · 빈도 2회 이상 · 처음 3일 대비 마지막 3일 CTR −30% 이상)
+export type FatigueRule = { minDays: number; minFreq: number; drop: number; window: number };
+export const DEFAULT_FATIGUE: FatigueRule = { minDays: 7, minFreq: 2, drop: 0.3, window: 3 };
+
+export function fatigue(rows: Enriched[], rule: FatigueRule = DEFAULT_FATIGUE): Fatigue[] {
   const out: Fatigue[] = [];
+  const w = Math.max(1, Math.round(rule.window));
   for (const r of rows) {
     const d = (r.daily ?? []).filter((p) => p.impressions > 0);
-    if (d.length < 7) continue;
-    const head = d.slice(0, 3);
-    const tail = d.slice(-3);
+    if (d.length < Math.max(rule.minDays, w * 2)) continue;
+    const head = d.slice(0, w);
+    const tail = d.slice(-w);
     const ctr = (ps: typeof d) => {
       const im = ps.reduce((a, p) => a + p.impressions, 0);
       return im > 0 ? ps.reduce((a, p) => a + p.clicks, 0) / im : 0;
@@ -247,7 +254,7 @@ export function fatigue(rows: Enriched[]): Fatigue[] {
     const b = ctr(tail);
     if (a <= 0) continue;
     const drop = (b - a) / a;
-    if (drop <= -0.3 && r.frequency >= 2) out.push({ row: r, ctrFirst: a, ctrLast: b, drop, days: d.length });
+    if (drop <= -rule.drop && r.frequency >= rule.minFreq) out.push({ row: r, ctrFirst: a, ctrLast: b, drop, days: d.length });
   }
   return out.sort((x, y) => y.row.cost - x.row.cost);
 }
@@ -370,7 +377,7 @@ export function creativeInsights(rows: Enriched[], fat: Fatigue[]): CreativeInsi
 
   // 요소별 — 소재 3개 이상·광고비 5% 이상 그룹 중 평균 대비 1.3배 이상/0.7배 이하
   if (avgRoas) {
-    for (const dim of CREATIVE_DIMENSIONS.filter((d) => ["type", "theme", "model", "format", "influencer"].includes(d.key))) {
+    for (const dim of creativeDims(rows).filter((d) => d.key !== "age")) {
       const bs = breakdown(sales, dim).filter((b) => b.count >= 3 && b.costShare >= 0.05 && b.roas != null);
       if (bs.length < 2) continue;
       const best = [...bs].sort((a, b) => b.roas! - a.roas!)[0];

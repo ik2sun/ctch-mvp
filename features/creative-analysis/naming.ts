@@ -1,3 +1,5 @@
+import type { NameSchema } from "./nameSchema";
+
 // 소재명·광고세트명 해석 — 광고주별 명명 사전(구글 시트 규칙)을 기준으로, 사전에 없는 조각은 따로 모은다.
 // 르무통 규칙(시트): 소재명 = 날짜_캠페인목표_콘텐츠명(또는 상품명)_소재번호 / 광고세트(타겟) = 성별_연령대_타겟
 // 실제 이름은 규칙보다 자유롭다(예: chuseok_2026_ev17, ps_hyunddy_l, tvc_yoona_ev02) → 앞에서부터 사전·패턴으로 하나씩 소비한다.
@@ -9,7 +11,9 @@ export type NamingDict = {
   models: Record<string, string>;
   tvc: Record<string, string>; // 여러 조각 코드: tvc_yoona_15s_a
   targets: Record<string, string>; // 광고세트 타겟 코드
+  schema?: NameSchema; // 광고주가 올린 소재명 규칙(nameSchema.ts) — 있으면 위 사전 대신 이 규칙으로 읽는다
 };
+export type DateFormat = "yymmdd" | "yyyymmdd" | "mmdd";
 
 // 르무통 — https://docs.google.com/spreadsheets/d/1DLTe7ago__srs9BKJUa7GR3UIo7qskdeXKN5uJK5oKE (2026-10-01 반영)
 const LEMOUTON: NamingDict = {
@@ -105,17 +109,28 @@ export type ParsedAdName = {
   serial: string | null; // 소재 번호
   detail: string | null; // 테마 뒤 세부 콘텐츠(사전에 없는 단어: foursisters moment)
   unknown: string[]; // 사전·패턴에 안 맞은 조각
+  objectiveCode?: string | null; // 목표 코드(cv·tr…)
+  fields?: ParsedField[]; // 항목별 값 — 분석 축은 이것으로 만든다(규칙 파일 항목 이름 그대로, 내장 해석은 목표·콘텐츠·상품… 7개)
+  mapValue?: string | null; // 성과 맵 기준 항목 값(규칙 파일에서 정함)
+  ruleSet?: string | null; // 적용된 규칙 세트 이름
+  outOfRule?: boolean; // 규칙의 조각 수에 크게 못 미치는 이름
 };
+export type ParsedField = { name: string; kind: "text" | "date" | "number"; values: string[]; raw: string | null };
 
 const YEAR = /^20\d{2}$/;
 
-function dateOf(tok: string): string | null {
-  if (!/^\d{6}$/.test(tok)) return null;
-  const yy = Number(tok.slice(0, 2));
-  const mm = Number(tok.slice(2, 4));
-  const dd = Number(tok.slice(4, 6));
+export function dateOf(tok: string, fmt: DateFormat = "yymmdd"): string | null {
+  const len = fmt === "yyyymmdd" ? 8 : fmt === "mmdd" ? 4 : 6;
+  if (!len || !new RegExp(`^\\d{${len}}$`).test(tok)) return null;
+  const now = new Date();
+  let yyyy = fmt === "yyyymmdd" ? Number(tok.slice(0, 4)) : fmt === "yymmdd" ? 2000 + Number(tok.slice(0, 2)) : now.getFullYear();
+  const md = tok.slice(-4);
+  const mm = Number(md.slice(0, 2));
+  const dd = Number(md.slice(2, 4));
   if (mm < 1 || mm > 12 || dd < 1 || dd > 31) return null;
-  return `20${String(yy).padStart(2, "0")}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`;
+  // mmdd는 연도가 없어 오늘보다 뒤면 작년으로 본다
+  if (fmt === "mmdd" && new Date(yyyy, mm - 1, dd) > now) yyyy -= 1;
+  return `${yyyy}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`;
 }
 
 // 여러 조각 코드(키에 _ 포함) 중 tokens[i..]와 가장 길게 맞는 것
@@ -129,6 +144,8 @@ function longest(tokens: string[], i: number, dict: Record<string, string>): { c
   return best;
 }
 
+// 내장 해석(르무통 사전) — 앞에서부터 날짜 → 목표 → TVC·파트너십·콘텐츠·모델·상품+번호를 사전·패턴으로 소비.
+// 광고주가 규칙 파일을 올리면 nameSchema.parseName이 이것 대신 그 규칙으로 읽는다.
 export function parseAdName(name: string, dict: NamingDict): ParsedAdName {
   const out: ParsedAdName = {
     launchDate: null,
@@ -155,6 +172,7 @@ export function parseAdName(name: string, dict: NamingDict): ParsedAdName {
   const obj = tokens[i];
   if (obj && (dict.objectives[obj] || COMMON_OBJECTIVES[obj])) {
     out.objective = dict.objectives[obj] ?? COMMON_OBJECTIVES[obj];
+    out.objectiveCode = obj;
     i++;
   }
 

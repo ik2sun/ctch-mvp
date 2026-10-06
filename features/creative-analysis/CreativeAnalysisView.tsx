@@ -10,22 +10,28 @@ import { InsightPanel } from "@/features/dashboard/InsightPanel";
 import { MEDIA_COLORS } from "@/features/dashboard/analysis";
 import { fmt } from "@/features/ai-report/calcMetrics";
 import type { CreativeAnalysisRes, ObjectiveGroup } from "@/features/creative-analysis/types";
-import { dictFor } from "@/features/creative-analysis/naming";
+import { labelUtm, rawUtmValues, resolveRules, type NamingRules } from "@/features/creative-analysis/namingRules";
+import { NamingRulesEditor } from "@/features/creative-analysis/NamingRulesPanel";
 import {
-  CREATIVE_DIMENSIONS,
   TARGET_DIMENSIONS,
+  DEFAULT_FATIGUE,
+  creativeDims,
   creativeInsights,
   enrich,
   fatigue,
+  type FatigueRule,
   settingChecks,
   type Enriched,
 } from "@/features/creative-analysis/analyze";
 import { CreativeGallery } from "@/features/creative-analysis/CreativeGallery";
 import { AttributePanel } from "@/features/creative-analysis/AttributePanel";
 import { CreativeMatrix } from "@/features/creative-analysis/CreativeMatrix";
-import { FatigueList, SettingCheckList } from "@/features/creative-analysis/SidePanels";
+import { FatigueList, FatigueRuleEditor, SettingCheckList } from "@/features/creative-analysis/SidePanels";
 import { CreativeDrawer } from "@/features/creative-analysis/CreativeDrawer";
 import { AbTestPanel, ThemeMap, UtmSidebar } from "@/features/creative-analysis/NamingInsights";
+import { ComboMatrix, ComboSelector } from "@/features/creative-analysis/ComboMatrix";
+import { DEMO_DIM_KEYS, availableDims, comboMatcher, comboStats, expandDemo } from "@/features/creative-analysis/combos";
+import type { DemographicsRes } from "@/features/creative-analysis/fetchDemographics";
 import { abGroups, matches, themeStats, type FacetSel } from "@/features/creative-analysis/groups";
 import { adsetActions, decide, type TargetRules } from "@/features/creative-analysis/decision";
 import { DecisionLog, DecisionQueue, TargetRoasEditor, isActive, type LoggedItem, type Snapshot } from "@/features/creative-analysis/DecisionQueue";
@@ -77,10 +83,36 @@ export function CreativeAnalysisView({
   const [minImp, setMinImp] = useState<string>("3000");
   const [obj, setObj] = useState<"all" | "cv" | "tr">("all");
   const [facets, setFacets] = useState<FacetSel>({});
-  const [themePick, setThemePick] = useState<{ keys: string[]; label: string } | null>(null);
+  const [themePick, setThemePick] = useState<{ keys: string[]; label: string; match?: (r: Enriched) => boolean } | null>(null);
+  // 조합 항목(성과 맵·조합 매트릭스 공통) — null = 전체(소재 유형별 맵)
+  const [combo, setCombo] = useState<string[] | null>(null);
+  // 피로도 기준 — 기본 DEFAULT_FATIGUE, 바꾸면 이 브라우저에 기억(localStorage)
+  const [fatRule, setFatRule] = useState<FatigueRule>(DEFAULT_FATIGUE);
+  useEffect(() => {
+    try {
+      const v = JSON.parse(localStorage.getItem("ctch_fatigue_rule") ?? "null");
+      if (v && ["minDays", "minFreq", "drop", "window"].every((k) => typeof v[k] === "number")) setFatRule(v);
+    } catch {
+      /* 무시 */
+    }
+  }, []);
+  const saveFatRule = (r: FatigueRule) => {
+    setFatRule(r);
+    try {
+      localStorage.setItem("ctch_fatigue_rule", JSON.stringify(r));
+    } catch {
+      /* 무시 */
+    }
+  };
+  // 성별·연령대 기준 — 메타 리포트 실제 성과(breakdowns=age,gender, 필요할 때만 조회) / 광고세트 타겟팅 설정
+  const [demoBasis, setDemoBasis] = useState<"report" | "target">("report");
+  const [demo, setDemo] = useState<{ key: string; res: DemographicsRes | null; loading: boolean; error: string | null }>({ key: "", res: null, loading: false, error: null });
   // 광고주별 목표 ROAS(%) — 판정 엔진·성과 맵 기준선. 저장 전이면 기본 500%
   const [target, setTarget] = useState<{ value: number; rules: TargetRules; saved: boolean }>({ value: 500, rules: {}, saved: false });
   const [targetBusy, setTargetBusy] = useState(false);
+  // 광고주별 분석 규칙(소재명 사전 + UTM 값 사전, 0032) — 없으면 코드 기본 사전
+  const [naming, setNaming] = useState<{ rules: NamingRules | null; ready: boolean }>({ rules: null, ready: true });
+  const [namingBusy, setNamingBusy] = useState(false);
   // 지난 결정 스냅숏(0030)
   const [log, setLog] = useState<{ snapshot: Snapshot | null; items: LoggedItem[]; ready: boolean }>({ snapshot: null, items: [], ready: true });
   const loadLog = useCallback(async () => {
@@ -100,8 +132,29 @@ export function CreativeAnalysisView({
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => j && setTarget({ value: j.targetRoas, rules: j.rules ?? {}, saved: j.saved }))
       .catch(() => undefined);
+    setNaming({ rules: null, ready: true });
+    fetch(`/api/clients/${selected.id}/naming-rules`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => j && setNaming({ rules: j.rules ?? null, ready: j.ready !== false }))
+      .catch(() => undefined);
     loadLog();
   }, [selected?.id, loadLog]);
+  const saveNaming = async (rules: NamingRules | null): Promise<boolean> => {
+    if (!selected?.id) return false;
+    setNamingBusy(true);
+    try {
+      const res = await fetch(`/api/clients/${selected.id}/naming-rules`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rules }) });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || "저장하지 못했어요.");
+      setNaming({ rules: j.rules ?? null, ready: true });
+      return true;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "분석 규칙을 저장하지 못했어요.");
+      return false;
+    } finally {
+      setNamingBusy(false);
+    }
+  };
   const saveTarget = async (v: number | null, rules: TargetRules) => {
     if (!selected?.id) return;
     setTargetBusy(true);
@@ -117,7 +170,12 @@ export function CreativeAnalysisView({
     }
   };
   const pickTheme = (keys: string[], label: string) => {
-    setThemePick({ keys, label });
+    if (comboDims?.length) {
+      // 구간 행이면 그 조합에 노출된 소재(id)로 갤러리를 좁힌다
+      const m = comboMatcher(comboDims, keys);
+      const ids = new Set(mapRows.filter(m).map((r) => r.id));
+      setThemePick({ keys, label, match: (r) => ids.has(r.id) });
+    } else setThemePick({ keys, label });
     document.getElementById("ca-gallery")?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
   const adsManagerUrl = selected?.meta_account_id ? `https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=${selected.meta_account_id.replace(/^act_/, "")}` : null;
@@ -134,7 +192,7 @@ export function CreativeAnalysisView({
         return;
       }
       // v2: 썸네일을 원본 비율로 받도록 바뀜(이전 캐시는 정사각형 썸네일) — 응답 모양이 바뀌면 버전을 올린다
-      const key = `ctch_creative_meta_v3_${selected.id}_${s}_${u}`; // v3: UTM(utm) 필드 추가
+      const key = `ctch_creative_meta_v4_${selected.id}_${s}_${u}`; // v3: UTM(utm) 필드 추가 · v4: 랜딩(landingUrl)
       if (!force) {
         const hit = getSessionCache<CreativeAnalysisRes>(key, 30 * 60 * 1000);
         if (hit) {
@@ -170,20 +228,59 @@ export function CreativeAnalysisView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected?.id]);
 
-  const { dict, source: dictSource } = useMemo(() => dictFor(selected?.name), [selected?.name]);
+  const ruleSet = useMemo(() => resolveRules(naming.rules, selected?.name), [naming.rules, selected?.name]);
+  const { dict, source: dictSource } = ruleSet;
 
+  // 소재명 사전으로 해석 + UTM 규칙으로 필터 값·캠페인 유형을 붙인다(축마다 기준 하나 — namingRules.ts)
   const enriched = useMemo(
-    () => (data ? enrich(data.creatives, data.adsets, data.campaigns, dict, data.period.until, Number(minImp)) : []),
-    [data, dict, minImp],
+    () => (data ? enrich(data.creatives, data.adsets, data.campaigns, dict, data.period.until, Number(minImp)).map((r) => ({ ...r, utmLabel: labelUtm(r.utm, ruleSet.utm) })) : []),
+    [data, dict, minImp, ruleSet.utm],
   );
+  const nameItems = useMemo(() => (data ? data.creatives.map((c) => ({ name: c.name, campaign: c.campaignName })) : []), [data]);
+  const utmValues = useMemo(() => (data ? rawUtmValues(data.creatives.map((c) => c.utm)) : undefined), [data]);
   // 목표 탭(CV = 전환 캠페인, TR = 트래픽·인지 캠페인 — 캠페인 실제 목표 기준, 없으면 소재명 목표 코드) → UTM 필터
   const byObj = useMemo(() => (obj === "all" ? enriched : enriched.filter((r) => r.group === (obj === "cv" ? "sales" : "upper"))), [enriched, obj]);
   const rows = useMemo(() => byObj.filter((r) => matches(r, facets)), [byObj, facets]);
   const sales = useMemo(() => rows.filter((r) => r.group === "sales"), [rows]);
-  const themes = useMemo(() => themeStats(rows), [rows]);
+  // 실제 성별·연령 리포트 — 지금 조회 기간과 맞을 때만 쓴다
+  const demoKey = data && selected ? `${selected.id}_${data.period.since}_${data.period.until}` : "";
+  const loadDemo = useCallback(async () => {
+    if (!selected?.id || !data || !demoKey) return;
+    const ck = `ctch_creative_demo_v1_${demoKey}`;
+    const hit = getSessionCache<DemographicsRes>(ck, 30 * 60 * 1000);
+    if (hit) return setDemo({ key: demoKey, res: hit, loading: false, error: null });
+    setDemo({ key: demoKey, res: null, loading: true, error: null });
+    try {
+      const res = await fetch("/api/creative-analysis/meta/demographics", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clientId: selected.id, since: data.period.since, until: data.period.until, adIds: data.creatives.map((c) => c.id) }) });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || "불러오기 실패");
+      setSessionCache(ck, j);
+      setDemo({ key: demoKey, res: j, loading: false, error: null });
+    } catch (e) {
+      setDemo({ key: demoKey, res: null, loading: false, error: e instanceof Error ? e.message : "성별·연령 리포트를 받지 못했어요." });
+    }
+  }, [selected?.id, data, demoKey]);
+  const demoReady = demo.key === demoKey && !!demo.res;
+  const wantsDemo = demoBasis === "report" && !!combo?.some((k) => DEMO_DIM_KEYS.includes(k));
+  useEffect(() => {
+    if (wantsDemo && demoKey && demo.key !== demoKey && !demo.loading) loadDemo();
+  }, [wantsDemo, demoKey, demo.key, demo.loading, loadDemo]);
+  const seg = useMemo(() => (demoBasis === "report" && demoReady ? expandDemo(rows, demo.res!.rows) : null), [demoBasis, demoReady, rows, demo.res]);
+  const segRows = seg?.rows ?? null;
+  const demoNote = seg
+    ? `성별·연령대 = 메타 리포트의 실제 성과(광고 관리자 '분석 기준 > 연령 및 성별')${seg.coverage != null ? ` · 구간 합계가 소재 광고비의 ${Math.round(seg.coverage * 100)}%` : ""} · 타겟을 열어 둔 광고는 메타가 잘 사는 층에 노출을 몰아주므로 '그 층의 반응 + 메타의 선별'이 섞인 값이에요(원인 확정은 성별·연령을 좁힌 테스트로)`
+    : null;
+
+  const comboDims = useMemo(() => (combo ? availableDims(segRows ?? rows).filter((d) => combo.includes(d.key)) : null), [rows, segRows, combo]);
+  const mapRows = segRows && comboDims?.some((d) => DEMO_DIM_KEYS.includes(d.key)) ? segRows : rows;
+  const themes = useMemo(() => (comboDims?.length ? comboStats(mapRows, comboDims) : themeStats(rows)), [rows, mapRows, comboDims]);
+  const changeCombo = (c: string[] | null) => {
+    setCombo(c);
+    setThemePick(null);
+  };
   const ab = useMemo(() => abGroups(rows), [rows]);
   const winnerIds = useMemo(() => new Set(ab.map((g) => g.winnerId).filter((x): x is string => !!x)), [ab]);
-  const decisions = useMemo(() => decide(rows, target.value, target.rules, new Set(fatigue(rows).map((f) => f.row.id))), [rows, target.value, target.rules]);
+  const decisions = useMemo(() => decide(rows, target.value, target.rules, new Set(fatigue(rows, fatRule).map((f) => f.row.id))), [rows, target.value, target.rules, fatRule]);
   const adsetActs = useMemo(() => (data ? adsetActions(rows, decisions, data.adsets, data.campaigns) : []), [rows, decisions, data]);
   const saveSnapshot = async () => {
     if (!selected?.id || !data) return;
@@ -200,8 +297,8 @@ export function CreativeAnalysisView({
       setError(e instanceof Error ? e.message : "결정을 저장하지 못했어요.");
     }
   };
-  const fat = useMemo(() => fatigue(rows), [rows]);
-  const insights = useMemo(() => creativeInsights(rows, fatigue(sales)), [rows, sales]); // UTM·목표 필터 반영
+  const fat = useMemo(() => fatigue(rows, fatRule), [rows, fatRule]);
+  const insights = useMemo(() => creativeInsights(rows, fatigue(sales, fatRule)), [rows, sales, fatRule]); // UTM·목표 필터 반영
   const checks = useMemo(() => (data ? settingChecks(enriched, data.adsets, data.campaigns, dict) : []), [data, enriched, dict]);
 
   const counts = { all: enriched.length, sales: enriched.filter((r) => r.group === "sales").length, upper: enriched.filter((r) => r.group === "upper").length };
@@ -246,7 +343,7 @@ export function CreativeAnalysisView({
   const open = openId ? enriched.find((r) => r.id === openId) ?? null : null;
   const peers = useMemo(() => {
     if (!open) return [];
-    const key = open.parsed.type === "파트너십" && open.parsed.influencer ? (r: Enriched) => r.parsed.influencer === open.parsed.influencer : (r: Enriched) => !!open.parsed.themeCode && r.parsed.themeCode === open.parsed.themeCode;
+    const key = open.parsed.type === "파트너십" && open.parsed.influencer ? (r: Enriched) => r.parsed.influencer === open.parsed.influencer : (r: Enriched) => !!open.parsed.theme && r.parsed.theme === open.parsed.theme; // 의미 기준(코드가 달라도 같은 의미면 같은 테마)
     return enriched.filter((r) => r.id !== open.id && key(r)).sort((a, b) => b.cost - a.cost);
   }, [open, enriched]);
 
@@ -304,6 +401,7 @@ export function CreativeAnalysisView({
               onChange={setObj}
             />
           </div>
+          {selected?.meta_account_id && <NamingRulesEditor current={ruleSet} saved={naming.rules} items={nameItems} utmValues={utmValues} clientName={selected.name} ready={naming.ready} busy={namingBusy} onSave={saveNaming} />}
           {selected?.meta_account_id && <TargetRoasEditor value={target.value} rules={target.rules} saved={target.saved} onSave={saveTarget} busy={targetBusy} />}
           <div className="flex items-center gap-2">
             <span className="text-[15px] text-ink-muted" title="이보다 노출이 적은 소재는 등급·비교에서 '판단 보류'">판단 기준 노출</span>
@@ -356,8 +454,71 @@ export function CreativeAnalysisView({
             </Card>
           )}
 
-          <Card title="소재 유형별 성과 맵" sub="소재명에서 뽑은 콘텐츠·상품(테마)을 광고비 × 효율 4사분면에 놓았어요 · 버블이나 패널 버튼을 누르면 아래 갤러리가 그 테마로 좁혀져요">
-            <ThemeMap stats={themes.list} avg={obj === "tr" ? themes.ctr : target.value / 100} metric={obj === "tr" ? "ctr" : "roas"} onPick={pickTheme} adsManagerUrl={adsManagerUrl} baseLabel={obj === "tr" ? "평균" : Object.keys(target.rules).length ? "기본 목표" : "목표"} />
+          {/* 조합 항목 — 아래 성과 맵·조합 매트릭스가 함께 따른다 */}
+          <div className="rounded-card border border-line bg-surface px-5 py-4">
+            <ComboSelector rows={segRows ?? rows} checked={combo} onChange={changeCombo} />
+            <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-line pt-3 text-[13px]">
+              <span className="font-semibold text-ink-soft">성별·연령대 기준</span>
+              <Segmented
+                value={demoBasis}
+                options={[
+                  { key: "report", label: "실제 성과(리포트)" },
+                  { key: "target", label: "타겟팅 설정" },
+                ]}
+                onChange={(k) => setDemoBasis(k as "report" | "target")}
+              />
+              {demoBasis === "report" &&
+                (demo.loading ? (
+                  <span className="text-ink-muted">
+                    <i className="ti ti-loader-2 mr-1 animate-spin" aria-hidden />
+                    메타 성별·연령 리포트 불러오는 중… (10~20초)
+                  </span>
+                ) : demoReady ? (
+                  <span className="text-ink-muted">✓ 리포트 {demo.res!.rows.length.toLocaleString("ko-KR")}구간{seg?.coverage != null ? ` · 소재 광고비의 ${Math.round(seg.coverage * 100)}%` : ""} — 성별·연령대를 고르면 실제 구간으로 계산해요</span>
+                ) : demo.error && demo.key === demoKey ? (
+                  <span className="text-bad">
+                    {demo.error}{" "}
+                    <button type="button" onClick={loadDemo} className="underline">
+                      다시 시도
+                    </button>
+                  </span>
+                ) : (
+                  <>
+                    <button type="button" onClick={loadDemo} className="h-7 rounded-lg border border-line px-2.5 text-ink-soft hover:border-signal hover:text-signal">
+                      실제 성별·연령 리포트 불러오기
+                    </button>
+                    <span className="text-ink-muted">성별·연령대를 체크하면 자동으로 불러와요(메타 호출 1회)</span>
+                  </>
+                ))}
+              {demoBasis === "target" && <span className="text-ink-muted">광고세트에 설정한 성별·연령(르무통처럼 열어 두면 대부분 &apos;남녀 전체&apos;)</span>}
+            </div>
+          </div>
+
+          <Card
+            title={comboDims?.length ? `조합별 성과 맵 — ${comboDims.map((d) => d.label).join(" × ")}` : "소재 유형별 성과 맵"}
+            sub={
+              comboDims?.length
+                ? `기준: ${[...new Set(comboDims.map((d) => d.basis))].join("·")} · 고른 항목 값의 조합을 광고비 × 효율 4사분면에 놓았어요(광고비 상위 12개) · 버블이나 패널 버튼을 누르면 아래 갤러리가 그 조합으로 좁혀져요`
+                : "기준: 소재명 · 소재명에서 뽑은 콘텐츠·상품(테마)을 광고비 × 효율 4사분면에 놓았어요 · 버블이나 패널 버튼을 누르면 아래 갤러리가 그 테마로 좁혀져요"
+            }
+          >
+            <ThemeMap key={combo?.join("+") ?? "all"} stats={themes.list} avg={obj === "tr" ? themes.ctr : target.value / 100} metric={obj === "tr" ? "ctr" : "roas"} onPick={pickTheme} adsManagerUrl={adsManagerUrl} baseLabel={obj === "tr" ? "평균" : Object.keys(target.rules).length ? "기본 목표" : "목표"} />
+          </Card>
+
+          <Card title="조합 분석 매트릭스" sub="위 조합 항목대로 표를 그려요 · 고른 항목 하나는 열로 펼쳐 교차 비교 · 칸이나 머리를 누르면 그 묶음의 소재가 열려요 · 고급 필터·목표 탭도 그대로 적용돼요">
+            <ComboMatrix
+              key={obj}
+              exportInfo={{
+                fileTag: `${selected?.name ?? ""}_${data.period.since}_${data.period.until}`,
+                lines: [
+                  ["광고주", selected?.name ?? ""],
+                  ["기간", `${data.period.since} ~ ${data.period.until}`],
+                  ["캠페인 목표 탭", obj === "all" ? "전체" : obj === "cv" ? "전환(CV)" : "트래픽(TR)"],
+                  ["UTM 필터", Object.entries(facets).filter(([, v]) => v?.length).map(([k, v]) => `${k}=${v!.join("|")}`).join(" · ") || "없음"],
+                  ["판단 기준 노출", Number(minImp).toLocaleString("ko-KR")],
+                ],
+              }}
+              rows={rows} segRows={segRows} demoNote={demoNote} checked={combo} onChecked={changeCombo} defaultMetric={obj === "tr" ? "ctr" : "roas"} onOpen={(r) => setOpenId(r.id)} targetRoas={target.value} />
           </Card>
 
           {/* 인사이트·세팅 점검 — 넓은 화면에선 2~3단 Masonry(한 줄이 너무 길어지지 않게) */}
@@ -369,18 +530,18 @@ export function CreativeAnalysisView({
           </Card>
 
           <div id="ca-gallery" className="scroll-mt-4" />
-          <Card title="소재 갤러리" sub={`${obj === "all" ? "전체" : obj === "cv" ? "전환(CV)" : "트래픽(TR)"} 캠페인 소재 · 등급은 같은 목표 소재끼리(전환=ROAS, 트래픽=CTR) · 태그는 소재명을 파싱한 것 · 눌러서 원본·세팅 보기`}>
+          <Card title="소재 갤러리" sub={`${obj === "all" ? "전체" : obj === "cv" ? "전환(CV)" : "트래픽(TR)"} 캠페인 소재 · 등급은 같은 목표 소재끼리(전환=ROAS, 트래픽=CTR) · 태그 기준: 소재명 · 눌러서 원본·세팅 보기`}>
             <CreativeGallery rows={rows} onOpen={(r) => setOpenId(r.id)} dict={dict} winnerIds={winnerIds} theme={themePick} onClearTheme={() => setThemePick(null)} decisions={decisions} />
           </Card>
 
-          <Card title="A/B 테스트 그룹" sub={`이름 앞부분(날짜_목표_콘텐츠)이 같고 번호만 다른 소재를 자동으로 묶었어요 · ${ab.length}개 묶음 · 👑 = 전환은 ROAS, 트래픽은 CTR 1위(판단 기준 노출 이상만)`}>
+          <Card title="A/B 테스트 그룹" sub={`기준: 소재명 · 이름 앞부분(날짜_목표_콘텐츠)이 같고 번호만 다른 소재를 자동으로 묶었어요 · ${ab.length}개 묶음 · 👑 = 전환은 ROAS, 트래픽은 CTR 1위(판단 기준 노출 이상만)`}>
             <AbTestPanel groups={ab} onOpen={(r) => setOpenId(r.id)} />
           </Card>
 
-          <Card title="소재명으로 본 요소별 성과" sub="소재명을 해석해 같은 요소끼리 묶었어요 — 어떤 콘텐츠·모델·상품이 잘 되나">
+          <Card title="소재명으로 본 요소별 성과" sub={`기준: 소재명 · ${ruleSet.schema ? "올린 규칙의 항목별로" : "내장 해석(목표·콘텐츠·상품·모델…)으로"} 같은 값끼리 묶었어요 — 어떤 값이 잘 되나`}>
             <AttributePanel
               rows={rows}
-              dims={CREATIVE_DIMENSIONS}
+              dims={creativeDims(rows)}
               group={group}
               note={
                 <>
@@ -407,11 +568,11 @@ export function CreativeAnalysisView({
           </Card>
 
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.4fr_1fr]">
-            <Card title="후킹 × 전환 진단" sub="CTR(눈길) × CVR(구매 전환) — 전환 캠페인 소재">
-              <CreativeMatrix rows={sales} onOpen={(r) => setOpenId(r.id)} />
+            <Card title="후킹 × 전환 진단" sub="CTR × CVR — 전환 캠페인 소재">
+              <CreativeMatrix rows={sales} onOpen={(r) => setOpenId(r.id)} fileTag={`${selected?.name ?? ""}_${data.period.since}_${data.period.until}`} />
             </Card>
-            <Card title="피로도" sub="광고비 상위 40개 소재의 일별 CTR 변화">
-              <FatigueList items={fat} onOpen={setOpenId} />
+            <Card title="피로도" sub="광고비 상위 40개 소재의 일별 CTR 변화" right={<FatigueRuleEditor rule={fatRule} onChange={saveFatRule} />}>
+              <FatigueList items={fat} onOpen={setOpenId} rule={fatRule} />
             </Card>
           </div>
 

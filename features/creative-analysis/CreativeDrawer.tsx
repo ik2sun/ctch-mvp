@@ -107,6 +107,12 @@ export function CreativeDrawer({
               메타 미리보기
             </a>
           )}
+          {row.landingUrl && (
+            <a href={row.landingUrl} target="_blank" rel="noreferrer noopener" title={row.landingUrl} className="flex items-center gap-1 whitespace-nowrap rounded-lg border border-line px-2.5 py-1 text-[13px] text-ink-soft hover:border-signal hover:text-signal">
+              <i className="ti ti-world text-[15px]" aria-hidden />
+              랜딩 열기
+            </a>
+          )}
           <button type="button" onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-lg text-ink-muted hover:bg-canvas" aria-label="닫기">
             <i className="ti ti-x text-[17px]" aria-hidden />
           </button>
@@ -185,17 +191,13 @@ export function CreativeDrawer({
             <h4 className="mb-2 text-[15px] font-semibold text-ink">소재명 해석</h4>
             <dl className="grid grid-cols-[96px_1fr] gap-x-3 gap-y-1.5 rounded-lg border border-line px-3.5 py-3 text-[13px]">
               <Row label="제작일" value={p.launchDate ? `${p.launchDate}${row.ageDays != null ? ` (집행 ${row.ageDays}일째)` : ""}` : null} />
-              <Row label="목표" value={p.objective} />
-              <Row label="소재 유형" value={p.type} />
-              <Row label="TVC" value={p.tvc} />
-              <Row label="콘텐츠·테마" value={p.theme} />
-              <Row label="세부 콘텐츠" value={p.detail} />
-              <Row label="모델" value={p.model} />
-              <Row label="인플루언서" value={p.influencer ? `@${p.influencer}` : null} />
-              <Row label="상품·랜딩" value={p.products.join(", ")} />
-              <Row label="영상 길이" value={p.videoLength} />
+              {p.ruleSet && <Row label="적용 규칙" value={`${p.ruleSet} 세트${p.outOfRule ? " · 규칙 밖 이름" : ""}`} />}
+              {(p.fields ?? []).filter((f) => f.kind === "text").map((f) => (
+                <Row key={f.name} label={f.name} value={f.values.join(", ") || null} />
+              ))}
+              {!p.ruleSet && <Row label="세부 콘텐츠" value={p.detail} />}
               <Row label="소재 번호" value={p.serial} />
-              <Row label="해석 못한 조각" value={p.unknown.filter((u) => !/^[a-z][a-z0-9.]*$/.test(u)).join(", ") || null} mono />
+              <Row label="해석 못한 조각" value={(p.ruleSet ? p.unknown : p.unknown.filter((u) => !/^[a-z][a-z0-9.]*$/.test(u))).join(", ") || null} mono />
             </dl>
           </section>
 

@@ -37,6 +37,23 @@ export function adsManagerUrl(accountId: string | null | undefined, level: "ads"
 }
 
 // 목표 ROAS — 기본 + 캠페인 유형별(선택)
+// 소재 랜딩 바로가기 — 없으면(파트너십·기존 게시물 광고 등) 흐린 칸으로 이유를 툴팁에
+export function LandingLink({ url }: { url?: string | null }) {
+  const cls = "whitespace-nowrap rounded-md border border-line px-2.5 py-1 text-[12px]";
+  if (!url) return <span className={`${cls} cursor-default text-ink-faint`} title="이 소재에서 랜딩 URL을 찾지 못했어요(파트너십·기존 게시물 광고는 링크가 게시물 쪽에 있어요)">랜딩 —</span>;
+  let host = url;
+  try {
+    host = new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    /* 그대로 */
+  }
+  return (
+    <a href={url} target="_blank" rel="noreferrer noopener" title={url} className={`${cls} text-ink-soft hover:border-ink-faint hover:text-ink`}>
+      랜딩 ↗<span className="sr-only"> {host}</span>
+    </a>
+  );
+}
+
 export function TargetRoasEditor({ value, rules, saved, onSave, busy }: { value: number; rules: TargetRules; saved: boolean; onSave: (v: number | null, rules: TargetRules) => void; busy: boolean }) {
   const [open, setOpen] = useState(false);
   const [base, setBase] = useState("");
@@ -293,6 +310,7 @@ export function DecisionQueue({
                       <button type="button" onClick={() => onOpen(r)} className="rounded-md border border-line px-2.5 py-1 text-[12px] text-ink-soft hover:border-ink-faint hover:text-ink">
                         상세
                       </button>
+                      <LandingLink url={r.landingUrl} />
                       {accountId && (
                         <a href={adsManagerUrl(accountId, "ads", [r.id])!} target="_blank" rel="noreferrer" className="rounded-md border border-line px-2.5 py-1 text-[12px] text-ink-soft hover:border-ink-faint hover:text-ink">
                           관리자 ↗

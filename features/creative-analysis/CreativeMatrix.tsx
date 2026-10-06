@@ -5,6 +5,7 @@
 import { CartesianGrid, ReferenceLine, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis } from "recharts";
 import type { TooltipContentProps } from "recharts";
 import type { NameType, ValueType } from "recharts/types/component/DefaultTooltipContent";
+import * as XLSX from "xlsx";
 import { fmt } from "@/features/ai-report/calcMetrics";
 import type { Enriched } from "./analyze";
 import { Thumb } from "./CreativeGallery";
@@ -37,7 +38,43 @@ function Tip({ active, payload }: TooltipContentProps<ValueType, NameType>) {
   );
 }
 
-export function CreativeMatrix({ rows, onOpen }: { rows: Enriched[]; onOpen: (r: Enriched) => void }) {
+const GRADE_LABEL: Record<string, string> = { top: "상위 10%", good: "상위 25%", mid: "중간", low: "하위 25%", hold: "판단 보류" };
+const pct2 = (v: number | null) => (v == null ? null : Math.round(v * 10000) / 100);
+
+// 4개 유형 소재 엑셀 — 전체 시트(유형 열 포함) + 유형별 시트 + 기준
+function downloadQuadrants(pts: Pt[], mx: number, my: number, quadOf: (p: Pt) => string, fileTag?: string) {
+  const head = ["유형", "소재명", "광고 ID", "상태", "캠페인", "광고세트", "광고비(원)", "노출", "링크 클릭", "CTR(%)", "CVR(%)", "전환", "매출(원)", "ROAS(%)", "CPA(원)", "등급", "랜딩 URL"];
+  const line = (p: Pt) => {
+    const r = p.row;
+    return [quadOf(p), r.name, r.id, r.status, r.campaignName, r.adsetName, Math.round(r.cost), Math.round(r.impressions), Math.round(r.linkClicks), pct2(r.ctr), pct2(r.cvr), Math.round(r.conversions * 100) / 100, Math.round(r.revenue), r.roas == null ? null : Math.round(r.roas * 100), r.cpa == null ? null : Math.round(r.cpa), GRADE_LABEL[r.grade] ?? r.grade, r.landingUrl ?? ""];
+  };
+  const sorted = [...pts].sort((a, b) => b.row.cost - a.row.cost);
+  const wb = XLSX.utils.book_new();
+  const add = (name: string, aoa: unknown[][]) => {
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws["!cols"] = name === "기준" ? [{ wch: 18 }, { wch: 90 }] : head.map((_, i) => ({ wch: i === 1 ? 44 : i === 16 ? 50 : i === 4 || i === 5 ? 30 : 12 }));
+    XLSX.utils.book_append_sheet(wb, ws, name);
+  };
+  add("전체", [head, ...sorted.map(line)]);
+  for (const q of QUADS) add(`${q.title}(${sorted.filter((p) => quadOf(p) === q.title).length})`, [head, ...sorted.filter((p) => quadOf(p) === q.title).map(line)]);
+  add("기준", [
+    ["후킹 × 전환 진단"],
+    ["대상", "전환 캠페인 소재 중 판단 기준 노출 이상 · CTR·CVR 계산 가능 · 링크 클릭 30회 이상"],
+    ["기준선", `CTR 중앙값 ${pct2(mx)}% · CVR 중앙값 ${pct2(my)}% (같거나 높으면 위/오른쪽)`],
+    ...QUADS.map((q) => [q.title, q.hint]),
+    ["내려받은 시각", new Date().toLocaleString("ko-KR")],
+  ]);
+  XLSX.writeFile(wb, `CTCH_후킹x전환_${fileTag ?? ""}.xlsx`.replace(/[\\/:*?"<>|]/g, ""));
+}
+
+const QUADS = [
+  { key: "win", title: "승리형", hint: "눈길도 끌고 구매도 됨 → 증액·변형 제작", fx: true, fy: true },
+  { key: "conv", title: "전환형", hint: "클릭은 적지만 구매로 잘 이어짐 → 썸네일·첫 문구 강화", fx: false, fy: true },
+  { key: "hook", title: "후킹형", hint: "클릭은 되는데 구매가 약함 → 랜딩·혜택 점검", fx: true, fy: false },
+  { key: "swap", title: "교체 후보", hint: "둘 다 약함 → 예산 회수", fx: false, fy: false },
+];
+
+export function CreativeMatrix({ rows, onOpen, fileTag }: { rows: Enriched[]; onOpen: (r: Enriched) => void; fileTag?: string }) {
   const pts: Pt[] = rows.filter((r) => r.judged && r.ctr != null && r.cvr != null && r.linkClicks >= 30).map((r) => ({ x: r.ctr!, y: r.cvr!, z: r.cost, row: r }));
   if (pts.length < 6) return <p className="py-10 text-center text-[15px] text-ink-muted">판단 가능한 전환 소재가 6개 이상일 때 사분면을 그려요.</p>;
   const mx = median(pts.map((p) => p.x));
@@ -45,6 +82,7 @@ export function CreativeMatrix({ rows, onOpen }: { rows: Enriched[]; onOpen: (r:
   const hi = pts.filter((p) => p.row.grade === "top" || p.row.grade === "good");
   const rest = pts.filter((p) => !(p.row.grade === "top" || p.row.grade === "good"));
   const q = (fx: boolean, fy: boolean) => pts.filter((p) => (p.x >= mx) === fx && (p.y >= my) === fy).length;
+  const quadOf = (p: Pt) => QUADS.find((x) => (p.x >= mx) === x.fx && (p.y >= my) === x.fy)!.title;
 
   const quadrant = [
     { pos: "left-14 top-2", title: "전환형", hint: "클릭은 적지만 구매로 잘 이어짐 → 썸네일·첫 문구 강화", n: q(false, true) },
@@ -65,6 +103,10 @@ export function CreativeMatrix({ rows, onOpen }: { rows: Enriched[]; onOpen: (r:
           그 외
         </span>
         <span>점 크기 = 광고비 · 기준선 = 중앙값 (CTR {fmt(mx, "pct")}, CVR {fmt(my, "pct")})</span>
+        <button type="button" onClick={() => downloadQuadrants(pts, mx, my, quadOf, fileTag)} className="ml-auto h-8 rounded-lg border border-line px-3 text-[13px] text-ink-soft hover:border-signal hover:text-signal" title="전체 + 승리형·전환형·후킹형·교체 후보 시트(광고비순) + 기준">
+          <i className="ti ti-download mr-1" aria-hidden />
+          유형별 소재 엑셀
+        </button>
       </div>
       <div className="relative h-[360px] w-full">
         <ResponsiveContainer width="100%" height="100%">
