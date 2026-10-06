@@ -8,6 +8,9 @@ import type { GfaCredentials } from "@/lib/gfa/auth";
 import { fetchAccountReport, fetchCampaigns as fetchKakaoCampaigns, fromYmd } from "@/lib/kakao-moment/aggregate";
 import type { KakaoCredentials } from "@/lib/kakao-moment/auth";
 import { kakaoMetricsOf } from "@/lib/kakao-moment/types";
+import { getGoogleAdsCredentials } from "@/lib/google-ads/auth";
+import { fetchCampaignDaily } from "@/lib/google-ads/aggregate";
+import { gadsSearch } from "@/lib/google-ads/client";
 import type { CorrCampaign, CorrDaily } from "./types";
 
 function add(map: Map<string, Map<string, CorrDaily>>, cid: string, date: string, m: Omit<CorrDaily, "date">) {
@@ -29,7 +32,7 @@ const sorted = (m?: Map<string, CorrDaily>) => (m ? [...m.values()].sort((a, b) 
 // ── 메타 — 캠페인 일별 인사이트를 페이지 끝까지 + 캠페인 목표 ─────────
 export async function metaCampaigns(accountId: string, token: string, since: string, until: string): Promise<CorrCampaign[]> {
   const act = actOf(accountId);
-  const [list, rows] = await Promise.all([
+  const [list, rows, totals] = await Promise.all([
     graphAll<{ id: string; name: string; objective?: string }>(`${act}/campaigns`, { fields: "id,name,objective" }, token),
     graphAll<Record<string, unknown>>(
       `${act}/insights`,
@@ -42,7 +45,24 @@ export async function metaCampaigns(accountId: string, token: string, since: str
       token,
       60,
     ),
+    // 기간 합계 — 도달·빈도는 일별을 더할 수 없어 따로(인지 캠페인 판단 근거). 실패해도 일별 분석은 그대로
+    graphAll<Record<string, unknown>>(
+      `${act}/insights`,
+      {
+        level: "campaign",
+        time_range: JSON.stringify({ since, until }),
+        fields: "campaign_id,reach,frequency,video_thruplay_watched_actions,video_p100_watched_actions",
+      },
+      token,
+      10,
+    ).catch(() => [] as Record<string, unknown>[]),
   ]);
+  const tot = new Map(
+    totals.map((r) => [
+      String(r.campaign_id ?? ""),
+      { reach: num(r.reach), frequency: num(r.frequency), thruplays: pickAction(r.video_thruplay_watched_actions, ["video_view"]), videoP100: pickAction(r.video_p100_watched_actions, ["video_view"]) },
+    ]),
+  );
   const byCampaign = new Map<string, Map<string, CorrDaily>>();
   const names = new Map<string, string>();
   for (const r of rows) {
@@ -64,6 +84,7 @@ export async function metaCampaigns(accountId: string, token: string, since: str
     name: meta.get(cid)?.name ?? names.get(cid) ?? `캠페인 ${cid}`,
     objective: meta.get(cid)?.objective ?? null,
     daily: sorted(byCampaign.get(cid)),
+    totals: tot.get(cid),
   }));
 }
 
@@ -139,4 +160,32 @@ export async function kakaoCampaigns(creds: KakaoCredentials, since: string, unt
       daily: sorted(byCampaign.get(cid)),
     };
   });
+}
+
+// ── 구글 Ads — 캠페인 일별(GAQL) + 채널 유형(SEARCH·VIDEO·DEMAND_GEN·PMAX…). TrueView 조회. 도달은 안 받음 ─────────
+export async function googleAdsCampaigns(customerId: string, since: string, until: string): Promise<CorrCampaign[]> {
+  const creds = await getGoogleAdsCredentials({ google_ads_customer_id: customerId });
+  const [rows, views, attrs] = await Promise.all([
+    fetchCampaignDaily(creds, since, until),
+    // 동영상 조회(TrueView — 30초 이상 또는 끝까지 본 조회). 실패해도 나머지는 그대로
+    gadsSearch<{ campaign?: { id?: string }; segments?: { date?: string }; metrics?: { videoTrueviewViews?: string } }>(
+      creds,
+      `SELECT campaign.id, segments.date, metrics.video_trueview_views FROM campaign WHERE segments.date BETWEEN '${since}' AND '${until}' AND metrics.video_trueview_views > 0`,
+    ).catch(() => []),
+    // 입찰 방식 — 동영상 캠페인이 도달형(CPM: VRC·범퍼·마스트헤드)인지 조회형(CPV: VVC)인지 가른다
+    gadsSearch<{ campaign?: { id?: string; biddingStrategyType?: string } }>(
+      creds,
+      `SELECT campaign.id, campaign.bidding_strategy_type FROM campaign WHERE segments.date BETWEEN '${since}' AND '${until}' AND metrics.impressions > 0`,
+    ).catch(() => []),
+  ]);
+  const bid = new Map(attrs.map((a) => [String(a.campaign?.id ?? ""), a.campaign?.biddingStrategyType ?? ""]));
+  const vv = new Map(views.map((v) => [`${v.campaign?.id}|${v.segments?.date}`, Number(v.metrics?.videoTrueviewViews) || 0]));
+  const by = new Map<string, CorrCampaign>();
+  for (const r of rows) {
+    const c = by.get(r.campaignId) ?? { id: `google_ads:${r.campaignId}`, media: "google_ads", name: r.campaignName, objective: [r.channelType, bid.get(r.campaignId)].filter(Boolean).join("/") || null, daily: [] };
+    if (r.cost > 0 || r.impressions > 0)
+      c.daily.push({ date: r.date, cost: r.cost, impressions: r.impressions, clicks: r.clicks, conversions: r.conversions, revenue: r.revenue, videoViews: vv.get(`${r.campaignId}|${r.date}`) ?? 0 });
+    by.set(r.campaignId, c);
+  }
+  return [...by.values()].map((c) => ({ ...c, daily: c.daily.sort((a, b) => a.date.localeCompare(b.date)) }));
 }

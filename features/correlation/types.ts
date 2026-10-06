@@ -16,6 +16,8 @@ export type CorrCampaign = {
   name: string;
   objective: string | null; // 매체 원본 값(메타 objective, GFA objective, 카카오 type/goal, 네이버 campaignTp)
   daily: CorrDaily[]; // 집행한 날만(빈 날은 화면에서 0으로 채움)
+  // 기간 합계로만 의미 있는 값(도달은 날짜끼리 더할 수 없음) — 메타만 채움
+  totals?: { reach?: number; frequency?: number; thruplays?: number; videoP100?: number };
 };
 
 export type CorrMediaStatus = { key: string; label: string; ok: boolean; campaigns: number; note?: string; error?: string };
@@ -41,10 +43,13 @@ export const ROLE_META: Record<Role, { label: string; color: string; kind: "driv
   other: { label: "제외", color: "#A7ACB4", kind: "other" },
 };
 
-export const MEDIA_LABEL: Record<string, string> = { meta: "메타", naver: "네이버 SA", gfa: "GFA", kakao: "카카오모먼트" };
+export const MEDIA_LABEL: Record<string, string> = { meta: "메타", naver: "네이버 SA", gfa: "GFA", kakao: "카카오모먼트", google_ads: "구글 Ads" };
 
 const VIDEO_WORDS = /(video|영상|동영상|vvc|tvc|youtube|유튜브|thruplay|reels?|릴스|조회|view)/i;
 const BRAND_WORDS = /(브랜드\s*검색|brand\s*search|brandsearch)/i;
+// 인지 목표 캠페인을 '영상'으로 좁히는 건 조회 자체가 목적이라고 이름에 적힌 경우만(vvc·ThruPlay·조회).
+// tvc·릴스는 소재 형식일 뿐 목적이 인지라서 '도달·인지'로 둔다(2026-10-06 — 르무통 branding_ba_tvc가 전부 영상으로 묶여 인지가 안 보이던 문제)
+const VIEW_GOAL_WORDS = /(vvc|thru\s*play|조회|video_?view)/i;
 
 // 매체 목표 → 역할. 이름 키워드는 목표가 인지·참여처럼 영상일 수 있는 경우에만 영상으로 좁힐 때 쓴다.
 export function guessRole(media: string, objective: string | null, name: string): Role {
@@ -54,10 +59,24 @@ export function guessRole(media: string, objective: string | null, name: string)
     if (o === "BRAND_SEARCH" || BRAND_WORDS.test(name)) return "brand_search";
     return "search";
   }
+  if (media === "google_ads") {
+    // objective = "채널 유형/입찰 방식"(예: VIDEO/TARGET_CPM)
+    const [ch, bid = ""] = o.split("/");
+    if (ch === "SEARCH") return BRAND_WORDS.test(name) ? "brand_search" : "search";
+    if (ch === "VIDEO") {
+      if (/CPM/.test(bid)) return "awareness"; // VRC·범퍼·마스트헤드 — 도달형
+      if (/CONVERSION|CPA|ROAS/.test(bid)) return "conversion"; // 동영상 액션
+      return "video"; // CPV(VVC) 등 조회형
+    }
+    if (ch === "DEMAND_GEN" || ch === "DISCOVERY") return videoName ? "video" : "conversion";
+    if (ch === "DISPLAY") return /CPM/.test(bid) ? "awareness" : /CONVERSION|CPA|ROAS/.test(bid) ? "conversion" : "awareness";
+    if (ch === "PERFORMANCE_MAX" || ch === "SHOPPING" || ch === "MULTI_CHANNEL") return "conversion";
+    return videoName ? "video" : "other";
+  }
   if (/VIDEO/.test(o)) return "video";
   if (/SALES|CONVERSION|CATALOG|LEAD|INSTALL|APP_PROMOTION|SHOPPING|PURCHASE|MESSAGES/.test(o)) return "conversion";
-  if (/TRAFFIC|LINK_CLICKS|VISIT/.test(o)) return videoName ? "video" : "traffic";
-  if (/AWARENESS|REACH|BRAND/.test(o)) return videoName ? "video" : "awareness";
+  if (/TRAFFIC|LINK_CLICKS|VISIT/.test(o)) return "traffic";
+  if (/AWARENESS|REACH|BRAND/.test(o)) return VIEW_GOAL_WORDS.test(name) ? "video" : "awareness";
   if (/ENGAGEMENT|POST_ENGAGEMENT|PAGE_LIKES|EVENT/.test(o)) return videoName ? "video" : "engagement";
   if (/VIEW/.test(o)) return "video"; // 카카오 goal=VIEW(동영상 조회)
   if (videoName) return "video";

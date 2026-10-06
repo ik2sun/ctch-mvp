@@ -5,10 +5,10 @@ import { resolveMetaToken } from "@/lib/meta/token";
 import { resolveNaverAdCredentials } from "@/lib/naver-ad/auth";
 import { getGfaCredentials } from "@/lib/gfa/auth";
 import { ensureKakaoAccessToken, KAKAO_TOKEN_COLUMNS } from "@/lib/kakao-moment/auth";
-import { gfaCampaigns, kakaoCampaigns, metaCampaigns, naverCampaigns } from "./fetchData";
+import { gfaCampaigns, googleAdsCampaigns, kakaoCampaigns, metaCampaigns, naverCampaigns } from "./fetchData";
 import { MEDIA_LABEL, type CorrCampaign, type CorrDataRes, type CorrMediaStatus } from "./types";
 
-export const CLIENT_MEDIA_COLUMNS = `name, meta_account_id, meta_access_token, naver_ad_api_key, naver_ad_secret, naver_ad_customer_id, gfa_customer_id, ${KAKAO_TOKEN_COLUMNS}`;
+export const CLIENT_MEDIA_COLUMNS = `name, meta_account_id, meta_access_token, naver_ad_api_key, naver_ad_secret, naver_ad_customer_id, gfa_customer_id, google_ads_customer_id, ${KAKAO_TOKEN_COLUMNS}`;
 
 // client: CLIENT_MEDIA_COLUMNS로 읽은 행(소유 확인은 호출부에서)
 export async function fetchClientCampaigns(
@@ -49,6 +49,10 @@ export async function fetchClientCampaigns(
     });
   } else skipped.push({ key: "kakao", label: MEDIA_LABEL.kakao, ok: false, campaigns: 0, note: "광고계정 ID 미등록" });
 
+  if (c.google_ads_customer_id) {
+    jobs.push({ key: "google_ads", run: async () => ({ campaigns: await googleAdsCampaigns(c.google_ads_customer_id!, since, until) }) });
+  } else skipped.push({ key: "google_ads", label: MEDIA_LABEL.google_ads, ok: false, campaigns: 0, note: "Customer ID 미등록" });
+
   const settled = await Promise.allSettled(jobs.map((j) => j.run()));
   const media: CorrMediaStatus[] = [...skipped];
   const campaigns: CorrCampaign[] = [];
@@ -62,7 +66,7 @@ export async function fetchClientCampaigns(
       media.push({ key, label: MEDIA_LABEL[key], ok: false, campaigns: 0, error: s.reason instanceof Error ? s.reason.message : "조회 실패" });
     }
   });
-  const order = ["meta", "naver", "gfa", "kakao"];
+  const order = ["meta", "naver", "gfa", "kakao", "google_ads"];
   media.sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key));
   return { since, until, media, campaigns };
 }

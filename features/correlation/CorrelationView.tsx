@@ -19,6 +19,8 @@ import {
   type Strength,
 } from "./analysis";
 import { Heatmap, LagChart, TimelineCharts, fmtValue } from "./charts";
+import { SIGNAL_OUTCOMES, awarenessRows, roleSignals } from "./awareness";
+import { AwarenessPanel } from "./AwarenessPanel";
 import { DRIVER_ROLES, MEDIA_LABEL, ROLE_META, guessRole, type CorrDataRes, type Role } from "./types";
 
 const STRENGTH: Record<Strength, { label: string; cls: string; icon: string }> = {
@@ -109,6 +111,28 @@ export function CorrelationView({ data, clientId }: { data: CorrDataRes; clientI
     for (const d of drivers) m[d.key] = onOff(d, outcome, dates, cells[`${d.key}|${outcome.key}`]?.lag ?? 0);
     return m;
   }, [drivers, outcome, dates, cells]);
+
+  // 인지·영상 캠페인 판단 근거 — 하위 퍼널 결과마다 회귀·집행일 비교를 따로 돌린다(선택한 결과 지표와 무관)
+  const awareness = useMemo(() => {
+    const ds = drivers.filter((d) => !d.external || d.additive);
+    const regs: Record<string, ReturnType<typeof regress>> = {};
+    const oos: Record<string, Record<string, ReturnType<typeof onOff>>> = {};
+    for (const key of SIGNAL_OUTCOMES) {
+      const o = outcomes.find((x) => x.key === key);
+      if (!o) continue;
+      const picks: Record<string, { lag: number; theta: number }> = {};
+      for (const d of ds) {
+        const c = cells[`${d.key}|${key}`];
+        picks[d.key] = c && c.r != null && c.r > 0 ? { lag: c.lag, theta: c.theta } : { lag: 0, theta: 0.3 };
+      }
+      regs[key] = ds.length ? regress(ds, o, dates, picks, metric === "cost" ? 10000 : 1000) : null;
+      oos[key] = Object.fromEntries(drivers.map((d) => [d.key, onOff(d, o, dates, cells[`${d.key}|${key}`]?.lag ?? 0)]));
+    }
+    const signals = roleSignals(outcomes, cells, regs, oos);
+    const driverKeys = new Set(built.drivers.map((d) => d.key));
+    const cm = Object.fromEntries(built.drivers.map((d) => [d.key, coMovement(d, built.perfCost, dates)]));
+    return { signals, driverKeys, rows: awarenessRows(data.campaigns, roles, dates.length, signals, driverKeys, cm) };
+  }, [drivers, outcomes, cells, dates, metric, built, data.campaigns, roles]);
 
   const coMove = useMemo(() => Object.fromEntries(built.drivers.map((d) => [d.key, coMovement(d, built.perfCost, dates)])), [built, dates]);
 
@@ -374,6 +398,8 @@ export function CorrelationView({ data, clientId }: { data: CorrDataRes; clientI
         </>
       )}
 
+      <AwarenessPanel rows={awareness.rows} signals={awareness.signals} driverKeys={awareness.driverKeys} unitWord={unitWord} />
+
       {/* 캠페인 분류 */}
       <Card title="캠페인 분류" sub="매체의 캠페인 목표로 자동 분류했어요 · 바꾸면 바로 다시 계산되고 이 브라우저에 기억돼요">
         <div className="mb-3 flex flex-wrap gap-1.5 text-[12px]">
@@ -396,11 +422,12 @@ export function CorrelationView({ data, clientId }: { data: CorrDataRes; clientI
         </summary>
         <ul className="mt-2.5 list-disc space-y-1 pl-5 leading-relaxed">
           <li>원인 = 영상·도달·트래픽·참여 캠페인의 일별 광고비(또는 노출). 결과 = 전환·검색 캠페인의 전환·매출·ROAS·CPA와 검색광고 클릭(수요 신호). 상위 퍼널 캠페인이 스스로 잡은 전환은 결과에 넣지 않아요.</li>
+          <li>인지·영상 캠페인은 자기 ROAS로 판단하지 않아요. &lsquo;인지·영상 캠페인 판단 근거&rsquo;에서 전달 효율(CPM·도달 단가·빈도), 주목도(재생률), 하위 퍼널 신호(브랜드검색·검색 클릭·성과 전환이 함께 움직였는지)로 봐요. 메타 인지 목표 캠페인은 이름에 vvc·ThruPlay·조회가 있을 때만 &lsquo;영상&rsquo;, 나머지(tvc·릴스 소재 포함)는 &lsquo;도달·인지&rsquo;로 분류해요.</li>
           <li>두 지표 모두에서 요일 효과와 선형 추세를 먼저 걷어내요. 둘 다 시즌에 함께 오르기만 해도 상관이 높게 나오는 착시를 줄이기 위해서예요.</li>
           <li>광고 효과는 며칠 남으므로 잔존 효과(θ 0·0.3·0.5·0.7)와 시차(0~14일)를 모두 시험해 가장 강한 조합을 보여줘요. 일별 값끼리 이어져 있는 만큼 유효 표본을 줄이고, 여러 조합을 시험한 만큼 보수적으로 유의성을 판단해요.</li>
           <li>기여도는 모든 원인을 함께 넣은 회귀(요일·추세 통제, 릿지)로 추정해요. &lsquo;{unitWord}당&rsquo;은 잔존 효과까지 합친 값이에요. 원인과 성과 캠페인 예산을 늘 같이 늘리고 줄였다면 효과를 분리하기 어려워요(핵심 발견에 표시).</li>
           <li>상관은 인과가 아니에요. 확실히 보려면 지역·기간을 나눈 홀드아웃(켰다 끄기) 테스트가 필요해요. 집행일 vs 미집행일 비교는 그 근사치예요.</li>
-          <li>네이버 SA는 일별을 캠페인 하나씩만 조회할 수 있어 광고비 상위 15개 + 브랜드검색 캠페인만 써요. 매체마다 전환 집계 기준이 달라요.</li>
+          <li>네이버 SA는 일별을 캠페인 하나씩만 조회할 수 있어 광고비 상위 15개 + 브랜드검색 캠페인만 써요. 구글 Ads는 채널 유형 + 입찰 방식으로 분류해요(검색 = 검색, 동영상 CPM 입찰(VRC·범퍼·마스트헤드) = 도달·인지, 동영상 CPV 입찰(VVC) = 영상, 동영상 전환 입찰 = 전환, 디스플레이 = 도달·인지, 디맨드젠 = 이름에 영상 키워드가 있으면 영상·없으면 전환, PMax·쇼핑 = 전환). 매체마다 전환 집계 기준이 달라요.</li>
           <li>외부 지표 CSV: 첫 열 날짜(2026-09-01·2026.09.01·20260901), 나머지 열은 숫자(GRP·SOV·검색량 등). 비어 있는 날은 직전 값으로 채워 주간 데이터도 쓸 수 있어요.</li>
         </ul>
       </details>
