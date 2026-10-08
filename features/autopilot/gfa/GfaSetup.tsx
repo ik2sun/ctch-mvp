@@ -13,6 +13,7 @@ import {
   DEFAULT_TEMPLATES,
   OBJECTIVE_LABEL,
   SINGLE_IMAGE_TEMPLATES,
+  isFeedTemplate,
   SUPPORTED_OBJECTIVES,
   adSetName,
   copyProblems,
@@ -67,7 +68,7 @@ export function GfaSetup() {
   const [brief, setBrief] = useState<SetupBrief>(EMPTY_BRIEF);
   const [images, setImages] = useState<SourceImage[]>([]);
   const [formats, setFormats] = useState<string[]>(DEFAULT_TEMPLATES);
-  const [useUtm, setUseUtm] = useState(true);
+  const [useUtm, setUseUtm] = useState(false); // UTM 자동 추가는 기본 꺼짐(광고주 UTM 규칙 우선)
   const [turnOn, setTurnOn] = useState(false);
 
   // 3. 세팅안
@@ -672,7 +673,7 @@ export function GfaSetup() {
               </Field>
               <Field label="소재 규격 (단일 이미지)">
                 <div className="flex flex-wrap gap-2">
-                  {SINGLE_IMAGE_TEMPLATES.map((t) => {
+                  {SINGLE_IMAGE_TEMPLATES.filter((t) => isFeedTemplate(t.code)).map((t) => {
                     const on = formats.includes(t.code);
                     return (
                       <button key={t.code} type="button" onClick={() => setFormats(on ? formats.filter((f) => f !== t.code) : [...formats, t.code])} className={`${CHIP} ${on ? CHIP_ON : ""}`}>
@@ -840,12 +841,12 @@ function AdSetRow({ a, name, onChange, onRemove }: { a: PlanAdSet; name: string;
 }
 
 function CopyCard({ idx, c, onChange }: { idx: number; c: PlanCopy; onChange: (c: PlanCopy) => void }) {
-  const fields: { k: keyof PlanCopy; label: string; max: number }[] = [
+  const fields: { k: "message" | "linkTitle" | "linkDescription"; label: string; max: number }[] = [
     { k: "message", label: "광고 문구", max: 65 },
     { k: "linkTitle", label: "제목", max: 25 },
     { k: "linkDescription", label: "설명", max: 45 },
   ];
-  const set = (k: keyof PlanCopy, v: string) => onChange({ ...c, [k]: v.slice(0, fields.find((f) => f.k === k)?.max ?? 65) });
+  const set = (k: "message" | "linkTitle" | "linkDescription" | "cta", v: string) => onChange({ ...c, [k]: v.slice(0, fields.find((f) => f.k === k)?.max ?? 65) });
   return (
     <div className="rounded-lg border border-line p-4">
       <p className="mb-3 text-[14px] font-semibold text-ink">카피 {idx + 1}</p>

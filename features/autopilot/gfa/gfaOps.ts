@@ -168,14 +168,44 @@ export async function uploadImage(c: GfaCredentials, templateCode: string, file:
   return { no: res.no, width: res.width, height: res.height };
 }
 
+// 광고계정 프로필 — 생성 API에는 프로필 칸이 없어 계정 프로필(GFA 광고 계정 관리 > 프로필 관리)이 붙는다.
+// 프로필 조회 API도 없어서 기존 네이티브·컬렉션·동영상 소재 상세의 profile로 읽는다(목록 응답엔 없음). 없으면 null
+const PROFILE_CACHE = new Map<string, { at: number; v: { name: string; imageUrl?: string } | null }>();
+export async function accountProfile(c: GfaCredentials): Promise<{ name: string; imageUrl?: string } | null> {
+  const hit = PROFILE_CACHE.get(c.adAccountNo);
+  if (hit && Date.now() - hit.at < 30 * 60 * 1000) return hit.v;
+  let v: { name: string; imageUrl?: string } | null = null;
+  let tried = 0;
+  outer: for (let page = 0; page < 3; page++) {
+    const p = await gfaRequest<Page<{ no: number; creativeType?: string }>>(`${base(c)}/creatives`, { ...opt(c), query: { page, size: 100 } });
+    for (const x of p.content ?? []) {
+      if (!["SINGLE_IMAGE", "MULTIPLE_IMAGE", "SINGLE_VIDEO"].includes(x.creativeType ?? "")) continue;
+      const d = await gfaRequest<{ profile?: { name?: string; image?: { imageUrl?: string } } }>(`${base(c)}/creatives/${x.no}`, opt(c)).catch(() => null);
+      if (d?.profile?.name) {
+        v = { name: d.profile.name, imageUrl: d.profile.image?.imageUrl };
+        break outer;
+      }
+      if (++tried >= 3) break outer;
+    }
+    if (p.last !== false) break;
+  }
+  PROFILE_CACHE.set(c.adAccountNo, { at: Date.now(), v });
+  return v;
+}
+
 export type SingleImageCreative = {
   adSetNo: number;
   creativeTemplateCode: string;
   imageNo: number;
   name: string;
-  message?: string; // 문구·제목·설명은 선택(스펙상 적으면 2자 이상) — 비면 보내지 않는다
+  // 문구 칸은 템플릿마다 다르다(types.ts COPY_RULES) — 템플릿이 안 받는 칸·빈 칸은 보내지 않는다
+  message?: string;
   linkTitle?: string;
   linkDescription?: string;
+  linkText3rd?: string;
+  linkText4th?: string;
+  linkText5th?: string;
+  adviceMessage?: string;
   linkUrl: string;
   ctaCode: string;
 };
@@ -186,6 +216,23 @@ export async function createSingleImageCreative(c: GfaCredentials, body: SingleI
     method: "POST",
     json: Object.fromEntries(Object.entries(body).filter(([, v]) => !(typeof v === "string" && !v.trim()))),
   });
+  if (!res?.no) throw new Error("소재는 요청했지만 응답에 번호가 없어요.");
+  return { no: res.no, status: res.status };
+}
+
+// 이미지 컬렉션 — 공식 스펙 OpenCreativeOfMultipleImageParam: name·message(2~65)·FEED_MULTIPLE_IMAGE·ctaCode·ctaUrl·imageMedias 4~10장 {imageNo, linkUrl, linkTitle 2~28}
+export type MultipleImageCreative = {
+  adSetNo: number;
+  name: string;
+  message: string;
+  creativeTemplateCode: string;
+  ctaCode: string;
+  ctaUrl: string;
+  imageMedias: { imageNo: number; linkUrl: string; linkTitle: string }[];
+};
+
+export async function createMultipleImageCreative(c: GfaCredentials, body: MultipleImageCreative): Promise<{ no: number; status?: string }> {
+  const res = await gfaRequest<{ no?: number; status?: string }>(`${base(c)}/creatives/MULTIPLE_IMAGE`, { ...opt(c), method: "POST", json: body });
   if (!res?.no) throw new Error("소재는 요청했지만 응답에 번호가 없어요.");
   return { no: res.no, status: res.status };
 }

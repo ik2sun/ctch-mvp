@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { gfaErrorResponse } from "@/lib/gfa/client";
 import { gfaAccess } from "@/features/autopilot/gfa/access";
 import { uploadImage } from "@/features/autopilot/gfa/gfaOps";
-import { ALL_TEMPLATES } from "@/features/autopilot/gfa/types";
+import { UPLOAD_TEMPLATES } from "@/features/autopilot/gfa/types";
 
 export const maxDuration = 60;
 
@@ -12,7 +12,7 @@ export async function POST(req: Request) {
   if (!form) return NextResponse.json({ error: "업로드 본문을 읽지 못했어요." }, { status: 400 });
   const templateCode = String(form.get("templateCode") ?? "");
   const file = form.get("file");
-  if (!ALL_TEMPLATES.some((t) => t.code === templateCode)) return NextResponse.json({ error: "지원하지 않는 소재 템플릿이에요." }, { status: 400 });
+  if (!UPLOAD_TEMPLATES.some((t) => t.code === templateCode)) return NextResponse.json({ error: "지원하지 않는 소재 템플릿이에요." }, { status: 400 });
   if (!(file instanceof Blob) || file.size === 0) return NextResponse.json({ error: "이미지 파일이 없어요." }, { status: 400 });
   try {
     const access = await gfaAccess(form.get("clientId"), true);

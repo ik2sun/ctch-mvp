@@ -1,11 +1,13 @@
 // 캠페인 오토파일럿 · GFA 실행 엔진(브라우저) — AI 자동 세팅과 엑셀 벌크 업로드가 같이 쓴다.
 // 광고그룹(새로 만들기 또는 기존 재사용) → 템플릿 규격으로 이미지 자르기·업로드(광고계정 단위라 재사용) → 소재 생성 → 새 광고그룹만 켜기/끄기 → 기록
-import { ALL_TEMPLATES, withUtm, type PlanAdSet, type PlanCopy, type TemplateSpec } from "./types";
+import { ALL_TEMPLATES, COLLECTION_TEMPLATE, copyForTemplate, withUtm, type PlanAdSet, type PlanCopy, type TemplateSpec } from "./types";
 import { fitToTemplate, type SourceImage } from "./imageFit";
 
 export type RunAdSet = { name: string; existingNo?: number; target?: PlanAdSet; overrides?: Record<string, unknown> }; // overrides = 엑셀 광고그룹 시트에 적힌 GFA 칸
 // altMessage = 배너(IMAGE_BANNER) 소재의 광고 안내 문구, 비우면 광고 문구 → 제목
 export type RunCreative = { adSetName: string; image: SourceImage; templates: string[]; copy: PlanCopy; altMessage?: string; landingUrl: string; name: (t: TemplateSpec) => string };
+// 컬렉션 — 카드(이미지·설명 문구·랜딩 URL) 4~10장이 소재 하나
+export type RunCollection = { adSetName: string; name: string; message: string; cta: string; ctaUrl: string; cards: { image: SourceImage; title: string; url: string }[] };
 export type LogLine = { kind: "ok" | "err" | "info"; text: string };
 export type RunResult = {
   adSets: { no: number; name: string; created: boolean }[];
@@ -28,6 +30,7 @@ export async function runSetup(opts: {
   startTime: string | null;
   adSets: RunAdSet[];
   creatives: RunCreative[];
+  collections?: RunCollection[];
   useUtm: boolean;
   turnOn: boolean;
   kind: "ai" | "bulk";
@@ -47,6 +50,25 @@ export async function runSetup(opts: {
     push({ kind: "err", text: m });
   };
   const imageNos = opts.imageCache ?? new Map<string, number>(); // `${이미지 id}:${템플릿}` → GFA 이미지 번호
+  // 템플릿 규격으로 맞춰 한 번만 업로드(같은 이미지·템플릿은 재사용)
+  async function upload(img: SourceImage, t: TemplateSpec): Promise<number> {
+    const key = `${img.id}:${t.code}`;
+    const hit = imageNos.get(key);
+    if (hit) return hit;
+    const file = await fitToTemplate(img, t);
+    const fd = new FormData();
+    fd.set("clientId", clientId);
+    fd.set("templateCode", t.code);
+    fd.set("file", file);
+    const res = await fetch("/api/autopilot/gfa/image", { method: "POST", body: fd });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json.error || "업로드 실패");
+    const no = json.image.no as number;
+    imageNos.set(key, no);
+    push({ kind: "ok", text: `이미지 업로드 #${no} ${img.file.name} → ${t.label} (${Math.round(file.size / 1024)}KB)` });
+    return no;
+  }
+  const ctaFor = (ctas: string[], want: string) => (ctas.length && !ctas.includes(want) ? (ctas.includes("MORE") ? "MORE" : ctas[0]) : want);
 
   for (const a of opts.adSets) {
     let info: { adSet: { no: number; name: string }; templates: TemplateSpec[]; ctas: string[] };
@@ -76,43 +98,20 @@ export async function runSetup(opts: {
         continue;
       }
       for (const t of allowed) {
-        const key = `${c.image.id}:${t.code}`;
-        let imageNo = imageNos.get(key);
-        if (!imageNo) {
-          try {
-            const file = await fitToTemplate(c.image, t);
-            const fd = new FormData();
-            fd.set("clientId", clientId);
-            fd.set("templateCode", t.code);
-            fd.set("file", file);
-            const res = await fetch("/api/autopilot/gfa/image", { method: "POST", body: fd });
-            const json = await res.json().catch(() => ({}));
-            if (!res.ok) throw new Error(json.error || "업로드 실패");
-            imageNo = json.image.no as number;
-            imageNos.set(key, imageNo);
-            push({ kind: "ok", text: `이미지 업로드 #${imageNo} ${c.image.file.name} → ${t.label} (${Math.round(file.size / 1024)}KB)` });
-          } catch (e) {
-            fail(`이미지 ${c.image.file.name} ${t.label} 업로드 실패 — ${(e as Error).message}`);
-            continue;
-          }
+        let imageNo: number;
+        try {
+          imageNo = await upload(c.image, t);
+        } catch (e) {
+          fail(`이미지 ${c.image.file.name} ${t.label} 업로드 실패 — ${(e as Error).message}`);
+          continue;
         }
         const cname = c.name(t).slice(0, 128);
-        const cta = info.ctas.length && !info.ctas.includes(c.copy.cta) ? (info.ctas.includes("MORE") ? "MORE" : info.ctas[0]) : c.copy.cta;
         const linkUrl = opts.useUtm ? withUtm(c.landingUrl.trim(), opts.campaignName, cname) : c.landingUrl.trim();
+        // 배너 = 랜딩 URL + 광고 안내 문구만 / 네이티브 이미지 = 템플릿이 받는 문구 칸만(피드는 광고 문구, 모바일 네이티브는 설명 문구1~3 …)
         const creative =
           t.kind === "IMAGE_BANNER"
             ? { adSetNo: info.adSet.no, creativeTemplateCode: t.code, imageNo, name: cname, linkUrl, altMessage: (c.altMessage || c.copy.message || c.copy.linkTitle).trim().slice(0, 100) }
-            : {
-                adSetNo: info.adSet.no,
-                creativeTemplateCode: t.code,
-                imageNo,
-                name: cname,
-                message: c.copy.message,
-                linkTitle: c.copy.linkTitle,
-                linkDescription: c.copy.linkDescription,
-                linkUrl,
-                ctaCode: cta,
-              };
+            : { adSetNo: info.adSet.no, creativeTemplateCode: t.code, imageNo, name: cname, linkUrl, ctaCode: ctaFor(info.ctas, c.copy.cta), ...copyForTemplate(c.copy, t.code) };
         try {
           const r = await postAutopilot<{ creative: { no: number } }>({ action: "createCreative", clientId, campaignNo, creative });
           out.creatives.push({ no: r.creative.no, name: cname, adSetNo: info.adSet.no });
@@ -120,6 +119,35 @@ export async function runSetup(opts: {
         } catch (e) {
           fail(`소재 ${cname} 생성 실패 — ${(e as Error).message}`);
         }
+      }
+    }
+
+    for (const col of (opts.collections ?? []).filter((x) => x.adSetName === a.name)) {
+      const t = info.templates.find((x) => x.code === COLLECTION_TEMPLATE.code) ?? (info.templates.length ? null : COLLECTION_TEMPLATE);
+      if (!t) {
+        fail(`${a.name} · 컬렉션 ${col.name}: 이 광고그룹은 이미지 컬렉션을 지원하지 않아요(게재 위치에 피드가 있어야 함)`);
+        continue;
+      }
+      const cname = col.name.slice(0, 128);
+      const utm = (u: string) => (opts.useUtm ? withUtm(u.trim(), opts.campaignName, cname) : u.trim());
+      const imageMedias: { imageNo: number; linkUrl: string; linkTitle: string }[] = [];
+      try {
+        for (const card of col.cards) imageMedias.push({ imageNo: await upload(card.image, t), linkUrl: utm(card.url), linkTitle: card.title.trim() });
+      } catch (e) {
+        fail(`컬렉션 ${cname} 카드 이미지 업로드 실패 — ${(e as Error).message}`);
+        continue;
+      }
+      try {
+        const r = await postAutopilot<{ creative: { no: number } }>({
+          action: "createCreative",
+          clientId,
+          campaignNo,
+          creative: { adSetNo: info.adSet.no, name: cname, message: col.message, creativeTemplateCode: t.code, ctaCode: ctaFor(info.ctas, col.cta), ctaUrl: utm(col.ctaUrl), imageMedias },
+        });
+        out.creatives.push({ no: r.creative.no, name: cname, adSetNo: info.adSet.no });
+        push({ kind: "ok", text: `컬렉션 생성 #${r.creative.no} ${cname} (카드 ${imageMedias.length}장)` });
+      } catch (e) {
+        fail(`컬렉션 ${cname} 생성 실패 — ${(e as Error).message}`);
       }
     }
   }

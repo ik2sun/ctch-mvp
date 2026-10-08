@@ -112,6 +112,11 @@ export type PlanCopy = {
   linkTitle: string;        // 제목 = 설명 1 (2~25자로 제한 — GFA 화면 기준 보수적으로)
   linkDescription: string;  // 설명 2 (2~45자)
   cta: string;              // CTA 코드
+  // 네이티브 템플릿 전용(엑셀 벌크) — 실제로 보내는 칸은 템플릿별 COPY_RULES가 정한다
+  linkText3rd?: string;     // 설명 문구3 (모바일 네이티브)
+  linkText4th?: string;     // PC 긴 설명1
+  linkText5th?: string;     // PC 긴 설명2
+  adviceMessage?: string;   // 고지 문구
 };
 
 export type SetupPlan = {
@@ -122,17 +127,85 @@ export type SetupPlan = {
 
 // ── 이미지 템플릿 ─────────────────────────────────────
 // 규격은 광고그룹 상세의 creativeTemplates 실응답(2026-10-04·10-08). 실행 때는 광고그룹이 돌려준 규격을 다시 쓴다
-// SINGLE_IMAGE(피드·네이티브) = 문구·제목·설명·CTA가 붙는 소재, GFA가 잘라 쓸 수 있음(croppable)
-// IMAGE_BANNER(스마트채널·배너) = 글자가 이미지 안에 있는 배너 — 랜딩 URL + 광고 안내 문구(대체 텍스트, 2~100자)만, 잘라 쓰지 않음
-// 르무통 실소재(2026-10-08): 스마트채널 광고그룹 = BANNER_750(750×160)·BANNER_750X280, 메인 배너 = BANNER_1250X560
-export type CreativeKind = "SINGLE_IMAGE" | "IMAGE_BANNER";
+// 소재 유형 3가지(GFA 화면 기준) — 공식 소재 가이드 https://naver-ad-api.github.io/developers/docs/ad-management/creative (2026-10-08 확인)
+//  · 네이티브 이미지(SINGLE_IMAGE) = 피드 3종 + 네이티브 모바일·PC. 템플릿마다 받는 문구 칸이 다르다(COPY_RULES). GFA가 잘라 쓸 수 있음
+//  · 이미지 배너(IMAGE_BANNER) = 스마트채널·배너. 글자가 이미지 안 — 랜딩 URL + 광고 안내 문구(대체 텍스트, 2~100자)만, 잘라 쓰지 않음
+//  · 컬렉션(MULTIPLE_IMAGE) = 600×600 카드 4~10장(카드마다 설명 문구 2~28자·랜딩 URL) + 광고 문구·CTA·CTA URL
+// 프로필(이미지·이름)은 광고계정 단위(GFA 광고 계정 관리 > 프로필 관리)라 생성 API에 칸이 없고 계정 프로필이 붙는다 — 네이티브·컬렉션은 프로필 선등록 필요
+// 르무통 실소재(2026-10-08): 스마트채널 광고그룹 = BANNER_750(750×160)·BANNER_750X280, 메인 배너 = BANNER_1250X560, 피드 1:1은 광고 문구·CTA·URL만
+export type CreativeKind = "SINGLE_IMAGE" | "IMAGE_BANNER" | "MULTIPLE_IMAGE";
 export type TemplateSpec = { code: string; kind: CreativeKind; label: string; short: string; width: number; height: number; minFileSize: number | null; maxFileSize: number };
 export const SINGLE_IMAGE_TEMPLATES: TemplateSpec[] = [
   { code: "FEED_SINGLE_IMAGE", kind: "SINGLE_IMAGE", label: "피드 가로 1200×628", short: "ls", width: 1200, height: 628, minFileSize: 51200, maxFileSize: 512000 },
   { code: "FEED_SINGLE_IMAGE_SQUARE", kind: "SINGLE_IMAGE", label: "피드 정사각 1200×1200", short: "sq", width: 1200, height: 1200, minFileSize: 81920, maxFileSize: 819200 },
   { code: "FEED_SINGLE_IMAGE_2TO3", kind: "SINGLE_IMAGE", label: "피드 세로 1200×1800", short: "pt", width: 1200, height: 1800, minFileSize: 102400, maxFileSize: 1228800 },
-  { code: "NATIVE_SINGLE_IMAGE_V2", kind: "SINGLE_IMAGE", label: "네이티브 342×228", short: "nt", width: 342, height: 228, minFileSize: 10240, maxFileSize: 133120 },
+  { code: "NATIVE_SINGLE_IMAGE_V2", kind: "SINGLE_IMAGE", label: "배너형(모바일) 342×228", short: "nt", width: 342, height: 228, minFileSize: 10240, maxFileSize: 133120 },
+  { code: "NATIVE_SINGLE_IMAGE_PC", kind: "SINGLE_IMAGE", label: "배너형(PC) 342×228", short: "npc", width: 342, height: 228, minFileSize: 10240, maxFileSize: 133120 },
 ];
+export const isFeedTemplate = (code: string) => code.startsWith("FEED_SINGLE_IMAGE");
+// 컬렉션 카드 이미지(sizeGroupNo 3, 실응답 600×600·20~500KB). 동영상 컬렉션(FEED_MULTIPLE_IMAGE_WITH_VIDEO)은 동영상 업로드가 필요해 미지원
+export const COLLECTION_TEMPLATE: TemplateSpec = { code: "FEED_MULTIPLE_IMAGE", kind: "MULTIPLE_IMAGE", label: "컬렉션 600×600", short: "col", width: 600, height: 600, minFileSize: 20480, maxFileSize: 512000 };
+export const COLLECTION_CARDS = { min: 4, max: 10, titleMax: 28, messageMax: 65 };
+
+// ── 네이티브 이미지 템플릿별 문구 칸(공식 소재 가이드 표) ── 없는 칸은 보내지 않는다
+export type CopyField = "message" | "linkTitle" | "linkDescription" | "linkText3rd" | "linkText4th" | "linkText5th" | "adviceMessage";
+export const COPY_LABEL: Record<CopyField, string> = {
+  message: "광고 문구",
+  linkTitle: "설명 문구1",
+  linkDescription: "설명 문구2",
+  linkText3rd: "설명 문구3",
+  linkText4th: "PC 긴 설명1",
+  linkText5th: "PC 긴 설명2",
+  adviceMessage: "고지 문구",
+};
+type FieldRule = { required: boolean; max: number };
+const FEED_RULE: Partial<Record<CopyField, FieldRule>> = { message: { required: true, max: 65 } };
+export const COPY_RULES: Record<string, Partial<Record<CopyField, FieldRule>>> = {
+  FEED_SINGLE_IMAGE: FEED_RULE,
+  FEED_SINGLE_IMAGE_SQUARE: FEED_RULE,
+  FEED_SINGLE_IMAGE_2TO3: FEED_RULE,
+  NATIVE_SINGLE_IMAGE_V2: {
+    message: { required: true, max: 20 },
+    linkTitle: { required: true, max: 12 },
+    linkDescription: { required: true, max: 12 },
+    linkText3rd: { required: true, max: 12 },
+    adviceMessage: { required: false, max: 45 },
+  },
+  NATIVE_SINGLE_IMAGE_PC: {
+    message: { required: true, max: 20 },
+    linkText4th: { required: true, max: 28 },
+    linkText5th: { required: true, max: 28 },
+    adviceMessage: { required: false, max: 45 },
+  },
+};
+const COPY_FIELDS = Object.keys(COPY_LABEL) as CopyField[];
+
+// 템플릿이 받는 칸만, 빈 칸은 빼고
+export function copyForTemplate(copy: Partial<Record<CopyField, string | undefined>>, code: string): Partial<Record<CopyField, string>> {
+  const rules = COPY_RULES[code] ?? {};
+  const out: Partial<Record<CopyField, string>> = {};
+  for (const f of COPY_FIELDS) {
+    const v = (copy[f] ?? "").trim();
+    if (rules[f] && v) out[f] = v;
+  }
+  return out;
+}
+
+// 템플릿 기준 필수·글자 수 점검(최소 2자는 GFA 공통)
+export function templateCopyProblems(copy: Partial<Record<CopyField, string | undefined>>, code: string): string[] {
+  const rules = COPY_RULES[code];
+  if (!rules) return [];
+  const p: string[] = [];
+  for (const f of COPY_FIELDS) {
+    const r = rules[f];
+    if (!r) continue;
+    const n = (copy[f] ?? "").trim().length;
+    if (r.required && n < 2) p.push(`${COPY_LABEL[f]} 필수(2~${r.max}자)`);
+    else if (n === 1) p.push(`${COPY_LABEL[f]}는 비우거나 2자 이상`);
+    else if (n > r.max) p.push(`${COPY_LABEL[f]} ${n}자(최대 ${r.max})`);
+  }
+  return p;
+}
 export const BANNER_TEMPLATES: TemplateSpec[] = [
   { code: "BANNER_750", kind: "IMAGE_BANNER", label: "스마트채널 750×160", short: "sc160", width: 750, height: 160, minFileSize: null, maxFileSize: 153600 },
   { code: "BANNER_750X280", kind: "IMAGE_BANNER", label: "스마트채널 750×280", short: "sc280", width: 750, height: 280, minFileSize: null, maxFileSize: 256000 },
@@ -142,15 +215,20 @@ export const BANNER_TEMPLATES: TemplateSpec[] = [
 ];
 export const ALL_TEMPLATES: TemplateSpec[] = [...SINGLE_IMAGE_TEMPLATES, ...BANNER_TEMPLATES];
 export const DEFAULT_TEMPLATES = ["FEED_SINGLE_IMAGE", "FEED_SINGLE_IMAGE_SQUARE"];
-export const templateByCode = (code: string) => ALL_TEMPLATES.find((t) => t.code === code);
+// 이미지 업로드가 되는 템플릿 전부(컬렉션 카드 포함)
+export const UPLOAD_TEMPLATES: TemplateSpec[] = [...ALL_TEMPLATES, COLLECTION_TEMPLATE];
+export const templateByCode = (code: string) => UPLOAD_TEMPLATES.find((t) => t.code === code);
 
 // 이미지 크기로 규격 고르기 — 비율이 ±2% 안에 드는 규격(정확히 같은 크기가 먼저). 1:1처럼 피드·배너가 둘 다 맞으면 prefer 쪽
+// only를 주면 그 유형 안에서만(네이티브 시트 = SINGLE_IMAGE, 배너 시트 = IMAGE_BANNER). 342×228은 모바일 네이티브(PC는 문구로 판단)
 const RATIO_TOL = 0.02;
 export function ratioMatches(img: { width: number; height: number }, t: TemplateSpec) {
   return Math.abs(img.width / img.height / (t.width / t.height) - 1) <= RATIO_TOL;
 }
-export function autoTemplates(img: { width: number; height: number }, prefer: CreativeKind): TemplateSpec[] {
-  const hits = ALL_TEMPLATES.filter((t) => t.code !== "BANNER_1200X1200" || prefer === "IMAGE_BANNER").filter((t) => ratioMatches(img, t));
+export function autoTemplates(img: { width: number; height: number }, prefer: CreativeKind, only?: CreativeKind): TemplateSpec[] {
+  const hits = ALL_TEMPLATES.filter((t) => (only ? t.kind === only : t.code !== "BANNER_1200X1200" || prefer === "IMAGE_BANNER"))
+    .filter((t) => t.code !== "NATIVE_SINGLE_IMAGE_PC")
+    .filter((t) => ratioMatches(img, t));
   if (!hits.length) return [];
   const exact = hits.filter((t) => t.width === img.width && t.height === img.height);
   const pool = exact.length ? exact : hits;
@@ -158,12 +236,12 @@ export function autoTemplates(img: { width: number; height: number }, prefer: Cr
   return [(preferred.length ? preferred : pool)[0]];
 }
 
-// 새 광고그룹이 돌려준 템플릿(creativeTemplates)에서 이미지 규격(단일 이미지·이미지 배너)만 뽑는다
+// 새 광고그룹이 돌려준 템플릿(creativeTemplates)에서 이미지 규격(네이티브 이미지·이미지 배너·이미지 컬렉션)만 뽑는다
 export type RawTemplate = { code: string; creativeType?: string; sizeGroups?: { width: number; height: number; ratioBased?: boolean; maxFileSize?: number | null; minFileSize?: number | null }[] };
 export function imageSpecs(raw: RawTemplate[] | undefined): TemplateSpec[] {
   const out: TemplateSpec[] = [];
   for (const t of raw ?? []) {
-    if (t.creativeType !== "SINGLE_IMAGE" && t.creativeType !== "IMAGE_BANNER") continue;
+    if (!["SINGLE_IMAGE", "IMAGE_BANNER", "MULTIPLE_IMAGE"].includes(t.creativeType ?? "")) continue;
     const base = templateByCode(t.code);
     const g = t.sizeGroups?.[0];
     if (!base) continue;
@@ -258,18 +336,5 @@ export function copyProblems(c: PlanCopy): string[] {
   if (c.message.trim().length < 2) p.push("광고 문구는 2자 이상");
   if (c.linkTitle.trim().length < 2) p.push("제목은 2자 이상");
   if (c.linkDescription.trim().length < 2) p.push("설명은 2자 이상");
-  return p;
-}
-
-// 소재 규격별 문구 점검 — 공식 스펙(OpenCreativeOfSingleImageParam)상 단일 이미지의 문구·제목·설명은 선택(적으면 2자 이상).
-// 네이티브는 광고 문구가 노출 문구라 필수로 둔다. 배너(IMAGE_BANNER)는 광고 안내 문구(altMessage)가 스펙상 필수라 별도 점검
-export const isNativeTemplate = (code: string) => code.startsWith("NATIVE_");
-export function creativeCopyProblems(c: Pick<PlanCopy, "message" | "linkTitle" | "linkDescription">, templateCode: string): string[] {
-  const p: string[] = [];
-  const short = (v: string) => v.trim().length === 1;
-  if (isNativeTemplate(templateCode) && c.message.trim().length < 2) p.push("네이티브 소재는 광고 문구 2자 이상");
-  else if (short(c.message)) p.push("광고 문구는 비우거나 2자 이상");
-  if (short(c.linkTitle)) p.push("제목은 비우거나 2자 이상");
-  if (short(c.linkDescription)) p.push("설명은 비우거나 2자 이상");
   return p;
 }

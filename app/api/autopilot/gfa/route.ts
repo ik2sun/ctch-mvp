@@ -9,23 +9,26 @@ import {
   callToActions,
   createAdSet,
   createImageBannerCreative,
+  createMultipleImageCreative,
   createSingleImageCreative,
+  accountProfile,
   getAdSet,
   getAdSetDetails,
   listCampaigns,
   loadCodeBook,
   loadContext,
   type ImageBannerCreative,
+  type MultipleImageCreative,
   type SingleImageCreative,
 } from "@/features/autopilot/gfa/gfaOps";
 import { buildPlan } from "@/features/autopilot/gfa/plan";
 import { OVERRIDE_KEYS } from "@/features/autopilot/gfa/adSetSheet";
-import { SUPPORTED_OBJECTIVES, creativeCopyProblems, imageSpecs, templateByCode, type PlanAdSet, type SetupBrief } from "@/features/autopilot/gfa/types";
+import { COLLECTION_CARDS, SUPPORTED_OBJECTIVES, copyForTemplate, imageSpecs, templateByCode, templateCopyProblems, type PlanAdSet, type SetupBrief } from "@/features/autopilot/gfa/types";
 
 export const maxDuration = 300;
 
 // 캠페인 오토파일럿 · GFA 자동 세팅
-// 읽기(구성원): campaigns · codebook · context · adSetDetails · plan · adSetMeta / 쓰기(소유자): createAdSet · createCreative · activate · log
+// 읽기(구성원): campaigns · codebook · profile · context · adSetDetails · plan · adSetMeta / 쓰기(소유자): createAdSet · createCreative · activate · log
 // 실행은 화면이 단계별로 부른다(이미지 업로드는 /api/autopilot/gfa/image) — Vercel 본문 4.5MB·시간 제한 안에서 진행 표시
 const WRITE = new Set(["createAdSet", "createCreative", "activate", "log"]);
 
@@ -40,6 +43,11 @@ export async function POST(req: Request) {
 
     if (action === "campaigns") {
       return NextResponse.json({ adAccountNo: c.adAccountNo, campaigns: await listCampaigns(c) });
+    }
+
+    if (action === "profile") {
+      // 광고계정 프로필(네이티브·컬렉션에 자동으로 붙는 이름) — 기존 소재 상세에서 읽음, 없으면 null
+      return NextResponse.json({ profile: await accountProfile(c) });
     }
 
     if (action === "codebook") {
@@ -99,9 +107,33 @@ export async function POST(req: Request) {
 
     if (action === "createCreative") {
       const cr = body.creative as SingleImageCreative;
-      if (!cr?.adSetNo || !cr.imageNo || !cr.creativeTemplateCode) return NextResponse.json({ error: "소재 정보가 부족해요." }, { status: 400 });
-      const tpl = templateByCode(cr.creativeTemplateCode);
+      const tpl = templateByCode(cr?.creativeTemplateCode ?? "");
       if (!tpl) return NextResponse.json({ error: "지원하지 않는 소재 템플릿이에요." }, { status: 400 });
+      if (tpl.kind === "MULTIPLE_IMAGE") {
+        // 컬렉션 — 카드 4~10장(설명 문구 2~28자·랜딩 URL) + 광고 문구·CTA·CTA URL
+        const m = body.creative as MultipleImageCreative;
+        const cards = Array.isArray(m.imageMedias) ? m.imageMedias : [];
+        const problems: string[] = [];
+        if (!m.adSetNo) problems.push("광고그룹 번호 없음");
+        if (cards.length < COLLECTION_CARDS.min || cards.length > COLLECTION_CARDS.max) problems.push(`카드는 ${COLLECTION_CARDS.min}~${COLLECTION_CARDS.max}장(지금 ${cards.length}장)`);
+        if (cards.some((x) => !x.imageNo || !x.linkUrl || (x.linkTitle ?? "").trim().length < 2 || x.linkTitle.trim().length > COLLECTION_CARDS.titleMax)) problems.push(`카드마다 이미지·랜딩 URL·설명 문구(2~${COLLECTION_CARDS.titleMax}자) 필요`);
+        const msg = (m.message ?? "").trim();
+        if (msg.length < 2 || msg.length > COLLECTION_CARDS.messageMax) problems.push(`광고 문구 2~${COLLECTION_CARDS.messageMax}자`);
+        if (!m.ctaCode || !m.ctaUrl) problems.push("CTA·CTA URL 필요");
+        if (problems.length) return NextResponse.json({ error: problems.join(", ") }, { status: 400 });
+        return NextResponse.json({
+          creative: await createMultipleImageCreative(c, {
+            adSetNo: m.adSetNo,
+            name: m.name,
+            message: msg,
+            creativeTemplateCode: tpl.code,
+            ctaCode: m.ctaCode,
+            ctaUrl: m.ctaUrl,
+            imageMedias: cards.map((x) => ({ imageNo: x.imageNo, linkUrl: x.linkUrl, linkTitle: x.linkTitle.trim() })),
+          }),
+        });
+      }
+      if (!cr?.adSetNo || !cr.imageNo) return NextResponse.json({ error: "소재 정보가 부족해요." }, { status: 400 });
       if (tpl.kind === "IMAGE_BANNER") {
         // 배너형은 글자가 이미지 안에 있어 랜딩 URL + 광고 안내 문구(대체 텍스트)만 보낸다
         const altMessage = String((body.creative as ImageBannerCreative).altMessage ?? "").trim().slice(0, 100);
@@ -110,9 +142,20 @@ export async function POST(req: Request) {
           creative: await createImageBannerCreative(c, { adSetNo: cr.adSetNo, creativeTemplateCode: tpl.code, imageNo: cr.imageNo, name: cr.name, url: cr.linkUrl, altMessage }),
         });
       }
-      const problems = creativeCopyProblems({ message: cr.message ?? "", linkTitle: cr.linkTitle ?? "", linkDescription: cr.linkDescription ?? "" }, tpl.code);
+      // 네이티브 이미지 — 템플릿이 받는 문구 칸만 보낸다(공식 소재 가이드 표)
+      const problems = templateCopyProblems(cr, tpl.code);
       if (problems.length) return NextResponse.json({ error: problems.join(", ") }, { status: 400 });
-      return NextResponse.json({ creative: await createSingleImageCreative(c, cr) });
+      return NextResponse.json({
+        creative: await createSingleImageCreative(c, {
+          adSetNo: cr.adSetNo,
+          creativeTemplateCode: tpl.code,
+          imageNo: cr.imageNo,
+          name: cr.name,
+          linkUrl: cr.linkUrl,
+          ctaCode: cr.ctaCode,
+          ...copyForTemplate(cr, tpl.code),
+        }),
+      });
     }
 
     if (action === "activate") {
