@@ -173,15 +173,28 @@ export type SingleImageCreative = {
   creativeTemplateCode: string;
   imageNo: number;
   name: string;
-  message: string;
-  linkTitle: string;
-  linkDescription: string;
+  message?: string; // 문구·제목·설명은 선택(스펙상 적으면 2자 이상) — 비면 보내지 않는다
+  linkTitle?: string;
+  linkDescription?: string;
   linkUrl: string;
   ctaCode: string;
 };
 
 export async function createSingleImageCreative(c: GfaCredentials, body: SingleImageCreative): Promise<{ no: number; status?: string }> {
-  const res = await gfaRequest<{ no?: number; status?: string }>(`${base(c)}/creatives/SINGLE_IMAGE`, { ...opt(c), method: "POST", json: body });
+  const res = await gfaRequest<{ no?: number; status?: string }>(`${base(c)}/creatives/SINGLE_IMAGE`, {
+    ...opt(c),
+    method: "POST",
+    json: Object.fromEntries(Object.entries(body).filter(([, v]) => !(typeof v === "string" && !v.trim()))),
+  });
+  if (!res?.no) throw new Error("소재는 요청했지만 응답에 번호가 없어요.");
+  return { no: res.no, status: res.status };
+}
+
+// 이미지 배너(스마트채널·배너 지면) — 공식 스펙 OpenCreativeOfImageBannerParam: adSetNo·name·creativeTemplateCode·imageNo·url·altMessage
+export type ImageBannerCreative = { adSetNo: number; creativeTemplateCode: string; imageNo: number; name: string; url: string; altMessage: string };
+
+export async function createImageBannerCreative(c: GfaCredentials, body: ImageBannerCreative): Promise<{ no: number; status?: string }> {
+  const res = await gfaRequest<{ no?: number; status?: string }>(`${base(c)}/creatives/IMAGE_BANNER`, { ...opt(c), method: "POST", json: body });
   if (!res?.no) throw new Error("소재는 요청했지만 응답에 번호가 없어요.");
   return { no: res.no, status: res.status };
 }

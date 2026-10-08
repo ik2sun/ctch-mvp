@@ -1,10 +1,11 @@
 // 캠페인 오토파일럿 · GFA 실행 엔진(브라우저) — AI 자동 세팅과 엑셀 벌크 업로드가 같이 쓴다.
 // 광고그룹(새로 만들기 또는 기존 재사용) → 템플릿 규격으로 이미지 자르기·업로드(광고계정 단위라 재사용) → 소재 생성 → 새 광고그룹만 켜기/끄기 → 기록
-import { SINGLE_IMAGE_TEMPLATES, withUtm, type PlanAdSet, type PlanCopy, type TemplateSpec } from "./types";
+import { ALL_TEMPLATES, withUtm, type PlanAdSet, type PlanCopy, type TemplateSpec } from "./types";
 import { fitToTemplate, type SourceImage } from "./imageFit";
 
 export type RunAdSet = { name: string; existingNo?: number; target?: PlanAdSet; overrides?: Record<string, unknown> }; // overrides = 엑셀 광고그룹 시트에 적힌 GFA 칸
-export type RunCreative = { adSetName: string; image: SourceImage; templates: string[]; copy: PlanCopy; landingUrl: string; name: (t: TemplateSpec) => string };
+// altMessage = 배너(IMAGE_BANNER) 소재의 광고 안내 문구, 비우면 광고 문구 → 제목
+export type RunCreative = { adSetName: string; image: SourceImage; templates: string[]; copy: PlanCopy; altMessage?: string; landingUrl: string; name: (t: TemplateSpec) => string };
 export type LogLine = { kind: "ok" | "err" | "info"; text: string };
 export type RunResult = {
   adSets: { no: number; name: string; created: boolean }[];
@@ -68,7 +69,7 @@ export async function runSetup(opts: {
 
     for (const c of opts.creatives.filter((x) => x.adSetName === a.name)) {
       // 광고그룹이 허용한 템플릿과 요청 규격의 교집합(조회 실패면 요청 규격 그대로)
-      const wanted = SINGLE_IMAGE_TEMPLATES.filter((t) => c.templates.includes(t.code));
+      const wanted = ALL_TEMPLATES.filter((t) => c.templates.includes(t.code));
       const allowed = info.templates.length ? info.templates.filter((t) => c.templates.includes(t.code)) : wanted;
       if (!allowed.length) {
         fail(`${a.name} · ${c.image.file.name}: 이 광고그룹은 요청한 규격을 지원하지 않아요(지원: ${info.templates.map((t) => t.label).join(", ") || "없음"})`);
@@ -97,23 +98,23 @@ export async function runSetup(opts: {
         }
         const cname = c.name(t).slice(0, 128);
         const cta = info.ctas.length && !info.ctas.includes(c.copy.cta) ? (info.ctas.includes("MORE") ? "MORE" : info.ctas[0]) : c.copy.cta;
+        const linkUrl = opts.useUtm ? withUtm(c.landingUrl.trim(), opts.campaignName, cname) : c.landingUrl.trim();
+        const creative =
+          t.kind === "IMAGE_BANNER"
+            ? { adSetNo: info.adSet.no, creativeTemplateCode: t.code, imageNo, name: cname, linkUrl, altMessage: (c.altMessage || c.copy.message || c.copy.linkTitle).trim().slice(0, 100) }
+            : {
+                adSetNo: info.adSet.no,
+                creativeTemplateCode: t.code,
+                imageNo,
+                name: cname,
+                message: c.copy.message,
+                linkTitle: c.copy.linkTitle,
+                linkDescription: c.copy.linkDescription,
+                linkUrl,
+                ctaCode: cta,
+              };
         try {
-          const r = await postAutopilot<{ creative: { no: number } }>({
-            action: "createCreative",
-            clientId,
-            campaignNo,
-            creative: {
-              adSetNo: info.adSet.no,
-              creativeTemplateCode: t.code,
-              imageNo,
-              name: cname,
-              message: c.copy.message,
-              linkTitle: c.copy.linkTitle,
-              linkDescription: c.copy.linkDescription,
-              linkUrl: opts.useUtm ? withUtm(c.landingUrl.trim(), opts.campaignName, cname) : c.landingUrl.trim(),
-              ctaCode: cta,
-            },
-          });
+          const r = await postAutopilot<{ creative: { no: number } }>({ action: "createCreative", clientId, campaignNo, creative });
           out.creatives.push({ no: r.creative.no, name: cname, adSetNo: info.adSet.no });
           push({ kind: "ok", text: `소재 생성 #${r.creative.no} ${cname}` });
         } catch (e) {

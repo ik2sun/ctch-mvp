@@ -44,9 +44,17 @@ export function upscaleRatio(src: { width: number; height: number }, t: Template
 }
 
 export async function fitToTemplate(src: SourceImage, t: TemplateSpec): Promise<File> {
-  const canvas = await draw(src, t.width, t.height);
   const min = t.minFileSize ?? 0;
   const max = t.maxFileSize;
+  // 이미 규격 크기·용량이 맞는 JPG·PNG는 다시 압축하지 않고 원본 그대로(배너의 글자가 뭉개지지 않게)
+  if (src.width === t.width && src.height === t.height && /^image\/(jpeg|png)$/.test(src.file.type) && src.file.size >= min && src.file.size <= max) return src.file;
+  const canvas = await draw(src, t.width, t.height);
+  const base = src.file.name.replace(/\.[^.]+$/, "").slice(0, 40) || "image";
+  if (t.kind === "IMAGE_BANNER") {
+    // 배너는 글자 위주라 PNG가 용량 안에 들면 PNG
+    const png = await toBlob(canvas, "image/png");
+    if (png.size >= min && png.size <= max) return new File([png], `${base}_${t.width}x${t.height}.png`, { type: "image/png" });
+  }
   let lo = 0.4;
   let hi = 0.97;
   let best: Blob | null = null;
@@ -70,6 +78,5 @@ export async function fitToTemplate(src: SourceImage, t: TemplateSpec): Promise<
     }
   }
   const ext = best.type === "image/png" ? "png" : "jpg";
-  const base = src.file.name.replace(/\.[^.]+$/, "").slice(0, 40) || "image";
   return new File([best], `${base}_${t.width}x${t.height}.${ext}`, { type: best.type });
 }

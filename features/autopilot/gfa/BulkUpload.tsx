@@ -6,8 +6,8 @@
 import { useCallback, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import { Card } from "@/features/dashboard/ui";
-import { SINGLE_IMAGE_TEMPLATES, DEFAULT_TEMPLATES, MIN_ADSET_BUDGET, slug, startTimeFor, type GfaContext } from "./types";
-import { CREATIVE_HEADERS, CREATIVE_SAMPLE, CTA_ALL, SHEET_GUIDE, matchImages, norm, parseCreativeSheet, type BulkRow } from "./bulkSheet";
+import { SINGLE_IMAGE_TEMPLATES, DEFAULT_TEMPLATES, MIN_ADSET_BUDGET, autoTemplates, isNativeTemplate, ratioMatches, slug, startTimeFor, templateByCode, type GfaContext, type TemplateSpec } from "./types";
+import { CREATIVE_HEADERS, CREATIVE_SAMPLE, CTA_ALL, IMAGE_REF_HEADER, SHEET_GUIDE, imageTemplateRows, matchImages, norm, parseCreativeSheet, type BulkRow } from "./bulkSheet";
 import { ADSET_COLUMNS, ADSET_FULL_HEADERS, ADSET_GUIDE, ADSET_SAMPLE_FULL, adSetToRow, parseAdSetSheetFull, type AdSetSpec, type GfaAdSetDetail, type GfaCodeBook } from "./adSetSheet";
 import { readImage, releaseImage, upscaleRatio, type SourceImage } from "./imageFit";
 import { downloadDriveFile, folderIdFrom, getDriveToken, listDriveImages } from "./driveImport";
@@ -17,7 +17,26 @@ import { CHIP, CHIP_ON, Field, INPUT, PRIMARY, RunLog, SECONDARY, todayKst, won 
 const MAX_IMAGES = 400;
 
 type Target = { ctx: GfaContext; existingNo?: number; spec?: AdSetSpec };
-type Prepared = BulkRow & { images: SourceImage[]; tpl: string[]; targets: Target[]; problems: string[]; count: number };
+// imgTpl[i] = images[i]에 쓸 규격(자동이면 이미지 크기로, 배너는 비율이 맞는 것만)
+type Prepared = BulkRow & { images: SourceImage[]; imgTpl: string[][]; auto: boolean; targets: Target[]; problems: string[]; notes: string[]; count: number };
+
+const fmtSize = (t: TemplateSpec) => `${t.width}×${t.height}`;
+
+// 이미지 한 장에 쓸 규격 — 규격 칸이 비면 크기로 자동(1:1은 피드 정사각), 맞는 비율이 없으면 화면 기본 규격으로 잘라 씀
+function templatesFor(img: SourceImage, r: BulkRow, defaults: string[]): { codes: string[]; note?: string } {
+  if (r.templates) {
+    const codes = r.templates.filter((c) => {
+      const t = templateByCode(c);
+      return t && (t.kind === "SINGLE_IMAGE" || ratioMatches(img, t));
+    });
+    if (codes.length) return { codes };
+    const want = r.templates.map((c) => templateByCode(c)).filter((t): t is TemplateSpec => !!t);
+    return { codes: [], note: `${img.file.name}(${img.width}×${img.height})는 ${want.map((t) => t.label).join("·")}와 비율이 달라요 — 배너는 잘라 쓰지 않아요` };
+  }
+  const auto = autoTemplates(img, "SINGLE_IMAGE");
+  if (auto.length) return { codes: auto.map((t) => t.code) };
+  return { codes: defaults, note: `${img.file.name}(${img.width}×${img.height})는 맞는 규격 비율이 없어 기본 규격으로 잘라 씀` };
+}
 
 const campaignKey = (s: string) => s.normalize("NFC").toLowerCase().replace(/\s+/g, "");
 const sameCampaign = (ctx: GfaContext, label: string) => String(ctx.campaign.no) === label.trim() || campaignKey(ctx.campaign.name) === campaignKey(label);
@@ -92,8 +111,12 @@ export function BulkUpload({ clientId, ctxs, accountNo, canEdit }: { clientId: s
     const wb = XLSX.utils.book_new();
     const blank = CREATIVE_HEADERS.slice(2).map(() => "");
     const prefilled = ctxs.flatMap((c) => (c.existingAdSets.length ? c.existingAdSets.map((s) => [labelOf(c), s.name, ...blank]) : [[labelOf(c), "", ...blank]]));
-    const s1 = XLSX.utils.aoa_to_sheet([[...CREATIVE_HEADERS], ...(prefilled.length ? prefilled : CREATIVE_SAMPLE)]);
-    s1["!cols"] = [Math.min(48, Math.max(20, ...ctxs.map((c) => c.campaign.name.length + 4))), 30, 16, 24, 14, 44, 20, 30, 14, 40, 20].map((w) => ({ wch: w }));
+    // 이미지를 먼저 불러왔으면 이미지 1장 = 1행(이미지 파일명·소재 이름 채움, 캠페인 칸은 비움 = 선택한 캠페인 전부)
+    const fromImages = images.length ? imageTemplateRows(images.map((i) => ({ name: i.file.name, width: i.width, height: i.height })), ctxs.flatMap((c) => c.existingAdSets.map((s) => s.name))) : [];
+    const s1 = fromImages.length
+      ? XLSX.utils.aoa_to_sheet([[...CREATIVE_HEADERS, IMAGE_REF_HEADER], ...fromImages])
+      : XLSX.utils.aoa_to_sheet([[...CREATIVE_HEADERS], ...(prefilled.length ? prefilled : CREATIVE_SAMPLE)]);
+    s1["!cols"] = [Math.min(48, Math.max(20, ...ctxs.map((c) => c.campaign.name.length + 4))), 30, 16, 36, 14, 44, 20, 30, 40, 14, 40, 36, 36].map((w) => ({ wch: w }));
     // 미리 채운 템플릿에서는 가짜 예시 광고그룹을 넣지 않는다
     const s2 = XLSX.utils.aoa_to_sheet([ADSET_FULL_HEADERS, ...(prefilled.length ? adSetRows : ADSET_SAMPLE_FULL)]);
     s2["!cols"] = ADSET_COLUMNS.map((c) => ({ wch: c.w }));
@@ -215,8 +238,21 @@ export function BulkUpload({ clientId, ctxs, accountNo, canEdit }: { clientId: s
         }
       } else imgs = (byProduct.get(r.product) ?? []).map((x) => x.img);
       if (!imgs.length && !r.files.length) problems.push("상품명과 맞는 이미지 없음");
-      const tpl = r.templates ?? formats;
-      if (!tpl.length) problems.push("소재 규격 없음");
+      const notes: string[] = [];
+      const imgTpl = imgs.map((img) => {
+        const f = templatesFor(img, r, formats);
+        if (f.note) (f.codes.length ? notes : problems).push(f.note);
+        return f.codes;
+      });
+      if (imgs.length && imgTpl.every((x) => !x.length) && !problems.some((x) => x.includes("비율"))) problems.push("소재 규격 없음");
+      // 쓰이는 규격에 따라 문구 점검 — 피드는 선택, 네이티브는 광고 문구, 배너는 광고 안내 문구(대체 텍스트)
+      const used = imgTpl.flat();
+      if (used.some(isNativeTemplate)) problems.push(...r.nativeCopyErrors);
+      const hasBanner = used.some((c) => templateByCode(c)?.kind === "IMAGE_BANNER");
+      if (hasBanner) {
+        problems.push(...r.bannerCopyErrors);
+        notes.push(...r.bannerNotes);
+      } else if (used.length) notes.push(...r.feedNotes);
 
       // 넣을 캠페인 — 칸이 비면 선택한 캠페인 전부, 적으면 ID 또는 이름이 같은 캠페인
       let picked = ctxs;
@@ -234,7 +270,8 @@ export function BulkUpload({ clientId, ctxs, accountNo, canEdit }: { clientId: s
       for (const sp of new Set(targets.filter((t) => !t.existingNo && t.spec?.errors.length).map((t) => t.spec!))) {
         problems.push(`광고그룹 시트 ${sp.row}행: ${sp.errors.join(", ")}`);
       }
-      return { ...r, images: imgs, tpl, targets, problems, count: imgs.length * tpl.length * targets.length };
+      const perTarget = imgTpl.reduce((sum, x) => sum + x.length, 0);
+      return { ...r, images: imgs, imgTpl, auto: !r.templates, targets, problems, notes, count: perTarget * targets.length };
     });
   }, [rows, images, formats, ctxs, existingBy, specFor]);
 
@@ -255,7 +292,7 @@ export function BulkUpload({ clientId, ctxs, accountNo, canEdit }: { clientId: s
         rows: mine,
         newAdSets,
         reuseAdSets,
-        creatives: mine.reduce((s, p) => s + p.images.length * p.tpl.length, 0),
+        creatives: mine.reduce((s, p) => s + p.imgTpl.reduce((n, x) => n + x.length, 0), 0),
         budget: newAdSets.reduce((s, n) => s + (specFor(c, n)?.budget ?? defaultBudget), 0),
       };
     })
@@ -264,7 +301,7 @@ export function BulkUpload({ clientId, ctxs, accountNo, canEdit }: { clientId: s
   const reuseAdSetCount = plans.reduce((s, x) => s + x.reuseAdSets.length, 0);
   const totalCreatives = plans.reduce((s, x) => s + x.creatives, 0);
   const newBudget = plans.reduce((s, x) => s + x.budget, 0);
-  const blurry = runnable.flatMap((p) => p.images.flatMap((img) => SINGLE_IMAGE_TEMPLATES.filter((t) => p.tpl.includes(t.code) && upscaleRatio(img, t) > 1.5).map(() => img.file.name)));
+  const blurry = runnable.flatMap((p) => p.images.flatMap((img, i) => p.imgTpl[i].map((c) => templateByCode(c)!).filter((t) => upscaleRatio(img, t) > 1.5).map(() => img.file.name)));
   const blurryNames = [...new Set(blurry)];
 
   async function run() {
@@ -309,27 +346,32 @@ export function BulkUpload({ clientId, ctxs, accountNo, canEdit }: { clientId: s
       const variantIdx = new Map<string, number>();
       const variantTotal = new Map<string, number>();
       for (const p of x.rows) {
-        const k = `${p.adSetName}|${p.product}`;
+        const k = `${p.adSetName}|${p.product || p.files.join(",")}`;
         variantTotal.set(k, (variantTotal.get(k) ?? 0) + 1);
       }
       const creatives: RunCreative[] = [];
       for (const p of x.rows) {
-        const k = `${p.adSetName}|${p.product}`;
+        const k = `${p.adSetName}|${p.product || p.files.join(",")}`;
         const v = (variantIdx.get(k) ?? 0) + 1;
         variantIdx.set(k, v);
         const suffix = (variantTotal.get(k) ?? 1) > 1 ? `_c${v}` : "";
+        const multiTpl = new Set(p.imgTpl.flat()).size > 1;
         p.images.forEach((img, i) => {
+          if (!p.imgTpl[i].length) return;
           const nn = String(i + 1).padStart(2, "0");
+          // 상품명이 없으면(파일명 지정) 파일 이름으로
+          const key = slug(p.product || img.file.name.replace(/\.[^.]+$/, ""), 30);
           creatives.push({
             adSetName: p.adSetName.trim(),
             image: img,
-            templates: p.tpl,
+            templates: p.imgTpl[i],
             copy: p.copy,
+            altMessage: p.altMessage || p.altFallback,
             landingUrl: p.landingUrl,
             name: (t) =>
               p.name
-                ? `${p.name}${p.images.length > 1 ? `_${nn}` : ""}${p.tpl.length > 1 ? `_${t.short}` : ""}`
-                : `${p.adSetName.trim()}_${slug(p.product, 20)}_${nn}_${t.short}${suffix}`,
+                ? `${p.name}${p.images.length > 1 ? `_${nn}` : ""}${multiTpl ? `_${t.short}` : ""}`
+                : `${p.adSetName.trim()}_${key}${p.product ? `_${nn}` : ""}_${t.short}${suffix}`,
           });
         });
       }
@@ -385,7 +427,7 @@ export function BulkUpload({ clientId, ctxs, accountNo, canEdit }: { clientId: s
               <div className="flex flex-wrap gap-2">
                 <button type="button" onClick={downloadTemplate} disabled={!!templBusy} className={SECONDARY}>
                   <i className={`ti ${templBusy ? "ti-loader-2 animate-spin" : "ti-download"} mr-1`} />
-                  {templBusy ? "템플릿 만드는 중…" : "템플릿 내려받기"}
+                  {templBusy ? "템플릿 만드는 중…" : images.length ? `템플릿 내려받기 (이미지 ${images.length}장 채움)` : "템플릿 내려받기"}
                 </button>
                 <label className={`${PRIMARY} cursor-pointer`}>
                   <i className="ti ti-file-spreadsheet mr-1" />
@@ -394,12 +436,17 @@ export function BulkUpload({ clientId, ctxs, accountNo, canEdit }: { clientId: s
                 </label>
               </div>
               <p className="mt-1.5 text-[13px] text-ink-muted">
-                {templBusy ?? (
+                {templBusy ??
+                  (images.length ? (
+                    <>
+                      불러온 이미지 <b className="text-ink">{images.length}장</b>이 &apos;소재&apos; 시트에 한 행씩 들어가요 — 이미지 파일명·소재 이름(파일명)과 인식한 규격이 채워지고, 광고그룹(확실할 때만 자동)·랜딩 URL·문구만 적으면 됩니다.
+                    </>
+                  ) : (
                   <>
-                    템플릿에 선택한 캠페인 {ctxs.length}개와 기존 광고그룹 {ctxs.reduce((s, c) => s + c.existingAdSets.length, 0)}개가 채워져 있어요. &apos;소재&apos; 시트는 쓸 행에 상품명·문구·랜딩만 적으면 되고(빈 행은 건너뜀),
+                    이미지를 먼저 불러오면(②) 파일명이 채워진 템플릿을 받을 수 있어요. 지금은 선택한 캠페인 {ctxs.length}개와 기존 광고그룹 {ctxs.reduce((s, c) => s + c.existingAdSets.length, 0)}개가 채워져 있어요. &apos;소재&apos; 시트는 쓸 행에 상품명·문구·랜딩만 적으면 되고(빈 행은 건너뜀),
                     &apos;광고그룹&apos; 시트에는 기존 광고그룹의 타겟·입찰·예산·일정 전 항목이 들어 있어요 — 행을 복사해 이름만 바꾸면 같은 설정으로 새 광고그룹을 만듭니다.
                   </>
-                )}
+                  ))}
               </p>
             </Field>
             {fileName && (
@@ -548,7 +595,7 @@ export function BulkUpload({ clientId, ctxs, accountNo, canEdit }: { clientId: s
                           );
                         })()}
                       </td>
-                      <td className="py-2.5 pr-3 text-ink">{p.product}</td>
+                      <td className="py-2.5 pr-3 text-ink">{p.product || <span className="text-ink-muted">—</span>}</td>
                       <td className="py-2.5 pr-3">
                         <div className="flex gap-1">
                           {p.images.slice(0, 4).map((img) => (
@@ -560,16 +607,28 @@ export function BulkUpload({ clientId, ctxs, accountNo, canEdit }: { clientId: s
                         {p.files.length > 0 && <p className="mt-1 text-[12px] text-ink-muted">파일명 지정</p>}
                       </td>
                       <td className="py-2.5 pr-3 text-[13px] text-ink-soft">
-                        {SINGLE_IMAGE_TEMPLATES.filter((t) => p.tpl.includes(t.code)).map((t) => t.label.split(" ")[1]).join(", ")}
-                        {!p.templates && <span className="text-ink-muted"> (기본)</span>}
+                        {[...new Set(p.imgTpl.flat())].map((c) => {
+                          const t = templateByCode(c)!;
+                          return (
+                            <p key={c} className="whitespace-nowrap">
+                              {t.label.replace(` ${fmtSize(t)}`, "")} <span className="tabular-nums text-ink-muted">{fmtSize(t)}</span>
+                            </p>
+                          );
+                        })}
+                        {p.auto && p.images.length > 0 && <span className="text-[12px] text-ink-muted">이미지 크기로 자동</span>}
                       </td>
                       <td className="max-w-[320px] py-2.5 pr-3">
                         <p className="truncate text-ink" title={p.copy.message}>
                           {p.copy.message}
                         </p>
                         <p className="truncate text-[12px] text-ink-muted">
-                          {p.copy.linkTitle} · {p.copy.linkDescription} · {CTA_ALL.find((c) => c.value === p.copy.cta)?.name}
+                          {[p.copy.linkTitle, p.copy.linkDescription, CTA_ALL.find((c) => c.value === p.copy.cta)?.name].filter(Boolean).join(" · ")}
                         </p>
+                        {p.altMessage && (
+                          <p className="truncate text-[12px] text-ink-muted" title={p.altMessage}>
+                            안내 문구: {p.altMessage}
+                          </p>
+                        )}
                       </td>
                       <td className="py-2.5 pr-3 text-right tabular-nums">{p.count}</td>
                       <td className="py-2.5 text-[13px]">
@@ -582,7 +641,7 @@ export function BulkUpload({ clientId, ctxs, accountNo, canEdit }: { clientId: s
                         ) : (
                           <p className="text-good">준비됨</p>
                         )}
-                        {p.warnings.map((w) => (
+                        {[...p.notes, ...p.warnings].map((w) => (
                           <p key={w} className="text-warn">
                             {w}
                           </p>
@@ -607,7 +666,7 @@ export function BulkUpload({ clientId, ctxs, accountNo, canEdit }: { clientId: s
         <Card title="4. 실행 설정 · 승인" sub="아래 버튼을 누르고 확인 창에서 [확인]을 누르는 것이 승인입니다. 그 전에는 GFA에 아무것도 보내지 않습니다">
           <div className="grid gap-6 lg:grid-cols-2">
             <div className="space-y-4">
-              <Field label="기본 소재 규격 (엑셀 '소재 규격'이 빈 행에 적용)">
+              <Field label="기본 소재 규격 (규격 칸이 비었는데 이미지 비율이 어느 규격과도 안 맞을 때 잘라 씀)">
                 <div className="flex flex-wrap gap-2">
                   {SINGLE_IMAGE_TEMPLATES.map((t) => {
                     const on = formats.includes(t.code);
@@ -653,7 +712,7 @@ export function BulkUpload({ clientId, ctxs, accountNo, canEdit }: { clientId: s
                   </>
                 )}
                 새 광고그룹 <b className="text-ink">{newAdSetCount}</b>개(일 {won(newBudget)}) · 기존 광고그룹 <b className="text-ink">{reuseAdSetCount}</b>개 · 소재 <b className="text-ink">{totalCreatives}</b>개 · 이미지 업로드 약{" "}
-                {new Set(runnable.flatMap((p) => p.images.flatMap((i) => p.tpl.map((t) => `${i.id}:${t}`)))).size}건
+                {new Set(runnable.flatMap((p) => p.images.flatMap((i, k) => p.imgTpl[k].map((t) => `${i.id}:${t}`)))).size}건
                 {multi && plans.length > 0 && (
                   <ul className="mt-2 space-y-0.5 border-t border-line pt-2 text-[13px]">
                     {plans.map((x) => (

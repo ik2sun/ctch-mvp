@@ -120,24 +120,51 @@ export type SetupPlan = {
   copies: PlanCopy[];
 };
 
-// ── 이미지 템플릿(단일 이미지) ─────────────────────────
-// 규격은 광고그룹 상세의 creativeTemplates 실응답(2026-10-04). 실행 때는 새 광고그룹이 돌려준 규격을 다시 쓴다
-export type TemplateSpec = { code: string; label: string; short: string; width: number; height: number; minFileSize: number | null; maxFileSize: number };
+// ── 이미지 템플릿 ─────────────────────────────────────
+// 규격은 광고그룹 상세의 creativeTemplates 실응답(2026-10-04·10-08). 실행 때는 광고그룹이 돌려준 규격을 다시 쓴다
+// SINGLE_IMAGE(피드·네이티브) = 문구·제목·설명·CTA가 붙는 소재, GFA가 잘라 쓸 수 있음(croppable)
+// IMAGE_BANNER(스마트채널·배너) = 글자가 이미지 안에 있는 배너 — 랜딩 URL + 광고 안내 문구(대체 텍스트, 2~100자)만, 잘라 쓰지 않음
+// 르무통 실소재(2026-10-08): 스마트채널 광고그룹 = BANNER_750(750×160)·BANNER_750X280, 메인 배너 = BANNER_1250X560
+export type CreativeKind = "SINGLE_IMAGE" | "IMAGE_BANNER";
+export type TemplateSpec = { code: string; kind: CreativeKind; label: string; short: string; width: number; height: number; minFileSize: number | null; maxFileSize: number };
 export const SINGLE_IMAGE_TEMPLATES: TemplateSpec[] = [
-  { code: "FEED_SINGLE_IMAGE", label: "피드 가로 1200×628", short: "ls", width: 1200, height: 628, minFileSize: 51200, maxFileSize: 512000 },
-  { code: "FEED_SINGLE_IMAGE_SQUARE", label: "피드 정사각 1200×1200", short: "sq", width: 1200, height: 1200, minFileSize: 81920, maxFileSize: 819200 },
-  { code: "FEED_SINGLE_IMAGE_2TO3", label: "피드 세로 1200×1800", short: "pt", width: 1200, height: 1800, minFileSize: 102400, maxFileSize: 1228800 },
-  { code: "NATIVE_SINGLE_IMAGE_V2", label: "네이티브 342×228", short: "nt", width: 342, height: 228, minFileSize: 10240, maxFileSize: 133120 },
+  { code: "FEED_SINGLE_IMAGE", kind: "SINGLE_IMAGE", label: "피드 가로 1200×628", short: "ls", width: 1200, height: 628, minFileSize: 51200, maxFileSize: 512000 },
+  { code: "FEED_SINGLE_IMAGE_SQUARE", kind: "SINGLE_IMAGE", label: "피드 정사각 1200×1200", short: "sq", width: 1200, height: 1200, minFileSize: 81920, maxFileSize: 819200 },
+  { code: "FEED_SINGLE_IMAGE_2TO3", kind: "SINGLE_IMAGE", label: "피드 세로 1200×1800", short: "pt", width: 1200, height: 1800, minFileSize: 102400, maxFileSize: 1228800 },
+  { code: "NATIVE_SINGLE_IMAGE_V2", kind: "SINGLE_IMAGE", label: "네이티브 342×228", short: "nt", width: 342, height: 228, minFileSize: 10240, maxFileSize: 133120 },
 ];
+export const BANNER_TEMPLATES: TemplateSpec[] = [
+  { code: "BANNER_750", kind: "IMAGE_BANNER", label: "스마트채널 750×160", short: "sc160", width: 750, height: 160, minFileSize: null, maxFileSize: 153600 },
+  { code: "BANNER_750X280", kind: "IMAGE_BANNER", label: "스마트채널 750×280", short: "sc280", width: 750, height: 280, minFileSize: null, maxFileSize: 256000 },
+  { code: "BANNER_750X200", kind: "IMAGE_BANNER", label: "배너 750×200", short: "bn200", width: 750, height: 200, minFileSize: null, maxFileSize: 184320 },
+  { code: "BANNER_1250X560", kind: "IMAGE_BANNER", label: "배너 1250×560", short: "bn560", width: 1250, height: 560, minFileSize: 51200, maxFileSize: 256000 },
+  { code: "BANNER_1200X1200", kind: "IMAGE_BANNER", label: "배너 1200×1200", short: "bnsq", width: 1200, height: 1200, minFileSize: 81920, maxFileSize: 819200 },
+];
+export const ALL_TEMPLATES: TemplateSpec[] = [...SINGLE_IMAGE_TEMPLATES, ...BANNER_TEMPLATES];
 export const DEFAULT_TEMPLATES = ["FEED_SINGLE_IMAGE", "FEED_SINGLE_IMAGE_SQUARE"];
+export const templateByCode = (code: string) => ALL_TEMPLATES.find((t) => t.code === code);
 
-// 새 광고그룹이 돌려준 템플릿(creativeTemplates)에서 단일 이미지 규격만 뽑는다
+// 이미지 크기로 규격 고르기 — 비율이 ±2% 안에 드는 규격(정확히 같은 크기가 먼저). 1:1처럼 피드·배너가 둘 다 맞으면 prefer 쪽
+const RATIO_TOL = 0.02;
+export function ratioMatches(img: { width: number; height: number }, t: TemplateSpec) {
+  return Math.abs(img.width / img.height / (t.width / t.height) - 1) <= RATIO_TOL;
+}
+export function autoTemplates(img: { width: number; height: number }, prefer: CreativeKind): TemplateSpec[] {
+  const hits = ALL_TEMPLATES.filter((t) => t.code !== "BANNER_1200X1200" || prefer === "IMAGE_BANNER").filter((t) => ratioMatches(img, t));
+  if (!hits.length) return [];
+  const exact = hits.filter((t) => t.width === img.width && t.height === img.height);
+  const pool = exact.length ? exact : hits;
+  const preferred = pool.filter((t) => t.kind === prefer);
+  return [(preferred.length ? preferred : pool)[0]];
+}
+
+// 새 광고그룹이 돌려준 템플릿(creativeTemplates)에서 이미지 규격(단일 이미지·이미지 배너)만 뽑는다
 export type RawTemplate = { code: string; creativeType?: string; sizeGroups?: { width: number; height: number; ratioBased?: boolean; maxFileSize?: number | null; minFileSize?: number | null }[] };
-export function singleImageSpecs(raw: RawTemplate[] | undefined): TemplateSpec[] {
+export function imageSpecs(raw: RawTemplate[] | undefined): TemplateSpec[] {
   const out: TemplateSpec[] = [];
   for (const t of raw ?? []) {
-    if (t.creativeType !== "SINGLE_IMAGE") continue;
-    const base = SINGLE_IMAGE_TEMPLATES.find((s) => s.code === t.code);
+    if (t.creativeType !== "SINGLE_IMAGE" && t.creativeType !== "IMAGE_BANNER") continue;
+    const base = templateByCode(t.code);
     const g = t.sizeGroups?.[0];
     if (!base) continue;
     if (!g || g.ratioBased) {
@@ -231,5 +258,18 @@ export function copyProblems(c: PlanCopy): string[] {
   if (c.message.trim().length < 2) p.push("광고 문구는 2자 이상");
   if (c.linkTitle.trim().length < 2) p.push("제목은 2자 이상");
   if (c.linkDescription.trim().length < 2) p.push("설명은 2자 이상");
+  return p;
+}
+
+// 소재 규격별 문구 점검 — 공식 스펙(OpenCreativeOfSingleImageParam)상 단일 이미지의 문구·제목·설명은 선택(적으면 2자 이상).
+// 네이티브는 광고 문구가 노출 문구라 필수로 둔다. 배너(IMAGE_BANNER)는 광고 안내 문구(altMessage)가 스펙상 필수라 별도 점검
+export const isNativeTemplate = (code: string) => code.startsWith("NATIVE_");
+export function creativeCopyProblems(c: Pick<PlanCopy, "message" | "linkTitle" | "linkDescription">, templateCode: string): string[] {
+  const p: string[] = [];
+  const short = (v: string) => v.trim().length === 1;
+  if (isNativeTemplate(templateCode) && c.message.trim().length < 2) p.push("네이티브 소재는 광고 문구 2자 이상");
+  else if (short(c.message)) p.push("광고 문구는 비우거나 2자 이상");
+  if (short(c.linkTitle)) p.push("제목은 비우거나 2자 이상");
+  if (short(c.linkDescription)) p.push("설명은 비우거나 2자 이상");
   return p;
 }

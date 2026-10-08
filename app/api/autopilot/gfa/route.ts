@@ -8,17 +8,19 @@ import {
   adSetTemplates,
   callToActions,
   createAdSet,
+  createImageBannerCreative,
   createSingleImageCreative,
   getAdSet,
   getAdSetDetails,
   listCampaigns,
   loadCodeBook,
   loadContext,
+  type ImageBannerCreative,
   type SingleImageCreative,
 } from "@/features/autopilot/gfa/gfaOps";
 import { buildPlan } from "@/features/autopilot/gfa/plan";
 import { OVERRIDE_KEYS } from "@/features/autopilot/gfa/adSetSheet";
-import { SUPPORTED_OBJECTIVES, copyProblems, singleImageSpecs, type PlanAdSet, type SetupBrief } from "@/features/autopilot/gfa/types";
+import { SUPPORTED_OBJECTIVES, creativeCopyProblems, imageSpecs, templateByCode, type PlanAdSet, type SetupBrief } from "@/features/autopilot/gfa/types";
 
 export const maxDuration = 300;
 
@@ -83,7 +85,7 @@ export async function POST(req: Request) {
       const created = await createAdSet(c, { ...adSetBody(ctx.sample, ctx.types, a, name, (body.startTime as string | null) ?? null), ...overrides });
       // 템플릿·CTA 조회가 실패해도 광고그룹 생성 결과는 돌려준다(화면이 기본 규격으로 진행)
       const [templates, ctas] = await Promise.all([adSetTemplates(c, created.no).catch(() => []), callToActions(c, created.no).catch(() => [] as string[])]);
-      return NextResponse.json({ adSet: created, templates: singleImageSpecs(templates), ctas });
+      return NextResponse.json({ adSet: created, templates: imageSpecs(templates), ctas });
     }
 
     if (action === "adSetMeta") {
@@ -92,13 +94,23 @@ export async function POST(req: Request) {
       if (!Number.isFinite(adSetNo) || adSetNo <= 0) return NextResponse.json({ error: "adSetNo가 필요해요." }, { status: 400 });
       const [d, ctas] = await Promise.all([getAdSet(c, adSetNo), callToActions(c, adSetNo).catch(() => [] as string[])]);
       if (Number(d.campaignNo) !== campaignNo) return NextResponse.json({ error: "선택한 캠페인의 광고그룹이 아니에요." }, { status: 400 });
-      return NextResponse.json({ adSet: { no: d.no, name: d.name }, templates: singleImageSpecs(d.creativeTemplates), ctas });
+      return NextResponse.json({ adSet: { no: d.no, name: d.name }, templates: imageSpecs(d.creativeTemplates), ctas });
     }
 
     if (action === "createCreative") {
       const cr = body.creative as SingleImageCreative;
       if (!cr?.adSetNo || !cr.imageNo || !cr.creativeTemplateCode) return NextResponse.json({ error: "소재 정보가 부족해요." }, { status: 400 });
-      const problems = copyProblems({ message: cr.message, linkTitle: cr.linkTitle, linkDescription: cr.linkDescription, cta: cr.ctaCode });
+      const tpl = templateByCode(cr.creativeTemplateCode);
+      if (!tpl) return NextResponse.json({ error: "지원하지 않는 소재 템플릿이에요." }, { status: 400 });
+      if (tpl.kind === "IMAGE_BANNER") {
+        // 배너형은 글자가 이미지 안에 있어 랜딩 URL + 광고 안내 문구(대체 텍스트)만 보낸다
+        const altMessage = String((body.creative as ImageBannerCreative).altMessage ?? "").trim().slice(0, 100);
+        if (altMessage.length < 2) return NextResponse.json({ error: "배너 소재의 광고 안내 문구는 2자 이상" }, { status: 400 });
+        return NextResponse.json({
+          creative: await createImageBannerCreative(c, { adSetNo: cr.adSetNo, creativeTemplateCode: tpl.code, imageNo: cr.imageNo, name: cr.name, url: cr.linkUrl, altMessage }),
+        });
+      }
+      const problems = creativeCopyProblems({ message: cr.message ?? "", linkTitle: cr.linkTitle ?? "", linkDescription: cr.linkDescription ?? "" }, tpl.code);
       if (problems.length) return NextResponse.json({ error: problems.join(", ") }, { status: 400 });
       return NextResponse.json({ creative: await createSingleImageCreative(c, cr) });
     }
