@@ -249,3 +249,45 @@ export async function createImageBannerCreative(c: GfaCredentials, body: ImageBa
 export async function activateAdSets(c: GfaCredentials, adSetNos: number[], activated: boolean) {
   return gfaRequest(`${base(c)}/adSets/activate`, { ...opt(c), method: "POST", query: { adSetNos: adSetNos.join(","), activated } });
 }
+
+// ── 수동 세팅: 캠페인 만들기 ─────────────────────────────
+// 캠페인 생성 본문(공식 스펙 CONVERSION·WEB_SITE_TRAFFIC): name·objective·urlNo·brandNo 필수 + conversionUrlNo·conversionType(전환만)·s2sApiOn·spendLimit·optimization(CBO)
+// 선택지 3종은 2026-10-09 르무통(8790) 실조회로 확인: 브랜드(campaigns/brands)·대표 URL(campaigns/urls)·전환 추적 대상(campaigns/conversionUrls?objective)
+export type CampaignOptions = {
+  brands: { no: number; name: string; explanation?: string | null }[];
+  urls: { no: number; url: string; type?: string | null; approved: boolean }[];
+  conversionUrls: { urlNo: number; name: string; url: string; status?: string | null; trackingDays?: number | null }[];
+};
+
+export async function campaignOptions(c: GfaCredentials, objective: string): Promise<CampaignOptions> {
+  const [brands, urls, conv] = await Promise.all([
+    gfaRequest<Page<{ brandNo: number; brandName: string; explanation?: string | null }>>(`${base(c)}/campaigns/brands`, { ...opt(c), query: { page: 0, size: 100 } }),
+    gfaRequest<Page<{ no: number; url: string; deleted?: boolean; inspectionStatus?: string; bizChannelType?: string }>>(`${base(c)}/campaigns/urls`, { ...opt(c), query: { page: 0, size: 100 } }),
+    gfaRequest<{ urlNo: number; name: string; url: string; status?: string; trackingDays?: number }[]>(`${base(c)}/campaigns/conversionUrls`, { ...opt(c), query: { objective } }).catch(() => []),
+  ]);
+  return {
+    brands: (brands.content ?? []).map((b) => ({ no: b.brandNo, name: b.brandName, explanation: b.explanation })),
+    urls: (urls.content ?? []).filter((u) => !u.deleted).map((u) => ({ no: u.no, url: u.url, type: u.bizChannelType, approved: u.inspectionStatus === "APPROVED" })),
+    conversionUrls: (conv ?? []).map((x) => ({ urlNo: x.urlNo, name: x.name, url: x.url, status: x.status, trackingDays: x.trackingDays })),
+  };
+}
+
+export async function createCampaign(c: GfaCredentials, body: Record<string, unknown>): Promise<{ no: number; name: string }> {
+  const res = await gfaRequest<{ no?: number; name?: string }>(`${base(c)}/campaigns`, { ...opt(c), method: "POST", json: body });
+  if (!res?.no) throw new Error("캠페인은 요청했지만 응답에 번호가 없어요. GFA 화면에서 생성 여부를 확인하세요.");
+  return { no: res.no, name: res.name ?? String(body.name) };
+}
+
+export async function activateCampaigns(c: GfaCredentials, campaignNos: number[], activated: boolean) {
+  return gfaRequest(`${base(c)}/campaigns/activate`, { ...opt(c), method: "POST", query: { campaignNos: campaignNos.join(","), activated } });
+}
+
+export function loadSample(c: GfaCredentials, campaignNo: number): Promise<GfaAdSetSample> {
+  return gfaRequest<GfaAdSetSample>(`${base(c)}/adSets/sampleByCampaignNo`, { ...opt(c), query: { campaignNo } });
+}
+
+// 수동 세팅 광고그룹 본문 — GFA 샘플(목적별 기본값)에서 번호·고객 파일 기본값만 빼고, 화면에서 정한 칸을 전부 덮는다
+export function manualAdSetBody(sample: GfaAdSetSample, name: string, settings: Record<string, unknown>) {
+  const { adidLibraries: _a, adidLibraryParams: _b, no: _n, ...rest } = sample as GfaAdSetSample & { adidLibraryParams?: unknown; no?: unknown };
+  return { ...rest, adidLibraries: [], ...settings, campaignNo: sample.campaignNo, name: name.slice(0, 128) };
+}

@@ -28,7 +28,7 @@ export function PlannedSection({
   return (
     <div className="mx-auto w-full max-w-[1600px] space-y-6">
       <AutopilotHeader intro={intro} status="준비 중" />
-      <p className="rounded-lg bg-canvas px-4 py-3 text-[14px] text-ink-muted">이 화면은 아직 설계만 있어 실행 버튼이 없습니다. 지금 쓸 수 있는 기능은 <b className="text-ink">자동 대량 세팅</b>(엑셀 벌크 업로드·AI 자동 세팅)과 <b className="text-ink">실행 기록</b>입니다.</p>
+      <p className="rounded-lg bg-canvas px-4 py-3 text-[14px] text-ink-muted">이 화면은 아직 설계만 있어 실행 버튼이 없습니다. 지금 쓸 수 있는 기능은 <b className="text-ink">자동 대량 세팅</b>(수동 세팅·엑셀 벌크 업로드)과 <b className="text-ink">실행 기록</b>입니다.</p>
 
       <div className="grid gap-6 xl:grid-cols-[7fr_5fr]">
         <Card title="흐름" sub="이 화면에서 하게 될 일">

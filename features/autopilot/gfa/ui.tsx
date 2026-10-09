@@ -24,6 +24,44 @@ export function Field({ label, children }: { label: string; children: ReactNode 
   );
 }
 
+// 여러 개 선택하는 목록 공통 — '모두 선택'(전부 고른 뒤 필요 없는 것만 빼기) · '모두 해제'
+export function SelectAllLinks({ onAll, onNone, allLabel = "모두 선택", noneLabel = "모두 해제", allDisabled, noneDisabled }: { onAll: () => void; onNone?: () => void; allLabel?: string; noneLabel?: string; allDisabled?: boolean; noneDisabled?: boolean }) {
+  return (
+    <span className="inline-flex items-center gap-1 text-[13px]">
+      <button type="button" onClick={onAll} disabled={allDisabled} className="rounded px-1.5 py-0.5 font-semibold text-[#C2410C] hover:bg-[#FFF4EE] disabled:font-normal disabled:text-ink-faint disabled:hover:bg-transparent">
+        {allLabel}
+      </button>
+      {onNone && (
+        <>
+          <span className="text-ink-faint">·</span>
+          <button type="button" onClick={onNone} disabled={noneDisabled} className="rounded px-1.5 py-0.5 text-ink-soft hover:bg-canvas hover:text-ink disabled:text-ink-faint disabled:hover:bg-transparent">
+            {noneLabel}
+          </button>
+        </>
+      )}
+    </span>
+  );
+}
+
+// 금액 입력 — 1,000 단위 쉼표로 보여 주고 숫자만 받는다. 비우면 null
+export function MoneyInput({ value, onChange, placeholder, unit = "원", className = "" }: { value: number | null; onChange: (n: number | null) => void; placeholder?: string; unit?: string; className?: string }) {
+  return (
+    <div className={`relative ${className}`}>
+      <input
+        inputMode="numeric"
+        className={`${INPUT} pr-9 text-right tabular-nums`}
+        value={value == null ? "" : value.toLocaleString("ko-KR")}
+        placeholder={placeholder}
+        onChange={(e) => {
+          const d = e.target.value.replace(/[^\d]/g, "").slice(0, 13);
+          onChange(d ? Number(d) : null);
+        }}
+      />
+      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[14px] text-ink-muted">{unit}</span>
+    </div>
+  );
+}
+
 export function RunLog({ title, log, result, running }: { title: string; log: LogLine[]; result: RunResult | null; running: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {

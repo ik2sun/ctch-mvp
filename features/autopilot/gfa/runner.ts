@@ -1,9 +1,10 @@
-// 캠페인 오토파일럿 · GFA 실행 엔진(브라우저) — AI 자동 세팅과 엑셀 벌크 업로드가 같이 쓴다.
+// 캠페인 오토파일럿 · GFA 실행 엔진(브라우저) — 수동 세팅(manual/run.ts)과 엑셀 벌크 업로드가 같이 쓴다.
 // 광고그룹(새로 만들기 또는 기존 재사용) → 템플릿 규격으로 이미지 자르기·업로드(광고계정 단위라 재사용) → 소재 생성 → 새 광고그룹만 켜기/끄기 → 기록
 import { ALL_TEMPLATES, COLLECTION_TEMPLATE, copyForTemplate, withUtm, type PlanAdSet, type PlanCopy, type TemplateSpec } from "./types";
 import { fitToTemplate, type SourceImage } from "./imageFit";
 
-export type RunAdSet = { name: string; existingNo?: number; target?: PlanAdSet; overrides?: Record<string, unknown> }; // overrides = 엑셀 광고그룹 시트에 적힌 GFA 칸
+// overrides = 엑셀 광고그룹 시트에 적힌 GFA 칸 / settings = 수동 세팅에서 정한 GFA 칸 전부(target 없이 createAdSetManual)
+export type RunAdSet = { name: string; existingNo?: number; target?: PlanAdSet; overrides?: Record<string, unknown>; settings?: Record<string, unknown> };
 // altMessage = 배너(IMAGE_BANNER) 소재의 광고 안내 문구, 비우면 광고 문구 → 제목
 export type RunCreative = { adSetName: string; image: SourceImage; templates: string[]; copy: PlanCopy; altMessage?: string; landingUrl: string; name: (t: TemplateSpec) => string };
 // 컬렉션 — 카드(이미지·설명 문구·랜딩 URL) 4~10장이 소재 하나
@@ -33,7 +34,7 @@ export async function runSetup(opts: {
   collections?: RunCollection[];
   useUtm: boolean;
   turnOn: boolean;
-  kind: "ai" | "bulk";
+  kind: "manual" | "bulk";
   logExtra?: Record<string, unknown>;
   onLog: (lines: LogLine[]) => void;
   imageCache?: Map<string, number>; // 여러 캠페인을 이어 돌릴 때 공유 — 이미지는 광고계정 단위라 다시 올리지 않는다
@@ -78,9 +79,11 @@ export async function runSetup(opts: {
         info = await postAutopilot({ action: "adSetMeta", clientId, campaignNo, adSetNo: a.existingNo });
         out.adSets.push({ ...info.adSet, created: false });
       } else {
-        if (!a.target) throw new Error("타겟 정보가 없어요");
+        if (!a.target && !a.settings) throw new Error("타겟 정보가 없어요");
         push({ kind: "info", text: `광고그룹 만드는 중: ${a.name}` });
-        info = await postAutopilot({ action: "createAdSet", clientId, campaignNo, adSet: a.target, name: a.name, startTime: opts.startTime, overrides: a.overrides });
+        info = a.settings
+          ? await postAutopilot({ action: "createAdSetManual", clientId, campaignNo, name: a.name, settings: a.settings })
+          : await postAutopilot({ action: "createAdSet", clientId, campaignNo, adSet: a.target, name: a.name, startTime: opts.startTime, overrides: a.overrides });
         out.adSets.push({ ...info.adSet, created: true });
         push({ kind: "ok", text: `광고그룹 생성 #${info.adSet.no} ${info.adSet.name}` });
       }
@@ -177,7 +180,7 @@ export async function runSetup(opts: {
         creatives: out.creatives.length,
         errors: out.errors.length,
         activated: out.activated,
-        dailyBudget: opts.adSets.reduce((s, a) => s + (a.existingNo ? 0 : a.target?.budget ?? 0), 0),
+        dailyBudget: opts.adSets.reduce((s, a) => s + (a.existingNo ? 0 : a.target?.budget ?? (a.settings?.budgetType === "DAILY" ? Number(a.settings.budgetAmount) || 0 : 0)), 0),
       },
       detail: { adSets: out.adSets, creatives: out.creatives, errors: out.errors, ...opts.logExtra },
     });

@@ -4,10 +4,13 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { gfaAccess } from "@/features/autopilot/gfa/access";
 import {
   activateAdSets,
+  activateCampaigns,
   adSetBody,
   adSetTemplates,
   callToActions,
+  campaignOptions,
   createAdSet,
+  createCampaign,
   createImageBannerCreative,
   createMultipleImageCreative,
   createSingleImageCreative,
@@ -17,20 +20,25 @@ import {
   listCampaigns,
   loadCodeBook,
   loadContext,
+  loadSample,
+  manualAdSetBody,
   type ImageBannerCreative,
   type MultipleImageCreative,
   type SingleImageCreative,
 } from "@/features/autopilot/gfa/gfaOps";
-import { buildPlan } from "@/features/autopilot/gfa/plan";
 import { OVERRIDE_KEYS } from "@/features/autopilot/gfa/adSetSheet";
-import { COLLECTION_CARDS, SUPPORTED_OBJECTIVES, copyForTemplate, imageSpecs, templateByCode, templateCopyProblems, type PlanAdSet, type SetupBrief } from "@/features/autopilot/gfa/types";
+import { COLLECTION_CARDS, copyForTemplate, imageSpecs, templateByCode, templateCopyProblems, type PlanAdSet } from "@/features/autopilot/gfa/types";
 
 export const maxDuration = 300;
 
-// 캠페인 오토파일럿 · GFA 자동 세팅
-// 읽기(구성원): campaigns · codebook · profile · context · adSetDetails · plan · adSetMeta / 쓰기(소유자): createAdSet · createCreative · activate · log
+// 캠페인 오토파일럿 · GFA 세팅(수동 세팅 · 엑셀 벌크 업로드)
+// 읽기: campaigns · campaignOptions · codebook · profile · context · adSetDetails · adSetMeta
+// 쓰기: createCampaign · activateCampaign · createAdSet · createAdSetManual · createCreative · activate · log — 구성원 누구나(access.ts memberOnly)
 // 실행은 화면이 단계별로 부른다(이미지 업로드는 /api/autopilot/gfa/image) — Vercel 본문 4.5MB·시간 제한 안에서 진행 표시
-const WRITE = new Set(["createAdSet", "createCreative", "activate", "log"]);
+const WRITE = new Set(["createCampaign", "activateCampaign", "createAdSet", "createAdSetManual", "createCreative", "activate", "log"]);
+// 캠페인 생성 본문에 받는 칸(공식 스펙 CONVERSION·WEB_SITE_TRAFFIC)
+const CAMPAIGN_KEYS = ["name", "objective", "brandNo", "urlNo", "conversionUrlNo", "conversionType", "s2sApiOn", "spendLimit", "optimization"] as const;
+const CAMPAIGN_OBJECTIVES = ["CONVERSION", "WEB_SITE_TRAFFIC"];
 
 export async function POST(req: Request) {
   const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
@@ -51,8 +59,37 @@ export async function POST(req: Request) {
     }
 
     if (action === "codebook") {
-      // 엑셀 '광고그룹' 시트의 코드 ↔ 이름(관심사·구매 의도·지역·확장 데모·게재 위치·고객 파일)
+      // 코드 ↔ 이름(관심사·구매 의도·지역·확장 데모·게재 위치·고객 파일) — 엑셀 '광고그룹' 시트와 수동 세팅 타겟 선택
       return NextResponse.json(await loadCodeBook(c));
+    }
+
+    if (action === "campaignOptions") {
+      // 새 캠페인 선택지 — 브랜드·대표 URL·전환 추적 대상(목적별)
+      const objective = String(body.objective ?? "");
+      if (!CAMPAIGN_OBJECTIVES.includes(objective)) return NextResponse.json({ error: "지원하지 않는 캠페인 목적이에요." }, { status: 400 });
+      return NextResponse.json(await campaignOptions(c, objective));
+    }
+
+    if (action === "createCampaign") {
+      const raw = (body.campaign ?? {}) as Record<string, unknown>;
+      const camp = Object.fromEntries(CAMPAIGN_KEYS.filter((k) => raw[k] !== undefined && raw[k] !== null && raw[k] !== "").map((k) => [k, raw[k]]));
+      const problems: string[] = [];
+      if (!CAMPAIGN_OBJECTIVES.includes(String(camp.objective))) problems.push("목적은 웹사이트 전환·트래픽만");
+      if (String(camp.name ?? "").trim().length < 2) problems.push("캠페인 이름 2자 이상");
+      if (!Number(camp.brandNo)) problems.push("브랜드");
+      if (!Number(camp.urlNo)) problems.push("대표 URL");
+      if (problems.length) return NextResponse.json({ error: problems.join(", ") }, { status: 400 });
+      const created = await createCampaign(c, camp);
+      // 새 캠페인은 우선 꺼 둔다 — 켜기는 실행 끝에 화면 선택(activateCampaign)으로
+      await activateCampaigns(c, [created.no], false).catch(() => null);
+      return NextResponse.json({ campaign: created });
+    }
+
+    if (action === "activateCampaign") {
+      const no = Number(body.campaignNo);
+      if (!Number.isFinite(no) || no <= 0) return NextResponse.json({ error: "campaignNo가 필요해요." }, { status: 400 });
+      await activateCampaigns(c, [no], body.activated === true);
+      return NextResponse.json({ ok: true });
     }
 
     const campaignNo = Number(body.campaignNo);
@@ -70,16 +107,15 @@ export async function POST(req: Request) {
       return NextResponse.json({ adSets: details.map((d) => ({ ...d, activated: state.get(d.no) })) });
     }
 
-    if (action === "plan") {
-      const brief = body.brief as SetupBrief;
-      if (!brief?.product?.trim() || !brief?.landingUrl?.trim()) return NextResponse.json({ error: "상품과 랜딩 URL은 꼭 넣어 주세요." }, { status: 400 });
-      if (!(brief.dailyBudget > 0)) return NextResponse.json({ error: "일 예산을 넣어 주세요." }, { status: 400 });
-      const ctx = await loadContext(c, campaignNo);
-      if (!SUPPORTED_OBJECTIVES.includes(ctx.campaign.objective)) {
-        return NextResponse.json({ error: "이 캠페인 목적은 아직 자동 세팅을 지원하지 않아요(전환·웹사이트 트래픽·참여 유도만)." }, { status: 400 });
-      }
-      const plan = await buildPlan(ctx, brief, Number(body.imageCount) || 0);
-      return NextResponse.json({ plan, context: ctx });
+    if (action === "createAdSetManual") {
+      // 수동 세팅 — 화면에서 정한 GFA 칸 전부(OVERRIDE_KEYS만)를 그 캠페인 샘플 위에 덮는다
+      const name = String(body.name ?? "").trim();
+      if (name.length < 2) return NextResponse.json({ error: "광고그룹 이름은 2자 이상" }, { status: 400 });
+      const raw = (body.settings ?? {}) as Record<string, unknown>;
+      const settings = Object.fromEntries(OVERRIDE_KEYS.filter((k) => raw[k] !== undefined).map((k) => [k, raw[k]]));
+      const created = await createAdSet(c, manualAdSetBody(await loadSample(c, campaignNo), name, settings));
+      const [templates, ctas] = await Promise.all([adSetTemplates(c, created.no).catch(() => []), callToActions(c, created.no).catch(() => [] as string[])]);
+      return NextResponse.json({ adSet: created, templates: imageSpecs(templates), ctas });
     }
 
     if (action === "createAdSet") {

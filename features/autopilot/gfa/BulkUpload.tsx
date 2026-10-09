@@ -51,7 +51,25 @@ import { ADSET_COLUMNS, ADSET_FULL_HEADERS, ADSET_GUIDE, ADSET_SAMPLE_FULL, adSe
 import { readImage, releaseImage, upscaleRatio, type SourceImage } from "./imageFit";
 import { downloadDriveFile, folderIdFrom, getDriveToken, listDriveImages } from "./driveImport";
 import { postAutopilot, runSetup, type LogLine, type RunAdSet, type RunCollection, type RunCreative, type RunResult } from "./runner";
-import { CHIP, CHIP_ON, Field, INPUT, PRIMARY, RunLog, SECONDARY, todayKst, won } from "./ui";
+import { CHIP, CHIP_ON, Field, INPUT, MoneyInput, PRIMARY, RunLog, SECONDARY, SelectAllLinks, todayKst, won } from "./ui";
+
+// 표 머리 '모두 선택' 체크박스 — 일부만 선택이면 중간 표시
+function AllRowsBox({ keys, excluded, setAll }: { keys: string[]; excluded: Set<string>; setAll: (keys: string[], on: boolean) => void }) {
+  const on = keys.filter((k) => !excluded.has(k)).length;
+  return (
+    <input
+      type="checkbox"
+      disabled={!keys.length}
+      checked={keys.length > 0 && on === keys.length}
+      ref={(el) => {
+        if (el) el.indeterminate = on > 0 && on < keys.length;
+      }}
+      onChange={(e) => setAll(keys, e.target.checked)}
+      aria-label="모든 행 포함"
+      title="모두 선택 · 모두 해제"
+    />
+  );
+}
 
 const MAX_IMAGES = 400;
 
@@ -377,6 +395,7 @@ export function BulkUpload({ clientId, ctxs, accountNo, canEdit }: { clientId: s
           else if (!picked.includes(hit)) picked.push(hit);
         }
       }
+      if (!ctxs.length) problems.push("위 ① 캠페인 선택에서 캠페인을 고르세요");
       const name = adSetName.trim();
       const targets: Target[] = picked.map((c) => ({ ctx: c, existingNo: existingBy.get(c.campaign.no)?.get(name), spec: specFor(c, name) }));
       for (const sp of new Set(targets.filter((t) => !t.existingNo && t.spec?.errors.length).map((t) => t.spec!))) {
@@ -608,6 +627,13 @@ export function BulkUpload({ clientId, ctxs, accountNo, canEdit }: { clientId: s
       else n.add(key);
       return n;
     });
+  // 표 머리 체크 — 고칠 필요 없는 행 전부 포함/전부 빼기
+  const setAllRows = (keys: string[], on: boolean) =>
+    setExcluded((s) => {
+      const n = new Set(s);
+      keys.forEach((k) => (on ? n.delete(k) : n.add(k)));
+      return n;
+    });
   // 광고그룹 시트에서 '새로 만들' 행만 점검 결과를 보여 준다(기존 광고그룹 행은 참고용)
   const isExisting = (sp: AdSetSpec) => ctxs.some((c) => (!sp.campaign || sameCampaign(c, sp.campaign)) && c.existingAdSets.some((s) => s.name.trim() === sp.name.trim()));
   const usedNames = new Set([...rows.map((r) => r.adSetName.trim()), ...groups.map((g) => g.adSetName.trim())]);
@@ -678,8 +704,14 @@ export function BulkUpload({ clientId, ctxs, accountNo, canEdit }: { clientId: s
                     </>
                   ) : (
                   <>
-                    이미지를 먼저 불러오면(②) 파일명이 채워진 템플릿을 받을 수 있어요. 지금은 선택한 캠페인 {ctxs.length}개와 기존 광고그룹 {ctxs.reduce((s, c) => s + c.existingAdSets.length, 0)}개가 채워져 있어요. 쓸 행에만 내용을 적으면 되고(빈 행은 건너뜀),
-                    &apos;광고그룹&apos; 시트에는 기존 광고그룹의 타겟·입찰·예산·일정 전 항목이 들어 있어요 — 행을 복사해 이름만 바꾸면 같은 설정으로 새 광고그룹을 만듭니다.
+                    이미지를 먼저 불러오면(②) 파일명이 채워진 템플릿을 받을 수 있어요.{" "}
+                    {ctxs.length ? (
+                      <>
+                        지금은 선택한 캠페인 {ctxs.length}개와 기존 광고그룹 {ctxs.reduce((s, c) => s + c.existingAdSets.length, 0)}개가 채워져 있어요. 쓸 행에만 내용을 적으면 되고(빈 행은 건너뜀), &apos;광고그룹&apos; 시트에는 기존 광고그룹의 타겟·입찰·예산·일정 전 항목이 들어 있어요 — 행을 복사해 이름만 바꾸면 같은 설정으로 새 광고그룹을 만듭니다.
+                      </>
+                    ) : (
+                      <>캠페인을 고르지 않으면 예시 행이 든 빈 템플릿이에요 — 캠페인을 고른 뒤 내려받으면 그 캠페인의 기존 광고그룹과 설정이 채워져요.</>
+                    )}
                   </>
                   ))}
               </p>
@@ -704,7 +736,11 @@ export function BulkUpload({ clientId, ctxs, accountNo, canEdit }: { clientId: s
             {sheetErr && <p className="text-[14px] text-bad">{sheetErr}</p>}
             <p className="text-[13px] leading-relaxed text-ink-muted">
               캠페인에 이미 있는 광고그룹 이름을 쓰면 그 광고그룹에 소재만 추가하고(켜짐 상태는 건드리지 않음), 없는 이름이면 &apos;광고그룹&apos; 시트 설정으로 새로 만듭니다.
-              {multi ? ` 선택한 캠페인 ${ctxs.length}개의 기존 광고그룹 ${ctxs.reduce((s, c) => s + c.existingAdSets.length, 0)}개.` : ` 이 캠페인의 기존 광고그룹 ${ctxs[0]?.existingAdSets.length ?? 0}개.`}
+              {multi
+                ? ` 선택한 캠페인 ${ctxs.length}개의 기존 광고그룹 ${ctxs.reduce((s, c) => s + c.existingAdSets.length, 0)}개.`
+                : ctxs.length
+                  ? ` 이 캠페인의 기존 광고그룹 ${ctxs[0].existingAdSets.length}개.`
+                  : " 업로드할 캠페인은 위에서 고르세요 — 엑셀·이미지는 먼저 준비해 둬도 됩니다."}
             </p>
             {multi && (
               <p className="rounded-lg bg-[#FFF4EE] px-3 py-2 text-[13px] leading-relaxed text-ink-soft ring-1 ring-[#FAD9CB]">
@@ -754,6 +790,18 @@ export function BulkUpload({ clientId, ctxs, accountNo, canEdit }: { clientId: s
         </div>
       </Card>
 
+      {/* 3번은 엑셀을 올리기 전에도 자리를 보여 준다(번호가 2 → 4로 건너뛰지 않게) */}
+      {totalUnits === 0 && (
+        <Card title="3. 매칭 결과 확인" sub="엑셀 행과 이미지가 어떻게 짝지어졌는지, 어느 캠페인·광고그룹에 들어가는지 확인하는 단계예요">
+          <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-line py-8 text-center">
+            <i className="ti ti-table-off text-[26px] text-ink-faint" aria-hidden />
+            <p className="text-[15px] text-ink-muted">
+              {fileName ? "올린 엑셀에 소재 행이 없어요 — 템플릿의 소재 시트에 내용을 적었는지 확인하세요." : "② 에서 엑셀을 올리면 행별 매칭 결과가 여기에 나와요."}
+            </p>
+          </div>
+        </Card>
+      )}
+
       {totalUnits > 0 && (
         <Card
           title="3. 매칭 결과 확인"
@@ -765,7 +813,9 @@ export function BulkUpload({ clientId, ctxs, accountNo, canEdit }: { clientId: s
             <table className="w-full min-w-[1100px] text-[14px]">
               <thead>
                 <tr className="border-b border-line text-left text-[13px] text-ink-muted">
-                  <th className="py-2 pr-2 font-medium" />
+                  <th className="py-2 pr-2 font-medium">
+                    <AllRowsBox keys={prepared.filter((p) => !p.problems.length).map((p) => p.key)} excluded={excluded} setAll={setAllRows} />
+                  </th>
                   <th className="py-2 pr-3 font-medium">행</th>
                   {multi && <th className="py-2 pr-3 font-medium">캠페인</th>}
                   <th className="py-2 pr-3 font-medium">광고그룹</th>
@@ -894,7 +944,9 @@ export function BulkUpload({ clientId, ctxs, accountNo, canEdit }: { clientId: s
               <table className="w-full min-w-[1000px] text-[14px]">
                 <thead>
                   <tr className="border-b border-line text-left text-[13px] text-ink-muted">
-                    <th className="py-2 pr-2 font-medium" />
+                    <th className="py-2 pr-2 font-medium">
+                      <AllRowsBox keys={preparedCols.filter((g) => !g.problems.length).map((g) => g.key)} excluded={excluded} setAll={setAllRows} />
+                    </th>
                     <th className="py-2 pr-3 font-medium">행</th>
                     {multi && <th className="py-2 pr-3 font-medium">캠페인</th>}
                     <th className="py-2 pr-3 font-medium">광고그룹 · 소재 이름</th>
@@ -995,11 +1047,15 @@ export function BulkUpload({ clientId, ctxs, accountNo, canEdit }: { clientId: s
                       </button>
                     );
                   })}
+                  {(() => {
+                    const feed = SINGLE_IMAGE_TEMPLATES.filter((t) => t.code.startsWith("FEED_")).map((t) => t.code);
+                    return <SelectAllLinks onAll={() => setFormats(feed)} allDisabled={feed.every((c) => formats.includes(c))} onNone={() => setFormats([])} noneDisabled={!formats.length} />;
+                  })()}
                 </div>
               </Field>
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="새 광고그룹 기본 일 예산 (시트에 없을 때)">
-                  <input type="number" min={MIN_ADSET_BUDGET} step={10000} className={INPUT} value={defaultBudget} onChange={(e) => setDefaultBudget(Number(e.target.value))} />
+                  <MoneyInput value={defaultBudget} onChange={(n) => setDefaultBudget(n ?? 0)} placeholder={MIN_ADSET_BUDGET.toLocaleString("ko-KR")} />
                 </Field>
                 <Field label="새 광고그룹 시작일">
                   <input type="date" min={todayKst()} className={INPUT} value={startDate} onChange={(e) => setStartDate(e.target.value)} />
@@ -1050,7 +1106,9 @@ export function BulkUpload({ clientId, ctxs, accountNo, canEdit }: { clientId: s
                 <span className="text-[13px] text-ink-muted">
                   {!canEdit
                     ? "보기 전용 계정 — 승인(실행)은 관리자(k2s)만"
-                    : !totalUnits
+                    : !ctxs.length
+                      ? "위에서 캠페인을 고르면 버튼이 켜집니다"
+                      : !totalUnits
                       ? "엑셀을 올리면 버튼이 켜집니다"
                       : !images.length
                         ? "이미지를 불러오면 버튼이 켜집니다"

@@ -1,6 +1,5 @@
 // 캠페인 오토파일럿 · GFA 자동 세팅 — 화면·서버 공용 타입과 규칙(순수 함수)
-// 흐름: 담당자가 GFA에서 캠페인만 만든다 → 여기서 캠페인 선택 + 브리프·이미지 → AI 세팅안(광고그룹·타겟·예산·카피)
-//       → [세팅 실행](승인) → 광고그룹 생성 → 템플릿별 이미지 업로드 → 소재 생성 → (선택) 켜기 → 기록
+// 흐름: 수동 세팅(캠페인부터) 또는 엑셀 벌크 업로드(기존 캠페인) → [세팅 실행](승인) → (캠페인 생성) → 광고그룹 생성 → 템플릿별 이미지 업로드 → 소재 생성 → (선택) 켜기 → 기록
 // GFA 형식은 2026-10-04 실계정 조회로 확인: 광고그룹 샘플(sampleByCampaignNo)·생성 가능 유형(typeInfoByCampaignNo)·
 // 광고그룹 상세 includeCreativeTemplates(템플릿별 이미지 규격·파일 크기)·CTA 목록. 생성(쓰기) 호출은 이 기능의 첫 실행이 첫 검증이다.
 
@@ -85,19 +84,7 @@ export const AGE_KEYS = AGE_BANDS.map((a) => a.key) as AgeKey[];
 export type Gender = "M" | "F";
 export type DeviceChoice = "ALL" | "MOBILE";
 
-// ── 브리프·세팅안 ──────────────────────────────────────
-export type SetupBrief = {
-  product: string;      // 상품·서비스
-  offer: string;        // 프로모션·혜택(없으면 빈 칸)
-  audience: string;     // 타겟 메모
-  landingUrl: string;
-  dailyBudget: number;  // 광고그룹 일 예산 합계(원)
-  adSetCount: number;   // 0 = AI가 정함(2~4)
-  copyCount: number;    // 카피 변형 수 1~3
-  startDate: string;    // yyyy-MM-dd, 빈 칸이면 GFA 샘플 시작일
-  notes: string;        // 금지어·톤 등
-};
-
+// ── 광고그룹 타겟(엑셀 벌크 업로드의 새 광고그룹 기본 틀) ──
 export type PlanAdSet = {
   label: string;        // 타겟 이름(네이밍에 들어감, 짧게)
   rationale: string;    // 이 타겟을 고른 이유
@@ -117,12 +104,6 @@ export type PlanCopy = {
   linkText4th?: string;     // PC 긴 설명1
   linkText5th?: string;     // PC 긴 설명2
   adviceMessage?: string;   // 고지 문구
-};
-
-export type SetupPlan = {
-  summary: string;
-  adSets: PlanAdSet[];
-  copies: PlanCopy[];
 };
 
 // ── 이미지 템플릿 ─────────────────────────────────────
@@ -267,35 +248,12 @@ export const CTA_OPTIONS = [
 ];
 
 // ── 네이밍·UTM ────────────────────────────────────────
-function mmdd(date: string) {
-  const m = date.match(/^\d{4}-(\d{2})-(\d{2})/);
-  return m ? `${m[1]}${m[2]}` : "";
-}
-
 export function slug(s: string, max = 24) {
   return s
     .trim()
     .replace(/[\s/\\|]+/g, "_")
     .replace(/[^\p{L}\p{N}_+-]/gu, "")
     .slice(0, max);
-}
-
-// 성별·연령 코드 — 소재 분석 naming.ts가 읽는 형식(f3549, m_all)과 맞춘다
-export function demoCode(a: Pick<PlanAdSet, "genders" | "ages">) {
-  const g = a.genders.length === 1 ? a.genders[0].toLowerCase() : "a";
-  if (!a.ages.length || a.ages.length === AGE_KEYS.length) return `${g}all`;
-  const bands = AGE_BANDS.filter((b) => a.ages.includes(b.key));
-  const from = bands[0].from;
-  const to = bands[bands.length - 1].to;
-  return `${g}${from}${to === 200 ? "99" : to}`;
-}
-
-export function adSetName(a: PlanAdSet, startDate: string) {
-  return [mmdd(startDate), slug(a.label), demoCode(a)].filter(Boolean).join("_");
-}
-
-export function creativeName(adSet: string, imageIdx: number, template: TemplateSpec, copyIdx: number) {
-  return `${adSet}_img${String(imageIdx + 1).padStart(2, "0")}_${template.short}_c${copyIdx + 1}`.slice(0, 128);
 }
 
 // 랜딩 URL에 UTM이 없을 때만 붙인다(있으면 그대로 — 광고주 규칙 우선)
@@ -324,17 +282,4 @@ export function startTimeFor(briefDate: string, sampleStart: string | null | und
 export const MIN_ADSET_BUDGET = 10000;
 export function roundBudget(n: number) {
   return Math.max(MIN_ADSET_BUDGET, Math.round(n / 1000) * 1000);
-}
-
-export function clampCopy(c: PlanCopy): PlanCopy {
-  const cut = (s: string, n: number) => (s ?? "").trim().slice(0, n);
-  return { message: cut(c.message, 65), linkTitle: cut(c.linkTitle, 25), linkDescription: cut(c.linkDescription, 45), cta: c.cta || "MORE" };
-}
-
-export function copyProblems(c: PlanCopy): string[] {
-  const p: string[] = [];
-  if (c.message.trim().length < 2) p.push("광고 문구는 2자 이상");
-  if (c.linkTitle.trim().length < 2) p.push("제목은 2자 이상");
-  if (c.linkDescription.trim().length < 2) p.push("설명은 2자 이상");
-  return p;
 }
