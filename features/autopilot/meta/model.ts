@@ -501,6 +501,7 @@ export function problemsOf(opts: {
       if (a.name.trim().length < 2) p.push({ where: w, text: "이름 2자 이상", target: a.key });
       if (a.ageMin < 13 || a.ageMax > 65 || a.ageMin > a.ageMax) p.push({ where: w, text: "연령은 13~65, 최소 ≤ 최대", target: a.key });
       if (a.advantageAudience && a.ageMin > 25) p.push({ where: w, text: "Advantage+ 타겟은 최소 연령을 25세 이하로(메타 제한)", target: a.key });
+      if (a.advantageAudience && a.ageMax < 65) p.push({ where: w, text: "Advantage+ 타겟은 최대 연령을 65+로(메타 제한)", target: a.key });
       if (!opts.campaignCbo && a.mode === "new" && (!a.budget || a.budget < opts.minDailyBudget)) p.push({ where: w, text: `일 예산 ${opts.minDailyBudget.toLocaleString("ko-KR")}원 이상`, target: a.key });
       if (a.endDate && a.startDate && a.endDate < a.startDate) p.push({ where: w, text: "종료일이 시작일보다 빨라요", target: a.key });
       if (a.mode === "copy" && a.sourceEnd && new Date(a.sourceEnd).getTime() < Date.now() && !a.endDate) p.push({ where: w, text: "원본 세트가 이미 종료됐어요 — 종료일(필요하면 시작일도)을 새로 정하세요", target: a.key });

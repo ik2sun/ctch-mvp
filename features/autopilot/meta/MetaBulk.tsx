@@ -401,6 +401,7 @@ export function MetaBulk({ clientId }: { clientId: string }) {
         // 메타 제약(2026-10-09 르무통 실검증): 기여 설정은 생성 뒤 변경 불가 · Advantage+ 타겟 세트는 최소 연령 25세 이하 · 종료된 원본은 새 종료일 필요
         if (src && spec.attribution && spec.attribution !== src.attribution) problems.push(`복사 세트는 기여 설정을 바꿀 수 없어요(메타 제한, 원본 ${ATTRIBUTIONS.find((a) => a.key === src.attribution)?.label ?? "?"}) — 칸을 비우거나 '복사할 세트'를 비워 새로 만드세요`);
         if (src?.advantageAudience && draft.ageMin > 25) problems.push("원본이 Advantage+ 타겟이라 최소 연령은 25세 이하만 돼요");
+        if (src?.advantageAudience && draft.ageMax < 65) problems.push("원본이 Advantage+ 타겟이라 최대 연령은 65+만 돼요");
         if (src?.endTime && new Date(src.endTime).getTime() < Date.now() && !spec.endDate) problems.push("원본 세트가 이미 종료됐어요 — 종료일(필요하면 시작일도)을 새로 적으세요");
         if (spec.startDate && spec.endDate && spec.endDate < spec.startDate) problems.push("종료일이 시작일보다 빨라요");
         return { mode: "copy", sourceId: src?.id ?? null, source: src, spec, draft, problems };
@@ -412,6 +413,7 @@ export function MetaBulk({ clientId }: { clientId: string }) {
       const ageMin = spec?.ageMin ?? 25;
       const advantage = spec?.advantageAudience ?? false;
       if (advantage && ageMin > 25) problems.push("Advantage+ 타겟은 최소 연령 25세 이하");
+      if (advantage && (spec?.ageMax ?? 65) < 65) problems.push("Advantage+ 타겟은 최대 연령 65+");
       const o = (OPTIMIZATION[campaign.objective] ?? [])[Math.max(0, opt)];
       if (o?.needsPixel && !defaults.pixelId) problems.push("전환 최적화에는 픽셀이 필요해요(위 계정 줄)");
       if (spec?.startDate && spec.endDate && spec.endDate < spec.startDate) problems.push("종료일이 시작일보다 빨라요");
