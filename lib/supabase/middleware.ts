@@ -6,6 +6,9 @@ type CookieToSet = { name: string; value: string; options?: CookieOptions };
 
 // 매 요청마다 세션을 갱신하고, 미로그인 사용자의 대시보드 접근을 차단
 export async function updateSession(request: NextRequest) {
+  // 공개 페이지 — 개인정보처리방침(메타 개발자 앱 게시에 필요) 이 경로 하나만. 데이터 없는 안내문이고, 나머지는 전부 아래 로그인·@nmg.co.kr 검사를 거친다
+  if (request.nextUrl.pathname === "/privacy") return NextResponse.next({ request });
+
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(
