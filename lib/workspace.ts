@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export { WORKSPACE_DOMAIN, ownerEmail, isOwnerEmail, isWorkspaceEmail } from "@/lib/workspaceEmail";
-import { ownerEmail, isOwnerEmail } from "@/lib/workspaceEmail";
+import { ownerEmail, isOwnerEmail, isWorkspaceEmail } from "@/lib/workspaceEmail";
 
 let cachedOwnerId: { id: string; at: number } | null = null;
 
@@ -36,4 +36,10 @@ export async function dataOwnerId(user: WorkspaceUser): Promise<string> {
 export function ownerOnly(user: WorkspaceUser): NextResponse | null {
   if (isOwnerEmail(user.email)) return null;
   return NextResponse.json({ error: "보기 전용 계정이에요. 저장·수정·삭제는 관리자(k2s)만 할 수 있어요." }, { status: 403 });
+}
+
+// 구성원에게 연 쓰기 기능(예: 오토파일럿 GFA 실행) — 회사 계정(@nmg.co.kr)이면 통과
+export function memberOnly(user: WorkspaceUser): NextResponse | null {
+  if (isOwnerEmail(user.email) || isWorkspaceEmail(user.email)) return null;
+  return NextResponse.json({ error: "회사 계정(@nmg.co.kr)만 실행할 수 있어요." }, { status: 403 });
 }

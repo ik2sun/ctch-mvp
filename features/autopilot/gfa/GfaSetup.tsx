@@ -5,7 +5,6 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useClients } from "@/features/clients/ClientContext";
-import { useCanEdit } from "@/features/workspace/WorkspaceContext";
 import { Card, Segmented } from "@/features/dashboard/ui";
 import {
   AGE_BANDS,
@@ -42,7 +41,7 @@ const EMPTY_BRIEF: SetupBrief = { product: "", offer: "", audience: "", landingU
 
 export function GfaSetup() {
   const { selected } = useClients();
-  const canEdit = useCanEdit();
+  const canEdit = true; // 오토파일럿 실행은 구성원 누구나(서버 access.ts memberOnly — 2026-10-09)
   const clientId = selected?.id ?? null;
 
   // 1. 캠페인
