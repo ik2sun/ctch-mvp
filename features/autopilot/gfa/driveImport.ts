@@ -77,8 +77,8 @@ async function driveGet<T>(token: string, path: string): Promise<T> {
   return json as T;
 }
 
-// 폴더 안 이미지(하위 폴더 2단계까지) — 공유 드라이브 포함
-export async function listDriveImages(token: string, folderId: string, depth = 2, prefix = ""): Promise<DriveFile[]> {
+// 폴더 안 이미지(하위 폴더 2단계까지) — 공유 드라이브 포함. withVideo = mp4·mov 영상도(메타 벌크)
+export async function listDriveImages(token: string, folderId: string, depth = 2, prefix = "", withVideo = false): Promise<DriveFile[]> {
   const out: DriveFile[] = [];
   let pageToken = "";
   do {
@@ -89,8 +89,8 @@ export async function listDriveImages(token: string, folderId: string, depth = 2
     );
     for (const f of page.files ?? []) {
       if (f.mimeType === "application/vnd.google-apps.folder") {
-        if (depth > 0) out.push(...(await listDriveImages(token, f.id, depth - 1, `${prefix}${f.name}/`)));
-      } else if (f.mimeType.startsWith("image/")) out.push({ ...f, path: `${prefix}${f.name}` });
+        if (depth > 0) out.push(...(await listDriveImages(token, f.id, depth - 1, `${prefix}${f.name}/`, withVideo)));
+      } else if (f.mimeType.startsWith("image/") || (withVideo && /^video\/(mp4|quicktime)$/.test(f.mimeType))) out.push({ ...f, path: `${prefix}${f.name}` });
     }
     pageToken = page.nextPageToken ?? "";
   } while (pageToken);

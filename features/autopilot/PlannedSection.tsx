@@ -7,8 +7,13 @@ import { NAV } from "@/components/layout/nav";
 import { useClients } from "@/features/clients/ClientContext";
 import { Card } from "@/features/dashboard/ui";
 
-// 2026-10-04 결정: 첫 매체 GFA, 실행은 승인 후 실행(완성도가 확인되면 완전 자동으로 전환)
-export const AUTOPILOT_MEDIA = { key: "gfa", label: "GFA", full: "네이버 성과형 디스플레이" } as const;
+// 2026-10-04 결정: 첫 매체 GFA, 실행은 승인 후 실행(완성도가 확인되면 완전 자동으로 전환). 2026-10-09 메타 추가
+export type AutopilotMediaKey = "gfa" | "meta";
+export const AUTOPILOT_MEDIAS: Record<AutopilotMediaKey, { key: AutopilotMediaKey; label: string; full: string }> = {
+  gfa: { key: "gfa", label: "GFA", full: "네이버 성과형 디스플레이" },
+  meta: { key: "meta", label: "메타", full: "메타(페이스북·인스타그램) 광고" },
+};
+export const AUTOPILOT_MEDIA = AUTOPILOT_MEDIAS.gfa;
 export const AUTOPILOT_MODE = "승인 후 실행";
 
 export type PlanStep = { title: string; detail: string };
@@ -76,7 +81,8 @@ export function PlannedSection({
 }
 
 // 오토파일럿 화면 공통 머리 — 이동 경로 + 파스텔 안내 배너(설명·매체·실행 방식·현재 광고주)
-export function AutopilotHeader({ intro, status }: { intro: string; status?: string }) {
+export function AutopilotHeader({ intro, status, media = "gfa" }: { intro: string; status?: string; media?: AutopilotMediaKey | "all" }) {
+  const m = media === "all" ? { label: "GFA · 메타", full: "GFA · 메타" } : AUTOPILOT_MEDIAS[media];
   const { selected } = useClients();
   const pathname = usePathname();
   const group = NAV.find((n) => n.children?.some((c) => c.href === pathname));
@@ -101,12 +107,12 @@ export function AutopilotHeader({ intro, status }: { intro: string; status?: str
         </span>
         <p className="min-w-[240px] flex-1 text-[15px] leading-relaxed text-ink-soft">{intro}</p>
         <div className="flex flex-wrap items-center gap-2">
-          <span className="whitespace-nowrap rounded-full bg-white/80 px-3 py-1 text-[13px] text-ink-soft ring-1 ring-[#FAD9CB]" title={AUTOPILOT_MEDIA.full}>
-            매체 · <b className="font-semibold text-ink">{AUTOPILOT_MEDIA.label}</b>
+          <span className="whitespace-nowrap rounded-full bg-white/80 px-3 py-1 text-[13px] text-ink-soft ring-1 ring-[#FAD9CB]" title={m.full}>
+            매체 · <b className="font-semibold text-ink">{m.label}</b>
           </span>
           <span
             className="cursor-help whitespace-nowrap rounded-full bg-white/80 px-3 py-1 text-[13px] text-ink-soft ring-1 ring-[#FAD9CB]"
-            title="AI·엑셀이 만든 세팅안은 화면에만 있고, 담당자가 실행 버튼 → 확인을 눌러야 GFA에 반영됩니다(관리자만). 완전 자동(버튼 없이 주기 실행)은 결과가 검증되면 운영 규칙에서 조치별로 켤 예정입니다."
+            title="화면·엑셀에서 만든 세팅안은 화면에만 있고, 담당자가 실행 버튼 → 확인을 눌러야 매체에 반영됩니다. 완전 자동(버튼 없이 주기 실행)은 결과가 검증되면 운영 규칙에서 조치별로 켤 예정입니다."
           >
             실행 · <b className="font-semibold text-ink">{AUTOPILOT_MODE}</b> ⓘ
           </span>

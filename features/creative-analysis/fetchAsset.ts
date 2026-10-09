@@ -2,7 +2,7 @@
 import { graphAll, MetaGraphError } from "@/lib/meta/graph";
 import type { CreativeAsset } from "./types";
 
-const G = "https://graph.facebook.com/v21.0";
+const G = "https://graph.facebook.com/v25.0";
 type Raw = Record<string, unknown>;
 
 async function get(url: string) {

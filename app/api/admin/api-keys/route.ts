@@ -14,7 +14,7 @@ import { fetchMccChildren, probeCustomer } from "@/lib/google-ads/aggregate";
 
 // API 공용 키 관리 (관리자·최고관리자) — 키 값은 응답에 마스킹해서만 내려준다.
 // GET: 매체별 등록 상태 / POST {channel, action:"test"|"save"|"import", config?}: 테스트(+저장), import = 지금 쓰는 .env.local 값을 테스트 후 DB로 옮김 / DELETE ?channel=: DB 공용 키 삭제
-const GRAPH = "https://graph.facebook.com/v21.0";
+const GRAPH = "https://graph.facebook.com/v25.0";
 
 type ClientRow = {
   name: string;
