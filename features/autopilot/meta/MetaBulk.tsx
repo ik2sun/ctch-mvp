@@ -631,7 +631,7 @@ export function MetaBulk({ clientId }: { clientId: string }) {
     setMarkBusy(true);
     setMarkErr(null);
     try {
-      const out = await markWorkbook(
+      const out = markWorkbook(
         sheetBuf,
         prepared.map((p) => {
           if (done.has(p.key)) return { row: p.row.sheetRow, status: "완료", fix: "이미 만듦 — 다시 올리면 건너뜀", tone: "ok" as const };
@@ -642,15 +642,10 @@ export function MetaBulk({ clientId }: { clientId: string }) {
         }),
         specs.filter((x) => x.errors.length).map((x) => ({ row: x.sheetRow, status: "수정 필요", fix: x.errors.join("\n"), tone: "bad" as const })),
       );
-      const blob = new Blob([out], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = `${fileName.replace(/\.(xlsx|xls|csv)$/i, "").replace(/_수정표시$/, "")}_수정표시.xlsx`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+      // 템플릿 내려받기와 같은 방식(XLSX.writeFile)
+      XLSX.writeFile(out, `${fileName.replace(/\.(xlsx|xls|csv)$/i, "").replace(/_수정표시$/, "")}_수정표시.xlsx`);
     } catch (e) {
+      console.error("[CTCH] 표시 엑셀", e);
       // 버튼 바로 옆에 보여 준다(예전엔 위쪽 ② 엑셀 카드에만 떠서 안 보였음)
       setMarkErr(`표시 엑셀을 못 만들었어요 — ${(e as Error).message}`);
     } finally {
