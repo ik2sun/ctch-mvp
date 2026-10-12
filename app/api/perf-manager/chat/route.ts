@@ -3,6 +3,7 @@ import { runChat } from "@/features/perf-manager/chat";
 import { listBriefs } from "@/features/perf-manager/briefs";
 import { listMailboxes, loadMemory, loadSettings, mailStats, peopleAsMembers, requireClientAccess } from "@/features/perf-manager/store";
 import { memoryToText } from "@/features/perf-manager/memory";
+import { docsForPrompt, listDocs } from "@/features/perf-manager/docs";
 import { EMPTY_SETTINGS, type ChatEvent, type ChatTurn } from "@/features/perf-manager/types";
 
 // 캠페인 매니저 대화 — NDJSON 스트림(한 줄에 이벤트 하나). 대화는 저장하지 않는다.
@@ -22,12 +23,13 @@ export async function POST(req: Request) {
   const clientId = access.client.id;
   // 캠페인 매니저 테이블(0022)이 없어도 대화는 되게 — 메일·담당자 없이 성과·시장 도구만
   const safe = async <T,>(p: Promise<T>, d: T) => p.catch(() => d);
-  const [{ briefs }, settings, linked, mem, stats] = await Promise.all([
+  const [{ briefs }, settings, linked, mem, stats, docs] = await Promise.all([
     listBriefs(),
     safe(loadSettings(clientId), { ...EMPTY_SETTINGS }),
     safe(listMailboxes(access.user.id), []),
     safe(loadMemory(clientId), null),
     safe(mailStats(clientId), { count: 0, lastAt: null, byMailbox: [] }),
+    safe(listDocs(clientId), []),
   ]);
 
   const enc = new TextEncoder();
@@ -50,6 +52,7 @@ export async function POST(req: Request) {
             memoryText: mem ? memoryToText(mem.memory) : null,
             memoryBuiltAt: mem?.meta.builtAt ?? null,
             mailCount: stats.count,
+            docsText: docsForPrompt(docs),
           },
           emit,
           req.signal,

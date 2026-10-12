@@ -4,6 +4,7 @@
 //    get_creative_report: 메타 소재 판정·유형별·피로도(소재 분석과 같은 엔진) / get_audience_report: 메타 성별·연령 실제 성과 — 서버가 매체 API 조회, 10분 캐시
 //  - search_emails / read_email: 담당자 메일함에서 수집한 광고주 메일(pm_emails)
 //  - get_market_signals: CTCH 경쟁사·브랜드 키워드 모니터링 + 시장 메모
+//  - search_documents / read_document: 자료실(올린 상품소개서·기능 안내 — 이 광고주 전용 + 공용, docs.ts)
 //  - web_search(서버 도구): 시장·업계·매체 최신 정보
 // 메일 AI 정리(pm_memory)·담당자 표·광고주 정보는 시스템 프롬프트 두 번째 블록에 넣는다(광고주마다 다름 — 캐시 앞 블록과 분리).
 // 대화는 저장하지 않는다. 화면이 보낸 이전 턴은 텍스트만 다시 넣는다(thinking 블록 재전송 없음).
@@ -14,6 +15,7 @@ import { SKILLS, skillByName } from "./skills";
 import { campaignDaily, campaignReport, loadCampaigns, loadPreviousCampaigns } from "./campaigns";
 import { audienceReport, creativeReport } from "./reportTools";
 import { marketSignals } from "./market";
+import { readDoc, searchDocs } from "./docs";
 import { membersText, type ClientProfile } from "./store";
 import { PM_MODEL, type Brief, type CampaignOwner, type ChatEvent, type ChatTurn, type PmSettings } from "./types";
 
@@ -40,6 +42,7 @@ const PERSONA = `너는 대행사 NMG에서 지금 선택된 광고주를 전담
 종합 요청에서 리포트가 켜져 있으면 get_campaign_performance(compare_previous=true)와 get_creative_report를 함께 조회하고, 시장 질문이 섞이면 get_market_signals도 본다.
 - 광고주가 요청·합의한 내용, 일정, 담당자, 과거 경위는 아래 '메일 정리'를 먼저 보고, 세부나 원문이 필요하면 search_emails → read_email.
 - 시장·경쟁·업계 동향은 get_market_signals와 웹 검색으로 확인하고 출처를 밝힌다.
+- 상품·기능·요금·단가·규격·운영 조건·신기능 질문, 광고주 상품 설명이 필요한 질문은 아래 '자료실' 목록을 보고 search_documents로 먼저 찾고(필요하면 read_document로 전체 정리), 근거를 [자료: 문서명 · 기준 시점]으로 밝힌다. 자료실 내용이 웹 검색·기억과 다르면 자료실(올린 최신 문서)을 우선하되 문서 기준 시점을 함께 말한다. 자료실에 없으면 없다고 말한다.
 - 할 일·이슈에는 담당자를 붙인다. 담당자는 아래 '프로젝트 사람'의 NMG 사람 중 그 건을 메일로 주고받은 사람으로 판단하고(search_emails로 확인), 알 수 없으면 '담당자 미지정'. 메일 속 사람이 광고주인지 NMG인지도 이 목록으로 판단한다.
 - 숫자는 도구 결과·메일·출처에서만 쓴다. 업계 평균·벤치마크를 지어내지 않는다. 경험칙은 경험칙이라고 밝힌다.
 - 상관과 인과를 구분한다. 플랫폼 리포트 수치는 증분이 아니다.
@@ -137,6 +140,26 @@ const CONTEXT_TOOLS: Anthropic.Beta.BetaTool[] = [
     input_schema: { type: "object", properties: { id: { type: "string" } }, required: ["id"], additionalProperties: false },
   },
   {
+    name: "search_documents",
+    description: "자료실(팀이 올린 매체·광고주 상품소개서, 신기능 안내, 가이드)에서 내용을 찾는다. 결과는 관련 조각(문서명·기준 시점·doc id·발췌). 문서 전체 정리는 read_document.",
+    strict: true,
+    input_schema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "찾을 단어(상품명·기능명·지면·용어 등, 공백으로 여러 개 — 많이 들어간 조각이 먼저)" },
+        limit: { type: "integer", description: "최대 조각 수 1~15" },
+      },
+      required: ["query", "limit"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "read_document",
+    description: "자료실 문서 하나의 AI 정리 전체(요약·핵심·주제별 정리)를 읽는다. id는 자료실 목록이나 search_documents 결과의 doc id.",
+    strict: true,
+    input_schema: { type: "object", properties: { id: { type: "string" } }, required: ["id"], additionalProperties: false },
+  },
+  {
     name: "get_market_signals",
     description: "CTCH에 쌓인 시장·경쟁 신호: 업종·경쟁사 설정, 네이버 파워링크 경쟁사 키워드 순위, 브랜드 키워드 침해 감지, 시장 메모.",
     strict: true,
@@ -164,6 +187,8 @@ const TOOL_LABEL: Record<string, string> = {
   search_emails: "메일 검색",
   read_email: "메일 원문",
   get_market_signals: "시장·경쟁 신호",
+  search_documents: "자료실 검색",
+  read_document: "자료실 문서",
 };
 
 export type ChatInput = {
@@ -180,6 +205,7 @@ export type ChatInput = {
   memoryText: string | null;
   memoryBuiltAt: string | null;
   mailCount: number;
+  docsText: string; // 자료실 목록(docs.ts docsForPrompt)
 };
 
 function systemPrompt(input: ChatInput): Anthropic.Beta.BetaTextBlockParam[] {
@@ -204,6 +230,9 @@ function systemPrompt(input: ChatInput): Anthropic.Beta.BetaTextBlockParam[] {
     "",
     `## 메일 정리(AI, ${input.memoryBuiltAt ? `${input.memoryBuiltAt.slice(0, 10)} 기준` : "아직 없음"} · 수집 메일 ${input.mailCount}건 · 담당자 메일함 ${input.mailboxes.length}개${input.mailboxes.length ? `: ${input.mailboxes.join(", ")}` : ""})`,
     input.memoryText || (input.mailCount ? "(정리 전 — 필요하면 search_emails로 직접 찾는다)" : "(수집된 메일 없음 — 담당자가 이 화면에서 Gmail을 연결하고 메일 규칙 저장 후 '메일 동기화'를 해야 한다)"),
+    "",
+    "## 자료실(팀이 올린 문서 — 내용은 search_documents·read_document로)",
+    input.docsText,
     "",
     "## 업계 최신 정보(CTCH 정리, 출처 확인분)",
     briefList || "(없음)",
@@ -269,6 +298,10 @@ async function runTool(name: string, raw: unknown, input: ChatInput): Promise<st
       if (!data) return "메일을 찾지 못했어요.";
       return `날짜: ${data.sent_at}\n방향: ${data.direction}\n보낸 사람: ${data.from_name ?? ""} <${data.from_addr}>\n받는 사람: ${(data.to_addrs ?? []).join(", ")}\n참조: ${(data.cc_addrs ?? []).join(", ")}\n제목: ${data.subject}\n수집 메일함: ${(data.mailboxes ?? []).join(", ")}\n\n${data.body ?? ""}`;
     }
+    case "search_documents":
+      return searchDocs(input.client.id, str("query"), clampInt(a.limit, 1, 15, 8));
+    case "read_document":
+      return readDoc(input.client.id, str("id"));
     case "get_market_signals":
       return marketSignals(input.supabase, input.client.id, input.ownerId, input.settings, input.client.industry);
     default:

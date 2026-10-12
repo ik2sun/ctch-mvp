@@ -11,15 +11,16 @@ const MAX_CHARS = 60_000;
 const ROWS_PER_SHEET = 150;
 const decode = (s: string) => s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, "&");
 
-function sheetsText(wb: XLSX.WorkBook): string {
+function sheetsText(wb: XLSX.WorkBook, rowsPerSheet = ROWS_PER_SHEET): string {
+  const ROWS_PER_SHEET_ = rowsPerSheet;
   const out: string[] = [];
   for (const n of wb.SheetNames) {
     const rows = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[n], { header: 1, defval: "", blankrows: false, raw: false });
     const body = rows
-      .slice(0, ROWS_PER_SHEET)
+      .slice(0, ROWS_PER_SHEET_)
       .map((r) => r.map((c) => String(c ?? "").replace(/\s+/g, " ").trim()).join(" | "))
       .filter((l) => l.replace(/[|\s]/g, ""));
-    out.push(`### 시트 '${n}' (${rows.length}행${rows.length > ROWS_PER_SHEET ? `, 앞 ${ROWS_PER_SHEET}행만` : ""})\n${body.join("\n")}`);
+    out.push(`### 시트 '${n}' (${rows.length}행${rows.length > ROWS_PER_SHEET_ ? `, 앞 ${ROWS_PER_SHEET_}행만` : ""})\n${body.join("\n")}`);
   }
   return out.join("\n\n");
 }
@@ -78,7 +79,21 @@ export function googleFileOf(url: string): { id: string; type: "document" | "spr
   return m ? { type: m[1] as "document" | "spreadsheets" | "presentation", id: m[2] } : null;
 }
 
-export async function extractGoogle(url: string): Promise<Extracted> {
+// AI 매니저 자료실용 — 원문을 길게(PDF는 텍스트 없이 원본만 — 서버에서 Claude가 읽음)
+export type LibraryFile = { kind: "pdf" | "pptx" | "docx" | "xlsx" | "text"; text: string };
+const LIB_MAX = 500_000;
+export async function extractForLibrary(file: File): Promise<LibraryFile> {
+  const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+  if (ext === "pdf") return { kind: "pdf", text: "" };
+  const buf = await file.arrayBuffer();
+  if (["xlsx", "xlsm", "xls", "csv"].includes(ext)) return { kind: "xlsx", text: sheetsText(XLSX.read(buf, { type: "array" }), 2000).slice(0, LIB_MAX) };
+  if (ext === "docx") return { kind: "docx", text: (await docxText(buf)).slice(0, LIB_MAX) };
+  if (ext === "pptx") return { kind: "pptx", text: (await pptxText(buf)).slice(0, LIB_MAX) };
+  if (["txt", "md", "html", "htm"].includes(ext)) return { kind: "text", text: new TextDecoder().decode(buf).replace(/<[^>]+>/g, " ").slice(0, LIB_MAX) };
+  throw new Error("지원하는 형식: PDF·파워포인트(pptx)·워드(docx)·엑셀(xlsx·csv)·텍스트");
+}
+
+export async function extractGoogle(url: string, maxChars = MAX_CHARS): Promise<Extracted> {
   const g = googleFileOf(url);
   if (!g) throw new Error("구글 문서·스프레드시트·슬라이드 주소를 넣어 주세요(docs.google.com/…/d/…).");
   const token = await getDriveToken();
@@ -100,5 +115,5 @@ export async function extractGoogle(url: string): Promise<Extracted> {
   }
   else if (g.type === "presentation") text = await pptxText(await res.arrayBuffer());
   else text = await res.text();
-  return { name, kind: "google", text: text.slice(0, MAX_CHARS), xlsxBase64 };
+  return { name, kind: "google", text: text.slice(0, maxChars), xlsxBase64 };
 }

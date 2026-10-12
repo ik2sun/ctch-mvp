@@ -7,6 +7,7 @@ import { useClients } from "@/features/clients/ClientContext";
 import { ChatPanel, type ChatPanelHandle } from "@/features/perf-manager/ChatPanel";
 import { CampaignManagerBoard } from "@/features/perf-manager/CampaignManagerBoard";
 import { KnowledgeBoard } from "@/features/perf-manager/KnowledgeBoard";
+import { DocsCard } from "@/features/perf-manager/DocsCard";
 import type { Brief } from "@/features/perf-manager/types";
 
 export default function PerformanceManagerPage() {
@@ -82,11 +83,14 @@ export default function PerformanceManagerPage() {
         <div className="min-w-0 space-y-5">
           <div>
             <h2 className="text-[24px] font-bold tracking-tight text-ink">{selected ? `${selected.name} 캠페인 매니저` : "캠페인 매니저"}</h2>
-            <p className="mt-1 text-[16px] text-ink-soft">광고주와 주고받은 메일, 연동 매체 성과, 시장 동향을 한곳에서 보고 담당자별 할 일을 정리해요</p>
+            <p className="mt-1 text-[16px] text-ink-soft">광고주와 주고받은 메일, 연동 매체 성과, 시장 동향, 자료실 문서를 한곳에서 보고 담당자별 할 일을 정리해요</p>
           </div>
 
           {selected ? (
-            <CampaignManagerBoard key={selected.id} clientId={selected.id} clientName={selected.name} onAsk={ask} notice={notice} />
+            <>
+              <CampaignManagerBoard key={selected.id} clientId={selected.id} clientName={selected.name} onAsk={ask} notice={notice} />
+              <DocsCard key={`docs-${selected.id}`} clientId={selected.id} clientName={selected.name} onAsk={ask} />
+            </>
           ) : (
             <p className="rounded-card border border-line bg-surface px-6 py-5 text-[15px] text-ink-muted">오른쪽 위에서 광고주를 선택하세요.</p>
           )}
