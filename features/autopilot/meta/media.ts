@@ -56,17 +56,24 @@ export async function imageForUpload(m: LocalMedia): Promise<Blob> {
   return toBlob(c, "image/jpeg", 0.5);
 }
 
-// 영상 썸네일 — 1초 지점(짧으면 10%) 프레임을 JPEG로
-export function videoThumbnail(m: LocalMedia): Promise<Blob> {
+// 영상 썸네일 — 1초 지점(짧으면 10%) 프레임을 JPEG로. 탭이 가려져 있으면 크롬이 디코딩을 미뤄 이벤트가 안 올 수 있어
+// 시간 제한(기본 20초)을 두고 실패로 끝낸다 — 실행은 메타 자동 썸네일로 이어 간다(2026-10-12 1시간 멈춤 사고)
+export function videoThumbnail(m: LocalMedia, timeoutMs = 20_000): Promise<Blob> {
   return new Promise((resolve, reject) => {
     const v = document.createElement("video");
+    const timer = setTimeout(() => {
+      v.removeAttribute("src");
+      reject(new Error("썸네일 추출 시간 초과"));
+    }, timeoutMs);
     v.muted = true;
+    v.playsInline = true;
     v.preload = "auto";
     v.src = m.url;
     v.onloadeddata = () => {
       v.currentTime = Math.min(1, (m.duration ?? 1) * 0.1);
     };
     v.onseeked = async () => {
+      clearTimeout(timer);
       try {
         const c = document.createElement("canvas");
         c.width = v.videoWidth;
@@ -77,7 +84,11 @@ export function videoThumbnail(m: LocalMedia): Promise<Blob> {
         reject(e);
       }
     };
-    v.onerror = () => reject(new Error("썸네일을 만들지 못했어요"));
+    v.onerror = () => {
+      clearTimeout(timer);
+      reject(new Error("썸네일을 만들지 못했어요"));
+    };
+    v.load();
   });
 }
 

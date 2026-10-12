@@ -10,6 +10,7 @@ import {
   createCreative,
   createVideo,
   dropCache,
+  videoThumbUrl,
   getAdSet,
   getCampaign,
   listAdSets,
@@ -157,6 +158,13 @@ export async function POST(req: Request) {
       const feed = (body.feed as UploadedMedia | null) ?? null;
       const vertical = (body.vertical as UploadedMedia | null) ?? null;
       if (!feed && !vertical) return NextResponse.json({ error: "소재가 없어요." }, { status: 400 });
+      // 브라우저 썸네일이 없는 영상 → 메타 자동 썸네일
+      for (const m of [feed, vertical]) {
+        if (m?.kind === "video" && m.videoId && !m.thumbHash) {
+          m.thumbUrl = (await videoThumbUrl(m.videoId, token)) ?? undefined;
+          if (!m.thumbUrl) return NextResponse.json({ error: "영상 썸네일을 찾지 못했어요 — 잠시 뒤 다시 실행해 주세요." }, { status: 502 });
+        }
+      }
       const r = await createCreative(
         act,
         creativeBody({ name: String(body.name ?? "creative"), pageId: page.id, igId, copy, feed, vertical, urlTags: String(body.urlTags ?? ""), aiEnhance: body.aiEnhance === true, productExt: body.productExt === true }),

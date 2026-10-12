@@ -188,6 +188,13 @@ export async function videoStatus(id: string, token: string) {
   return { status: s.video_status ?? "processing", progress: s.processing_progress ?? 0, error: err };
 }
 
+// 메타가 영상 처리 때 만든 썸네일(선호 표시 우선) — 브라우저 썸네일 추출이 실패했을 때
+export async function videoThumbUrl(id: string, token: string): Promise<string | null> {
+  const r = await graphGet<{ data?: { uri: string; is_preferred?: boolean }[] }>(`${id}/thumbnails`, { fields: "uri,is_preferred" }, token);
+  const list = r.data ?? [];
+  return (list.find((t) => t.is_preferred) ?? list[0])?.uri ?? null;
+}
+
 export async function createCreative(act: string, body: Record<string, unknown>, token: string, validateOnly = false) {
   return graphPost<{ id?: string; success?: boolean }>(`${act}/adcreatives`, body, token, { validateOnly });
 }

@@ -394,7 +394,7 @@ export function targetingBrief(t: { age_min?: unknown; age_max?: unknown; gender
 }
 
 // 소재 본문 — 피드만/세로만 = object_story_spec 하나, 둘 다 = asset_feed_spec 게재 위치 맞춤(세로 위치 → 세로 소재, 나머지 → 피드 소재)
-export type UploadedMedia = { kind: MediaKind; hash?: string; videoId?: string; thumbHash?: string };
+export type UploadedMedia = { kind: MediaKind; hash?: string; videoId?: string; thumbHash?: string; thumbUrl?: string }; // 영상 썸네일은 hash(브라우저 추출) 또는 url(메타 자동)
 export function creativeBody(opts: {
   name: string;
   pageId: string;
@@ -428,7 +428,7 @@ export function creativeBody(opts: {
     if (single.kind === "image") {
       story.link_data = { image_hash: single.hash, link, message: copy.message, name: copy.headline || undefined, description: copy.description || undefined, call_to_action: ctaSpec };
     } else {
-      story.video_data = { video_id: single.videoId, image_hash: single.thumbHash, message: copy.message, title: copy.headline || undefined, link_description: copy.description || undefined, call_to_action: ctaSpec ?? { type: "LEARN_MORE", value: { link } } };
+      story.video_data = { video_id: single.videoId, ...(single.thumbHash ? { image_hash: single.thumbHash } : { image_url: single.thumbUrl }), message: copy.message, title: copy.headline || undefined, link_description: copy.description || undefined, call_to_action: ctaSpec ?? { type: "LEARN_MORE", value: { link } } };
     }
     body.object_story_spec = story;
     return body;
@@ -439,7 +439,7 @@ export function creativeBody(opts: {
   const v = opts.vertical!;
   const isVideo = f.kind === "video";
   const L = (n: string) => [{ name: `ctch_${n}_v` }, { name: `ctch_${n}_f` }]; // 문구 하나를 두 규칙이 같이 씀 — 규칙마다 다른 라벨
-  const asset = (m: UploadedMedia, label: string) => (isVideo ? { video_id: m.videoId, thumbnail_hash: m.thumbHash, adlabels: [{ name: label }] } : { hash: m.hash, adlabels: [{ name: label }] });
+  const asset = (m: UploadedMedia, label: string) => (isVideo ? { video_id: m.videoId, ...(m.thumbHash ? { thumbnail_hash: m.thumbHash } : { thumbnail_url: m.thumbUrl }), adlabels: [{ name: label }] } : { hash: m.hash, adlabels: [{ name: label }] });
   const mediaLabel = isVideo ? "video_label" : "image_label";
   const rule = (side: "v" | "f", spec: Record<string, unknown>, priority: number) => ({
     customization_spec: spec,

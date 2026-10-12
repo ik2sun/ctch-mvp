@@ -8,7 +8,7 @@ import { imageForUpload, videoThumbnail, type LocalMedia } from "./media";
 
 export type LogLine = { kind: "ok" | "err" | "info"; text: string };
 // 소재(creative)는 광고계정 단위라 여러 캠페인에 같은 광고를 넣을 때 한 번만 만든다(파일·문구·페이지가 같을 때)
-export type MediaCache = { images: Map<string, string>; videos: Map<string, { videoId: string; thumbHash: string }>; creatives: Map<string, string> };
+export type MediaCache = { images: Map<string, string>; videos: Map<string, { videoId: string; thumbHash?: string }>; creatives: Map<string, string> };
 export const newCache = (): MediaCache => ({ images: new Map(), videos: new Map(), creatives: new Map() });
 export type MetaRunResult = {
   validateOnly: boolean;
@@ -87,7 +87,13 @@ export async function runMeta(opts: {
     tempPaths.push(up.path);
     const { videoId } = await postMeta<{ videoId: string }>({ action: "registerVideo", clientId, path: up.path, name: m.name });
     // 썸네일은 영상 처리와 동시에
-    const thumbP = videoThumbnail(m).then((b) => uploadImageBlob(b, `${m.name}_thumb.jpg`));
+    // 실패하면 undefined — 서버가 소재를 만들 때 메타 자동 썸네일을 붙인다
+    const thumbP = videoThumbnail(m)
+      .then((b) => uploadImageBlob(b, `${m.name}_thumb.jpg`))
+      .catch((e: Error) => {
+        push({ kind: "info", text: `${m.name}: 썸네일은 메타 자동 썸네일을 써요(${e.message}) — 실행 중에는 이 탭을 앞에 띄워 두면 빨라요` });
+        return undefined;
+      });
     const t0 = Date.now();
     for (;;) {
       const s = await postMeta<{ status: string; progress: number; error: string | null }>({ action: "videoStatus", clientId, videoId });
