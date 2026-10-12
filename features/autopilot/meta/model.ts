@@ -310,7 +310,7 @@ export function campaignBody(c: CampaignDraft, turnOn: boolean, offset: number):
   return b;
 }
 
-const kstIso = (date: string, end = false) => `${date}T${end ? "23:59:00" : "00:00:00"}+0900`;
+export const kstIso = (date: string, end = false) => `${date}T${end ? "23:59:00" : "00:00:00"}+0900`;
 
 export function targetingOf(a: AdSetDraft): Record<string, unknown> {
   const t: Record<string, unknown> = {
@@ -353,7 +353,8 @@ export function adSetBody(a: AdSetDraft, ctx: { campaignId: string; objective: s
 export function copyOverrides(a: AdSetDraft, src: { targeting?: Record<string, unknown>; attribution_spec?: unknown } | null, ctx: { cbo: boolean; offset: number }): Record<string, unknown> {
   const b: Record<string, unknown> = { name: a.name.trim() };
   if (!ctx.cbo && a.budget) b.daily_budget = Math.round(a.budget * ctx.offset);
-  if (a.startDate) b.start_time = kstIso(a.startDate);
+  // 시작일은 여기서 보내지 않는다 — 복사 세트는 원본의 지난 시작 시각을 물려받아 '이미 시작된 세트'라 start_time 수정이 거절됨
+  // (1487057, 2026-10-12 운영 실행). 시작일은 복사 요청(/copies) 자체에 넣는다 — copyStartTime
   if (a.endDate) b.end_time = kstIso(a.endDate, true);
   // 기여 설정은 세트를 만든 뒤 바꿀 수 없음(1504040, 2026-10-09 르무통 실검증) — 복사 세트는 원본 그대로. 다르게 하려면 새로 만들기
   // 타겟팅은 성별·연령·맞춤 타겟을 바꿨을 때만 다시 보낸다(원본 타겟팅을 통째로 되돌려 보내면 읽기 전용 칸 때문에 거절될 수 있음)
@@ -386,6 +387,13 @@ export function copyOverrides(a: AdSetDraft, src: { targeting?: Record<string, u
 }
 
 const TARGETING_READ_ONLY = ["targeting_optimization", "age_range"];
+
+// 복사 세트 시작 시각 — 미래 날짜만(오늘·지난 날짜는 원본 시작 시각 그대로 = 켜면 바로 시작). 템플릿이 원본의 지난 시작일을 미리 채우므로 보통 null
+export function copyStartTime(startDate: string, now = new Date()): string | null {
+  if (!startDate) return null;
+  const today = new Date(now.getTime() + 9 * 3600_000).toISOString().slice(0, 10); // 한국 날짜
+  return startDate > today ? kstIso(startDate) : null;
+}
 
 // 메타 타겟팅 → 화면 칸(성별·연령). genders 없음·[0]·[1,2] = 전체
 export function targetingBrief(t: { age_min?: unknown; age_max?: unknown; genders?: unknown }): { gender: AdSetDraft["gender"]; ageMin: number; ageMax: number } {

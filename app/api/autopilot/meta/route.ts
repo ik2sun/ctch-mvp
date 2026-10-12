@@ -19,7 +19,7 @@ import {
   updateObject,
   videoStatus,
 } from "@/features/autopilot/meta/metaOps";
-import { adSetBody, campaignBody, copyOverrides, creativeBody, NEW_OBJECTIVES, SUPPORTED_OBJECTIVES, type AdSetDraft, type CampaignDraft, type Copy, type UploadedMedia } from "@/features/autopilot/meta/model";
+import { adSetBody, campaignBody, copyOverrides, copyStartTime, creativeBody, NEW_OBJECTIVES, SUPPORTED_OBJECTIVES, type AdSetDraft, type CampaignDraft, type Copy, type UploadedMedia } from "@/features/autopilot/meta/model";
 
 export const maxDuration = 120;
 
@@ -110,12 +110,20 @@ export async function POST(req: Request) {
       // 설정 복사 — 원본 세트(같은 광고계정)를 대상 캠페인으로 복사 → 화면 값 덮어쓰기
       const src = await ownAdSet(a.sourceId);
       if (validateOnly) return NextResponse.json({ id: null, validated: true });
-      const id = await copyAdSet(src.id, camp.id, token);
+      const id = await copyAdSet(src.id, camp.id, token, copyStartTime(a.startDate));
       try {
         await updateObject(id, copyOverrides(a, src, { cbo, offset: acc.offset }), token);
       } catch (e) {
-        // 복사는 됐지만 덮어쓰기 실패 — 세트 ID를 알려 줘서 화면이 이어서 진행·안내
-        return NextResponse.json({ id, warning: `복사는 됐지만 이름·예산·연령 반영 실패 — ${(e as Error).message}` });
+        // 복사는 됐지만 덮어쓰기 실패 — 이름만이라도 바꿔 두고(엉뚱한 이름으로 남지 않게) 세트 ID와 함께 안내
+        let renamed = false;
+        try {
+          await updateObject(id, { name: String(a.name).trim() }, token);
+          renamed = true;
+        } catch {
+          /* 이름도 실패 */
+        }
+        dropCache(`${act}:adsets:${camp.id}`);
+        return NextResponse.json({ id, warning: `복사는 됐지만 ${renamed ? "예산·연령·종료일" : "이름·예산·연령"} 반영 실패 — 광고 관리자에서 확인해 주세요(${(e as Error).message})` });
       }
       dropCache(`${act}:adsets:${camp.id}`);
       return NextResponse.json({ id });

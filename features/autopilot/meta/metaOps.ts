@@ -153,8 +153,12 @@ export async function createAdSet(act: string, body: Record<string, unknown>, to
   return graphPost<{ id?: string; success?: boolean }>(`${act}/adsets`, body, token, { validateOnly });
 }
 // 광고세트 설정 복사 — 광고는 빼고(deep_copy=false) 세트만, 대상 캠페인으로. 끈 상태로 복사한 뒤 이름·예산·기간·연령을 덮는다
-export async function copyAdSet(sourceId: string, campaignId: string, token: string) {
-  const r = await graphPost<{ copied_adset_id?: string; ad_object_ids?: { copied_id: string }[] }>(`${sourceId}/copies`, { campaign_id: campaignId, deep_copy: false, status_option: "PAUSED" }, token);
+export async function copyAdSet(sourceId: string, campaignId: string, token: string, startTime?: string | null) {
+  const r = await graphPost<{ copied_adset_id?: string; ad_object_ids?: { copied_id: string }[] }>(
+    `${sourceId}/copies`,
+    { campaign_id: campaignId, deep_copy: false, status_option: "PAUSED", ...(startTime ? { start_time: startTime } : {}) },
+    token,
+  );
   const id = r.copied_adset_id ?? r.ad_object_ids?.[0]?.copied_id;
   if (!id) throw new Error("광고세트 복사 결과에 새 세트 ID가 없어요");
   return id;
