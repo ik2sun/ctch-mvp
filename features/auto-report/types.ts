@@ -45,7 +45,11 @@ export type ReportSection = {
   sortBy?: MetricKey; // 캠페인 표 정렬(기본 광고비)
   showCompare?: boolean; // 비교 기간 대비 증감 표시
   note?: string; // insights: 무엇을 중심으로 쓸지 / text: 그대로 넣을 문구
+  sheet?: string; // 첨부 엑셀에서 이 섹션이 들어갈 시트(원본 시트 구성 그대로, 비면 '리포트')
 };
+
+// 첨부 엑셀 서식 — 원본 엑셀에서 읽은 색·글꼴(hex 6자리, # 없이)
+export type ReportTheme = { headerFill?: string; headerFont?: string; accent?: string; font?: string; band?: string };
 
 export type ReportSpec = {
   subject: string; // 메일 제목 — {광고주} {기간} 치환
@@ -53,6 +57,7 @@ export type ReportSpec = {
   tone: string; // 코멘트 말투·길이(예: "보고서체, 항목당 2~3문장")
   sections: ReportSection[];
   learnedFrom?: string; // AI가 원본에서 읽은 구조 요약
+  theme?: ReportTheme; // 첨부 엑셀 색·글꼴(원본 서식 학습)
   unsupported?: string[]; // 원본에 있지만 자동으로 못 만드는 항목(예: GA4 유입, 경쟁사 동향)
 };
 

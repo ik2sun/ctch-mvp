@@ -8,7 +8,8 @@ import { buildNaverSections } from "./naverSections";
 import { fetchNaverDetail } from "@/lib/naver-ad/statReport";
 import { resolveNaverAdCredentials } from "@/lib/naver-ad/auth";
 import { kstToday, rangeLabel, reportPeriod } from "./period";
-import { fillVars, renderHtml, renderXlsx } from "./render";
+import { fillVars, renderHtml } from "./render";
+import { renderStyledXlsx } from "./xlsxReport";
 import { DEFAULT_SCHEDULE, NAVER_DETAIL_TYPES, type AutoReport, type ReportOptions, type ReportRun, type ReportSpec, type Schedule } from "./types";
 
 const MISSING = /Could not find the table|relation .* does not exist|column .* does not exist/i;
@@ -155,7 +156,7 @@ export async function generate(report: AutoReport, today = kstToday()): Promise<
   return {
     subject: fillVars(report.spec.subject, { client: clientName, period: p.label }),
     html,
-    xlsx: report.options.attachXlsx ? renderXlsx(input) : null,
+    xlsx: report.options.attachXlsx ? await renderStyledXlsx(input) : null,
     period: { since: p.cur.since, until: p.cur.until, compareSince: p.prev?.since, compareUntil: p.prev?.until },
     warnings,
   };

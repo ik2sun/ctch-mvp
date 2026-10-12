@@ -99,7 +99,7 @@ export function AutoReportView({ client }: { client: { id: string; name: string 
     setLearnNote(null);
     try {
       const ex = await src;
-      const res = await fetch("/api/auto-report/learn", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clientId: client.id, sourceName: ex.name, text: ex.text, pdfBase64: ex.pdfBase64 }) });
+      const res = await fetch("/api/auto-report/learn", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clientId: client.id, sourceName: ex.name, text: ex.text, pdfBase64: ex.pdfBase64, xlsxBase64: ex.xlsxBase64 }) });
       const j = await res.json();
       if (!res.ok) throw new Error(j.error || "학습 실패");
       edit((d) => ({
@@ -110,7 +110,7 @@ export function AutoReportView({ client }: { client: { id: string; name: string 
         schedule: { ...d.schedule, ...j.schedule },
         source: { kind: ex.kind, name: ex.name, excerpt: ex.text.slice(0, 2000) },
       }));
-      setLearnNote(`'${ex.name}'에서 섹션 ${j.spec.sections.length}개를 읽었어요. 아래 구성을 확인하고 미리보기로 원본과 비교해 보세요.`);
+      setLearnNote(`'${ex.name}'에서 섹션 ${j.spec.sections.length}개${j.spec.theme ? "와 엑셀 서식(색·글꼴)" : ""}을 읽었어요. 아래 구성을 확인하고 미리보기로 원본과 비교해 보세요.`);
     } catch (e) {
       setMsg({ kind: "err", text: (e as Error).message });
     } finally {
@@ -257,6 +257,20 @@ export function AutoReportView({ client }: { client: { id: string; name: string 
                 <Field label="첫 문단(선택)"><textarea rows={2} className={`${INP} resize-y`} value={d.spec.intro ?? ""} onChange={(e) => edit((x) => ({ ...x, spec: { ...x.spec, intro: e.target.value } }))} /></Field>
                 <Field label="AI 코멘트 말투·길이"><textarea rows={2} className={`${INP} resize-y`} value={d.spec.tone} onChange={(e) => edit((x) => ({ ...x, spec: { ...x.spec, tone: e.target.value } }))} /></Field>
               </div>
+              <div className="mt-3 flex flex-wrap items-center gap-4 rounded-lg bg-canvas px-3 py-2 text-[13px] text-ink-soft">
+                <span className="font-semibold text-ink">첨부 엑셀 서식</span>
+                {([
+                  ["headerFill", "머리글", "1F3A5F"],
+                  ["accent", "강조(막대·선)", "D9531F"],
+                  ["band", "카드·합계 배경", "F5F7FA"],
+                ] as const).map(([k, label, def]) => (
+                  <label key={k} className="flex items-center gap-1.5">
+                    <input type="color" className="h-6 w-8 cursor-pointer rounded border border-line" value={`#${d.spec.theme?.[k] ?? def}`} onChange={(e) => edit((x) => ({ ...x, spec: { ...x.spec, theme: { ...x.spec.theme, [k]: e.target.value.slice(1).toUpperCase() } } }))} />
+                    {label}
+                  </label>
+                ))}
+                <span className="text-ink-muted">{d.spec.theme ? "원본에서 읽은 색 — 바꿀 수 있어요" : "원본 엑셀을 학습하면 그 색을 따라가요"}</span>
+              </div>
               <div className="mt-5 space-y-3">
                 {d.spec.sections.map((s, i) => (
                   <SectionEditor
@@ -397,6 +411,7 @@ function SectionEditor({ s, first, last, onChange, onMove, onRemove }: { s: Repo
           {Object.entries(SECTION_TYPES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
         </select>
         <input className={`${INP} min-w-[200px] flex-1`} value={s.title} onChange={(e) => onChange({ title: e.target.value })} aria-label="섹션 제목" />
+        <input className={`${INP} w-36`} value={s.sheet ?? ""} onChange={(e) => onChange({ sheet: e.target.value })} placeholder="엑셀 시트(기본 리포트)" title="첨부 엑셀에서 이 섹션이 들어갈 시트 — 같은 이름끼리 한 시트에 위에서부터 쌓여요" aria-label="엑셀 시트" />
         <span className="ml-auto flex gap-1">
           <button type="button" disabled={first} onClick={() => onMove(-1)} className="rounded-md border border-line px-2 py-1 text-ink-soft disabled:opacity-30" aria-label="위로"><i className="ti ti-arrow-up" aria-hidden /></button>
           <button type="button" disabled={last} onClick={() => onMove(1)} className="rounded-md border border-line px-2 py-1 text-ink-soft disabled:opacity-30" aria-label="아래로"><i className="ti ti-arrow-down" aria-hidden /></button>

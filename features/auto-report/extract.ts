@@ -3,7 +3,9 @@ import * as XLSX from "xlsx";
 import JSZip from "jszip";
 import { getDriveToken } from "@/features/autopilot/gfa/driveImport";
 
-export type Extracted = { name: string; kind: "file" | "google"; text: string; pdfBase64?: string };
+// xlsxBase64 = 원본 엑셀(서식 학습용 — 머리글 색·강조색·글꼴), 2.5MB까지
+export type Extracted = { name: string; kind: "file" | "google"; text: string; pdfBase64?: string; xlsxBase64?: string };
+const XLSX_STYLE_MAX = 2.5 * 1024 * 1024;
 
 const MAX_CHARS = 60_000;
 const ROWS_PER_SHEET = 150;
@@ -54,7 +56,11 @@ export async function extractFile(file: File): Promise<Extracted> {
   const buf = await file.arrayBuffer();
   let text = "";
   let pdfBase64: string | undefined;
-  if (["xlsx", "xls", "xlsm", "csv"].includes(ext)) text = sheetsText(XLSX.read(buf, { type: "array" }));
+  let xlsxBase64: string | undefined;
+  if (["xlsx", "xls", "xlsm", "csv"].includes(ext)) {
+    text = sheetsText(XLSX.read(buf, { type: "array" }));
+    if ((ext === "xlsx" || ext === "xlsm") && buf.byteLength <= XLSX_STYLE_MAX) xlsxBase64 = toBase64(buf);
+  }
   else if (ext === "docx") text = await docxText(buf);
   else if (ext === "pptx") text = await pptxText(buf);
   else if (ext === "pdf") {
@@ -63,7 +69,7 @@ export async function extractFile(file: File): Promise<Extracted> {
   } else if (["txt", "md", "html", "htm"].includes(ext)) text = new TextDecoder().decode(buf).replace(/<[^>]+>/g, " ");
   else throw new Error("지원하는 형식: 엑셀(xlsx·xls·csv)·워드(docx)·파워포인트(pptx)·PDF·텍스트");
   if (!text.trim() && !pdfBase64) throw new Error("파일에서 읽을 내용이 없어요.");
-  return { name: file.name, kind: "file", text: text.slice(0, MAX_CHARS), pdfBase64 };
+  return { name: file.name, kind: "file", text: text.slice(0, MAX_CHARS), pdfBase64, xlsxBase64 };
 }
 
 // 구글 문서·스프레드시트·슬라이드 주소 → 내보내기(drive.readonly, 브라우저 팝업 동의 — 오토파일럿 드라이브 불러오기와 같은 연결)
@@ -86,8 +92,13 @@ export async function extractGoogle(url: string): Promise<Extracted> {
   const res = await fetch(`${API}/${g.id}/export?mimeType=${encodeURIComponent(mime)}`, { headers: H });
   if (!res.ok) throw new Error(`내보내기 실패(HTTP ${res.status}) — 파일이 너무 크면 엑셀·PDF로 받아 올려 주세요.`);
   let text: string;
-  if (g.type === "spreadsheets") text = sheetsText(XLSX.read(await res.arrayBuffer(), { type: "array" }));
+  let xlsxBase64: string | undefined;
+  if (g.type === "spreadsheets") {
+    const buf = await res.arrayBuffer();
+    text = sheetsText(XLSX.read(buf, { type: "array" }));
+    if (buf.byteLength <= XLSX_STYLE_MAX) xlsxBase64 = toBase64(buf);
+  }
   else if (g.type === "presentation") text = await pptxText(await res.arrayBuffer());
   else text = await res.text();
-  return { name, kind: "google", text: text.slice(0, MAX_CHARS) };
+  return { name, kind: "google", text: text.slice(0, MAX_CHARS), xlsxBase64 };
 }

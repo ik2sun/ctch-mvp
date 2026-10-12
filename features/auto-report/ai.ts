@@ -67,7 +67,7 @@ const LEARN_SCHEMA = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["type", "title", "metrics", "limit", "sortBy", "showCompare", "note", "weeks", "device"],
+        required: ["type", "title", "metrics", "limit", "sortBy", "showCompare", "note", "weeks", "device", "sheet"],
         properties: {
           type: { type: "string" },
           title: { type: "string" },
@@ -78,6 +78,7 @@ const LEARN_SCHEMA = {
           note: { type: "string" },
           weeks: { type: "integer" },
           device: { type: "string" },
+          sheet: { type: "string" },
         },
       },
     },
@@ -97,7 +98,7 @@ type LearnRaw = {
   weekday: number;
   monthDay: number;
   naverRaw: boolean;
-  sections: { type: string; title: string; metrics: string[]; limit: number; sortBy: string; showCompare: boolean; note: string; weeks: number; device: string }[];
+  sections: { type: string; title: string; metrics: string[]; limit: number; sortBy: string; showCompare: boolean; note: string; weeks: number; device: string; sheet: string }[];
 };
 
 export type LearnResult = {
@@ -123,6 +124,7 @@ ${Object.entries(SECTION_TYPES)
 - 네이버: 디바이스(PC/MO)별 표는 naver_device, 키워드별 TOP은 naver_keyword_top, 쇼핑검색 상품별 TOP은 naver_product_top(limit = 원본 줄 수, sortBy = 원본 정렬 기준 지표 — 노출 TOP이면 impressions, 클릭 TOP이면 clicks, device = 원본이 'PC 노출 TOP'처럼 기기를 한정하면 "P"·모바일이면 "M", 아니면 "all"). 원본에 같은 표가 기준 지표만 달리 여러 개(노출 TOP·클릭 TOP)면 섹션도 여러 개. 키워드·소재 단위 원본 데이터(RD) 시트가 있으면 naverRaw true. 원본 열 순서대로 metrics를 고른다(원본 열 이름이 달라도 뜻이 같으면 매핑: 집행금액·소진액=cost, 전환수·구매=conversions, 전환매출·구매액=revenue, ROAS·광고수익률=roas 등).
 - 원본의 서술(총평·인사이트·다음 액션)은 insights로 옮기고, note에 원본이 무엇을 중심으로 썼는지 적는다. 인사말·안내처럼 매번 같은 글은 text로 옮기고 note에 그 글을 넣는다({광고주} {기간} 변수 사용 가능).
 - 만들 수 없는 항목은 sections에 넣지 말고 unsupported에 짧게 적는다(예: "GA4 유입 채널 표", "소재별 성과 이미지").
+- sheet: 그 표·글이 원본에서 있던 시트 이름을 그대로(원본 텍스트의 "### 시트 '이름'"). 첨부 엑셀을 원본과 같은 시트 구성으로 만든다. 원본이 엑셀이 아니면 "".
 - 해당 없는 칸은 limit 0, sortBy "", note "", weeks 0, device "" 로 둔다. 캠페인 표 limit은 원본 줄 수(모르면 10).
 - period: ${Object.keys(PERIODS).join(" | ")} 중 원본 기간과 가장 가까운 것. compare: ${Object.keys(COMPARES).join(" | ")}. frequency: ${Object.keys(FREQUENCIES).join(" | ")} (주간 리포트면 weekly, weekday 1=월…7=일, 월간이면 monthly·monthDay).
 - subject는 메일 제목 — {광고주} {기간} 변수를 넣는다. tone은 원본 말투를 한 줄로(예: "보고서체, 항목당 2~3문장, 수치 근거").
@@ -156,6 +158,7 @@ export function normalizeLearn(r: LearnRaw): LearnResult {
         device: type === "naver_keyword_top" || type === "naver_product_top" ? pick(s.device, ["all", "P", "M"] as const, "all") : undefined,
         showCompare: ["daily_table", "insights", "text", "achievement", "naver_device", "naver_keyword_top", "naver_product_top"].includes(type) ? undefined : type === "weekly_table" ? s.showCompare !== false : !!s.showCompare,
         note: s.note || undefined,
+        sheet: s.sheet ? String(s.sheet).slice(0, 31) : undefined,
       };
     })
     .slice(0, 12);
