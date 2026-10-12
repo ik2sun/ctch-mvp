@@ -1,8 +1,9 @@
 // 소재 상세 원본 조회 — 다이내믹 소재의 모든 이미지(원본 해상도), 영상 썸네일·길이. 서버 전용, 읽기 전용.
+import { META_API_VERSION } from "@/lib/meta/graph";
 import { graphAll, MetaGraphError } from "@/lib/meta/graph";
 import type { CreativeAsset } from "./types";
 
-const G = "https://graph.facebook.com/v25.0";
+const G = `https://graph.facebook.com/${META_API_VERSION}`;
 type Raw = Record<string, unknown>;
 
 async function get(url: string) {

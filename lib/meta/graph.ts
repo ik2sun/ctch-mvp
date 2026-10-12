@@ -1,5 +1,7 @@
 // 메타 Graph API 공용 호출 — 페이지 끝까지 받기, ids 묶음 조회, 인사이트 지표 해석. 서버 전용.
-export const META_API_VERSION = "v25.0"; // v21.0은 Marketing API 2025-09-09 만료(메타가 v25로 자동 상향 처리하던 상태) — 2026-10-09 v25 고정
+// 2026-10-12 v26.0 — 토큰을 새 앱(NMG-CTCH)으로 바꾼 뒤 메타가 v25 요청을 v26으로 처리(새 앱은 만든 시점 최신 버전 미만 불가, 응답 헤더 facebook-api-version: v26.0).
+// v26부터 ?ids= 묶음 조회가 없어져(100 "The ids query parameter is deprecated in v26.0+") 묶음 조회는 배치 API로(graphByIds)
+export const META_API_VERSION = "v26.0";
 const G = `https://graph.facebook.com/${META_API_VERSION}`;
 
 export class MetaGraphError extends Error {
@@ -90,39 +92,59 @@ export async function graphAll<T = Record<string, unknown>>(path: string, params
   return out;
 }
 
-// 묶음 조회 중 일부 id만 권한이 없을 때 — 실패한 묶음을 반으로 나눠 다시(전체 1건씩 조회 대신). 한도 오류는 그대로 올린다.
-export async function graphByIdsTolerant<T = Record<string, unknown>>(ids: string[], fields: string, token: string, extra: Record<string, string> = {}): Promise<Map<string, T>> {
-  const out = new Map<string, T>();
-  const run = async (part: string[]): Promise<void> => {
-    if (!part.length) return;
+// 배치 API — GET 여러 건을 요청 하나로(최대 50). 항목별 결과 { code, body(JSON 문자열) }
+async function batchGet(relativeUrls: string[], token: string): Promise<{ code: number; body: unknown }[]> {
+  const u = metaAppUsage();
+  if (u != null && u >= USAGE_GUARD) throw new MetaGraphError(`메타 호출 한도 임박(앱 사용량 ${u}%) — 한도를 넘기지 않으려고 조회를 멈췄어요. 잠시 후 다시 시도해 주세요.`, 4);
+  const res = await fetch("https://graph.facebook.com", {
+    method: "POST",
+    body: new URLSearchParams({ access_token: token, include_headers: "false", batch: JSON.stringify(relativeUrls.map((r) => ({ method: "GET", relative_url: r }))) }),
+    cache: "no-store",
+  });
+  const usage = res.headers.get("x-app-usage");
+  if (usage) {
     try {
-      const m = await graphByIds<T>(part, fields, token, extra);
-      m.forEach((v, k) => out.set(k, v));
-    } catch (e) {
-      if (e instanceof MetaGraphError && e.code != null && LIMIT_CODES.has(e.code)) throw e;
-      if (part.length === 1) return; // 이 1건은 권한 없음 — 건너뜀
-      const mid = Math.ceil(part.length / 2);
-      await run(part.slice(0, mid));
-      await run(part.slice(mid));
+      const j = JSON.parse(usage) as { call_count?: number; total_time?: number; total_cputime?: number };
+      lastUsage = { pct: Math.max(j.call_count ?? 0, j.total_time ?? 0, j.total_cputime ?? 0), at: Date.now() };
+    } catch {
+      /* 무시 */
     }
-  };
-  const uniq = [...new Set(ids.filter(Boolean))];
-  for (let i = 0; i < uniq.length; i += 50) await run(uniq.slice(i, i + 50));
-  return out;
+  }
+  const json = await res.json().catch(() => null);
+  if (!Array.isArray(json)) {
+    const e = (json as { error?: { code?: number; message?: string } } | null)?.error;
+    throw new MetaGraphError(friendly(e?.code, e?.message ?? "메타 배치 조회 실패"), e?.code);
+  }
+  return (json as ({ code: number; body: string } | null)[]).map((r) => {
+    if (!r) return { code: 0, body: null };
+    try {
+      return { code: r.code, body: JSON.parse(r.body) };
+    } catch {
+      return { code: r.code, body: null };
+    }
+  });
 }
 
-// 여러 객체를 id로 한 번에(?ids=, 50개씩 병렬)
+// 여러 객체를 id로 한 번에 — 배치 API 50개씩 병렬(v26에서 ?ids= 폐지). 권한 없는 id 등 항목별 실패는 건너뛰고, 호출 한도 오류만 올린다
 export async function graphByIds<T = Record<string, unknown>>(ids: string[], fields: string, token: string, extra: Record<string, string> = {}): Promise<Map<string, T>> {
   const uniq = [...new Set(ids.filter(Boolean))];
+  const qs = new URLSearchParams({ fields, ...extra }).toString();
   const chunks: string[][] = [];
   for (let i = 0; i < uniq.length; i += 50) chunks.push(uniq.slice(i, i + 50));
   const out = new Map<string, T>();
-  const results = await Promise.all(
-    chunks.map((c) => getJson(`${G}/?${new URLSearchParams({ ids: c.join(","), fields, ...extra, access_token: token })}`)),
-  );
-  for (const r of results) for (const [id, v] of Object.entries(r as Record<string, T>)) out.set(id, v);
+  const results = await Promise.all(chunks.map((c) => batchGet(c.map((id) => `${META_API_VERSION}/${id}?${qs}`), token).then((r) => ({ c, r }))));
+  for (const { c, r } of results) {
+    r.forEach((item, i) => {
+      const err = (item.body as { error?: { code?: number; message?: string } } | null)?.error;
+      if (item.code === 200 && item.body && !err) out.set(c[i], item.body as T);
+      else if (err?.code != null && LIMIT_CODES.has(err.code)) throw new MetaGraphError(friendly(err.code, err.message ?? "메타 호출 한도"), err.code);
+    });
+  }
   return out;
 }
+
+// 예전 이름(일부 id 권한 없음 대비) — 배치는 항목별로 실패를 건너뛰므로 같은 동작
+export const graphByIdsTolerant = graphByIds;
 
 type ActionItem = { action_type: string; value: string };
 export const PURCHASE_TYPES = ["purchase", "omni_purchase", "offsite_conversion.fb_pixel_purchase"];
