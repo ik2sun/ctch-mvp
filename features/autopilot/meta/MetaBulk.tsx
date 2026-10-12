@@ -62,6 +62,7 @@ import {
   type Problem,
 } from "./model";
 import { newCache, postMeta, runMeta, type LogLine, type MetaRunResult } from "./run";
+import { markWorkbook } from "./markSheet";
 import { MetaRunLog, RunBar } from "./RunBar";
 import { StateFilter, isOn, lockReason, type StateKey } from "./StateFilter";
 
@@ -624,81 +625,34 @@ export function MetaBulk({ clientId }: { clientId: string }) {
 
   // 올린 엑셀에 행마다 'CTCH 상태'·'수정할 부분'을 덧붙여 내려받기(원본 서식 유지, 고칠 행은 빨간 배경)
   const [markBusy, setMarkBusy] = useState(false);
+  const [markErr, setMarkErr] = useState<string | null>(null);
   async function downloadMarked() {
     if (!sheetBuf || markBusy) return;
     setMarkBusy(true);
+    setMarkErr(null);
     try {
-      const ExcelJS = (await import("exceljs")).default;
-      const wb = new ExcelJS.Workbook();
-      await wb.xlsx.load(sheetBuf.slice(0));
-      const text = (v: unknown) => String(v ?? "").trim();
-      const RED = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFEE2E2" } } as const;
-      const GREEN = { type: "pattern", pattern: "solid", fgColor: { argb: "FFDCFCE7" } } as const;
-      // 머리글 행을 찾아 상태·수정 열을 맨 뒤에 붙인다(이미 있으면 그 열을 다시 씀)
-      const mark = (ws: import("exceljs").Worksheet, isHeader: (vals: string[]) => boolean, items: { row: number; status: string; fix: string; tone: "bad" | "ok" | "" }[]) => {
-        let hr = 0;
-        ws.eachRow((row, n) => {
-          if (!hr && isHeader((row.values as unknown[]).map(text))) hr = n;
-        });
-        if (!hr) return false;
-        const header = ws.getRow(hr);
-        let sc = 0;
-        let fc = 0;
-        let last = 0;
-        header.eachCell((c, col) => {
-          const v = text(c.value);
-          if (v === STATUS_HEADER) sc = col;
-          else if (v === FIX_HEADER) fc = col;
-          else if (v) last = Math.max(last, col);
-        });
-        if (!sc) sc = Math.max(last, fc) + 1;
-        if (!fc) fc = Math.max(last, sc) + 1;
-        for (const [c, v] of [[sc, STATUS_HEADER], [fc, FIX_HEADER]] as const) {
-          const cellH = header.getCell(c);
-          cellH.value = v;
-          cellH.font = { bold: true, color: { argb: "FFB42318" } };
-        }
-        ws.getColumn(sc).width = 14;
-        ws.getColumn(fc).width = 70;
-        for (let n = hr + 1; n <= ws.rowCount; n++) {
-          const r = ws.getRow(n);
-          r.getCell(sc).value = null;
-          r.getCell(fc).value = null;
-        }
-        const width = Math.max(sc, fc);
-        for (const it of items) {
-          const r = ws.getRow(it.row);
-          r.getCell(sc).value = it.status;
-          const f = r.getCell(fc);
-          f.value = it.fix || null;
-          f.alignment = { wrapText: true, vertical: "top" };
-          if (it.tone === "bad") {
-            for (let c = 1; c <= width; c++) r.getCell(c).fill = RED;
-            f.font = { color: { argb: "FFB42318" } };
-            r.getCell(sc).font = { bold: true, color: { argb: "FFB42318" } };
-          } else if (it.tone === "ok") r.getCell(sc).fill = GREEN;
-        }
-        return true;
-      };
-      const adWs = wb.getWorksheet(AD_SHEET) ?? wb.worksheets.find((w) => ![SET_SHEET, GUIDE_SHEET, AUDIENCE_SHEET].includes(w.name));
-      if (!adWs || !mark(adWs, (v) => v.includes("광고세트") && v.includes("소재 파일"), prepared.map((p) => {
-        if (done.has(p.key)) return { row: p.row.sheetRow, status: "완료", fix: "이미 만듦 — 다시 올리면 건너뜀", tone: "ok" as const };
-        if (p.problems.length) return { row: p.row.sheetRow, status: "수정 필요", fix: p.problems.join("\n"), tone: "bad" as const };
-        if (failed.has(rowSig(p))) return { row: p.row.sheetRow, status: "실패", fix: `${failed.get(rowSig(p))}\n→ 고친 뒤 다시 올리면 다시 실행`, tone: "bad" as const };
-        if (excluded.has(p.key)) return { row: p.row.sheetRow, status: "제외", fix: "화면에서 체크 해제한 행", tone: "" as const };
-        return { row: p.row.sheetRow, status: "준비됨", fix: "", tone: "" as const };
-      })))
-        throw new Error(`'${AD_SHEET}' 시트 머리글을 못 찾았어요`);
-      const setWs = wb.getWorksheet(SET_SHEET);
-      if (setWs) mark(setWs, (v) => v.includes("광고세트"), specs.filter((s) => s.errors.length).map((s) => ({ row: s.sheetRow, status: "수정 필요", fix: s.errors.join("\n"), tone: "bad" as const })));
-      const blob = new Blob([await wb.xlsx.writeBuffer()], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const out = await markWorkbook(
+        sheetBuf,
+        prepared.map((p) => {
+          if (done.has(p.key)) return { row: p.row.sheetRow, status: "완료", fix: "이미 만듦 — 다시 올리면 건너뜀", tone: "ok" as const };
+          if (p.problems.length) return { row: p.row.sheetRow, status: "수정 필요", fix: p.problems.join("\n"), tone: "bad" as const };
+          if (failed.has(rowSig(p))) return { row: p.row.sheetRow, status: "실패", fix: `${failed.get(rowSig(p))}\n→ 고친 뒤 다시 올리면 다시 실행`, tone: "bad" as const };
+          if (excluded.has(p.key)) return { row: p.row.sheetRow, status: "제외", fix: "화면에서 체크 해제한 행", tone: "" as const };
+          return { row: p.row.sheetRow, status: "준비됨", fix: "", tone: "" as const };
+        }),
+        specs.filter((x) => x.errors.length).map((x) => ({ row: x.sheetRow, status: "수정 필요", fix: x.errors.join("\n"), tone: "bad" as const })),
+      );
+      const blob = new Blob([out], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
       a.download = `${fileName.replace(/\.(xlsx|xls|csv)$/i, "").replace(/_수정표시$/, "")}_수정표시.xlsx`;
+      document.body.appendChild(a);
       a.click();
+      a.remove();
       setTimeout(() => URL.revokeObjectURL(a.href), 5000);
     } catch (e) {
-      setSheetErr(`수정 표시 엑셀을 못 만들었어요 — ${(e as Error).message}`);
+      // 버튼 바로 옆에 보여 준다(예전엔 위쪽 ② 엑셀 카드에만 떠서 안 보였음)
+      setMarkErr(`표시 엑셀을 못 만들었어요 — ${(e as Error).message}`);
     } finally {
       setMarkBusy(false);
     }
@@ -715,6 +669,7 @@ export function MetaBulk({ clientId }: { clientId: string }) {
         수정 후 다시 올리기
         <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={(e) => onSheet(e.target.files?.[0]).then(() => (e.target.value = ""))} />
       </label>
+      {markErr && <span className="basis-full text-[13px] text-bad">{markErr}</span>}
     </span>
   );
 
