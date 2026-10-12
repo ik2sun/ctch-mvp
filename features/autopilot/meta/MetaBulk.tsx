@@ -499,11 +499,9 @@ export function MetaBulk({ clientId }: { clientId: string }) {
   if (!picked.length) globalProblems.push({ where: "① 캠페인", text: "캠페인을 고르세요", target: "bulk-campaigns" });
   if (setsLoading) globalProblems.push({ where: "① 캠페인", text: "광고세트 목록을 불러오는 중" });
   if (!rows.length) globalProblems.push({ where: "② 엑셀", text: "엑셀을 올리세요", target: "bulk-files" });
-  else if (!runnable.length)
+  else if (!runnable.length && !(done.size && done.size === prepared.length)) // 모두 완료는 문제가 아님 — 버튼이 '모두 완료'로 잠김
     globalProblems.push(
-      done.size && done.size === prepared.length
-        ? { where: "③ 매칭", text: "모두 만들었어요 — 새 엑셀을 올리면 이어서 만들어요", target: "bulk-preview" }
-        : failedRows.length
+      failedRows.length
           ? { where: "③ 매칭", text: `실패 ${failedRows.length}행 — 원인을 고쳐 엑셀을 다시 올리거나, 그 행을 체크해 다시 실행`, target: "bulk-preview" }
           : { where: "③ 매칭", text: "실행할 행이 없어요 — 빨간 행을 고치거나 체크하세요", target: "bulk-preview" },
     );
@@ -706,11 +704,11 @@ export function MetaBulk({ clientId }: { clientId: string }) {
     }
   }
   const fixCount = prepared.filter((p) => !done.has(p.key) && (p.problems.length || failed.has(rowSig(p)))).length;
-  const fixButtons = sheetBuf && fixCount > 0 && (
+  const fixButtons = sheetBuf && (fixCount > 0 || done.size > 0) && (
     <span className="flex flex-wrap gap-2">
       <button type="button" onClick={downloadMarked} disabled={markBusy} className={BTN}>
         <i className={`ti ${markBusy ? "ti-loader-2 animate-spin" : "ti-file-alert"} text-[16px]`} aria-hidden />
-        수정할 부분 표시해 내려받기
+        {fixCount > 0 ? `수정할 부분 표시해 내려받기 (${fixCount}행)` : "실행 결과 표시해 내려받기"}
       </button>
       <label className={`${BTN} cursor-pointer`}>
         <i className="ti ti-file-upload text-[16px]" aria-hidden />
@@ -745,7 +743,7 @@ export function MetaBulk({ clientId }: { clientId: string }) {
   }
 
   const multi = pickedCampaigns.length > 1;
-  const errorRows = prepared.filter((p) => p.problems.length).length;
+  const errorRows = prepared.filter((p) => p.problems.length && !done.has(p.key)).length;
   const selectable = prepared.filter((p) => !p.problems.length && !done.has(p.key)).map((p) => p.key);
   const onCount = selectable.filter((k) => !excluded.has(k)).length;
 
@@ -1026,8 +1024,8 @@ export function MetaBulk({ clientId }: { clientId: string }) {
               </thead>
               <tbody>
                 {prepared.map((p) => {
-                  const bad = p.problems.length > 0;
                   const isDone = done.has(p.key);
+                  const bad = !isDone && p.problems.length > 0; // 완료 행은 실행 뒤 세트 목록이 늦게 갱신돼 생기는 점검 문구를 무시
                   const off = excluded.has(p.key) || isDone;
                   const c = copyOf({ key: p.key, name: "", feed: null, vertical: null, copy: { message: p.row.message, headline: p.row.headline, description: p.row.description, cta: p.row.cta, url: p.row.url } }, defaults.copy);
                   return (
@@ -1055,7 +1053,11 @@ export function MetaBulk({ clientId }: { clientId: string }) {
                         <p className="truncate font-mono text-[13px] text-ink" title={p.row.adSet}>
                           {p.row.adSet || "—"}
                         </p>
-                        <SetBadges targets={p.targets} audiences={audiences ?? []} />
+                        {isDone ? (
+                          <span className="mt-1 inline-block whitespace-nowrap rounded-full bg-[#ECFDF3] px-2 py-0.5 text-[12px] text-[#067647]">이 세트에 만듦</span>
+                        ) : (
+                          <SetBadges targets={p.targets} audiences={audiences ?? []} />
+                        )}
                       </td>
                       <td className="py-2 pr-3">
                         <div className="flex items-end gap-1">

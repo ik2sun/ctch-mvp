@@ -25,7 +25,7 @@ export function RunBar(p: {
 }) {
   const [open, setOpen] = useState(false);
   const n = p.problems.length;
-  const blocked = !p.acc || n > 0 || !!p.running;
+  const blocked = !p.acc || n > 0 || !!p.running || (p.doneCount !== undefined && p.adCount === 0); // 엑셀 벌크: 만들 광고가 없으면 잠금
   return (
     <div className="sticky bottom-0 z-30 -mx-6 -mb-6 border-t border-[#EAECF0] bg-white/95 shadow-[0_-4px_16px_-8px_rgba(16,24,40,0.12)] backdrop-blur 2xl:-mx-8">
       <div className="mx-auto flex w-full max-w-[1600px] flex-wrap items-center gap-x-4 gap-y-2 px-6 py-3 2xl:px-8">
