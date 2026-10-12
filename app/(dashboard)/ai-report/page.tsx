@@ -249,7 +249,7 @@ export default function AiReportPage() {
       aiComment: body || null,
     });
     setSaving(false);
-    setSaveMsg(error ? "저장에 실패했어요." : "저장했어요. 파일 분석 메뉴의 목록에서 볼 수 있어요.");
+    setSaveMsg(error ? "저장에 실패했어요." : "저장했어요. 리포트 파일 분석 메뉴의 목록에서 볼 수 있어요.");
   }
 
   const summary = data ? metaRowsToSummary(data.campaigns) : null;

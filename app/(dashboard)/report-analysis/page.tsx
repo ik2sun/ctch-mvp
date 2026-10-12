@@ -226,7 +226,7 @@ export default function ReportAnalysisPage() {
   return (
     <div className="mx-auto w-full max-w-[1600px] space-y-6">
       <div>
-        <p className="text-[15px] text-ink-muted">파일 분석 · CSV·엑셀 리포트</p>
+        <p className="text-[15px] text-ink-muted">리포트 파일 분석 · CSV·엑셀 리포트</p>
         <h2 className="mt-1 text-[26px] font-bold tracking-tight text-[#1A1A1A]">{selected ? `${selected.name} 리포트 분석` : "리포트 파일 분석"}</h2>
       </div>
       {/* 업로드 */}

@@ -5,9 +5,10 @@ export type SendEmailInput = {
   to: string | string[];
   subject: string;
   html: string;
+  attachments?: { filename: string; content: string }[]; // content = base64
 };
 
-export async function sendEmail({ to, subject, html }: SendEmailInput): Promise<void> {
+export async function sendEmail({ to, subject, html, attachments }: SendEmailInput): Promise<void> {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) throw new Error("RESEND_API_KEY가 설정되지 않았어요.");
 
@@ -24,6 +25,7 @@ export async function sendEmail({ to, subject, html }: SendEmailInput): Promise<
       to: Array.isArray(to) ? to : [to],
       subject,
       html,
+      ...(attachments?.length ? { attachments } : {}),
     }),
   });
 

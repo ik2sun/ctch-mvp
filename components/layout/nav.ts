@@ -19,7 +19,8 @@ export const NAV: NavItem[] = [
     accent: "#1baf7a",
     children: [
       { href: "/ai-report", label: "실시간 리포트", icon: "plug-connected", desc: "매체 API 연동으로 실시간 성과 분석" },
-      { href: "/report-analysis", label: "파일 분석", icon: "file-analytics", desc: "리포트 파일 업로드 후 지표·AI 코멘트" },
+      { href: "/report-analysis", label: "리포트 파일 분석", icon: "file-analytics", desc: "리포트 파일 업로드 후 지표·AI 코멘트" },
+      { href: "/auto-report", label: "자동 리포트", icon: "mail-forward", desc: "광고주별 리포트 양식을 학습해 정해진 날 자동 생성·메일 발송" },
       { href: "/creative-analysis", label: "소재 분석", icon: "photo-search", desc: "소재 이미지·소재명·타겟 세팅 통합 분석" },
     ],
   },
