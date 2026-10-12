@@ -655,11 +655,18 @@ export function MetaBulk({ clientId }: { clientId: string }) {
   const fixCount = prepared.filter((p) => !done.has(p.key) && (p.problems.length || failed.has(rowSig(p)))).length;
   const fixButtons = sheetBuf && (fixCount > 0 || done.size > 0) && (
     <span className="flex flex-wrap gap-2">
-      <button type="button" onClick={downloadMarked} disabled={markBusy} className={BTN}>
-        <i className={`ti ${markBusy ? "ti-loader-2 animate-spin" : "ti-file-alert"} text-[16px]`} aria-hidden />
+      <button
+        type="button"
+        onClick={downloadMarked}
+        disabled={markBusy}
+        className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border px-3 py-2 text-[14px] font-semibold disabled:opacity-50 ${
+          fixCount > 0 ? "border-[#FDA29B] bg-[#FEF3F2] text-[#B42318] hover:bg-[#FEE4E2]" : "border-[#ABEFC6] bg-[#ECFDF3] text-[#067647] hover:bg-[#DCFAE6]"
+        }`}
+      >
+        <i className={`ti ${markBusy ? "ti-loader-2 animate-spin" : fixCount > 0 ? "ti-file-alert" : "ti-file-check"} text-[16px]`} aria-hidden />
         {fixCount > 0 ? `수정할 부분 표시해 내려받기 (${fixCount}행)` : "실행 결과 표시해 내려받기"}
       </button>
-      <label className={`${BTN} cursor-pointer`}>
+      <label className={`${BTN_PRIMARY} cursor-pointer`}>
         <i className="ti ti-file-upload text-[16px]" aria-hidden />
         수정 후 다시 올리기
         <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={(e) => onSheet(e.target.files?.[0]).then(() => (e.target.value = ""))} />
@@ -842,7 +849,6 @@ export function MetaBulk({ clientId }: { clientId: string }) {
               {errorRows > 0 && <span className="text-bad"> · 확인 필요 {errorRows}행</span>}
             </p>
           )}
-          {fixButtons && <div className="mt-2">{fixButtons}</div>}
           {sheetErr && <p className="mt-2 text-[14px] text-bad">{sheetErr}</p>}
         </div>
 
