@@ -24,6 +24,8 @@ import {
   SET_HEADERS,
   SET_SAMPLES,
   SET_SHEET,
+  STATUS_HEADER,
+  FIX_HEADER,
   SET_WIDTHS,
   adSetToRow,
   audienceRows,
@@ -47,6 +49,8 @@ import {
   OPTIMIZATION,
   SUPPORTED_OBJECTIVES,
   copyOf,
+  landingUrlProblem,
+  pairCtaProblem,
   type AdDraft,
   type AdSetDraft,
   type Defaults,
@@ -91,7 +95,8 @@ export function MetaBulk({ clientId }: { clientId: string }) {
     const base: Defaults = { pageId: "", igId: "", pixelId: "", copy: { ...EMPTY_COPY, cta: "LEARN_MORE" }, urlTags: DEFAULT_URL_TAGS, useUtm: false, turnOn: false, aiEnhance: false };
     try {
       const s = JSON.parse(localStorage.getItem(LS_KEY(clientId)) ?? "null") as Partial<Defaults> | null;
-      if (s) return { ...base, ...s, copy: { ...base.copy, ...s.copy }, turnOn: false };
+      // 공통 문구는 매번 빈칸으로 시작(버튼만 '더 알아보기') — 지난 문구가 엑셀 빈 칸에 섞여 들어가지 않게
+      if (s) return { ...base, ...s, copy: base.copy, turnOn: false };
     } catch {
       /* 저장값 없음 */
     }
@@ -100,11 +105,12 @@ export function MetaBulk({ clientId }: { clientId: string }) {
   useEffect(() => {
     try {
       const prev = JSON.parse(localStorage.getItem(LS_KEY(clientId)) ?? "{}");
-      localStorage.setItem(LS_KEY(clientId), JSON.stringify({ ...prev, copy: defaults.copy, urlTags: defaults.urlTags, useUtm: defaults.useUtm, aiEnhance: defaults.aiEnhance }));
+      delete prev.copy;
+      localStorage.setItem(LS_KEY(clientId), JSON.stringify({ ...prev, urlTags: defaults.urlTags, useUtm: defaults.useUtm, aiEnhance: defaults.aiEnhance }));
     } catch {
       /* 저장 못 해도 동작 */
     }
-  }, [clientId, defaults.copy, defaults.urlTags, defaults.useUtm, defaults.aiEnhance]);
+  }, [clientId, defaults.urlTags, defaults.useUtm, defaults.aiEnhance]);
   const [newBudget, setNewBudget] = useState<number | null>(50000); // 새 세트 기본 일 예산(시트에 행·예산이 없을 때)
 
   const loadAccount = useCallback(
@@ -192,12 +198,17 @@ export function MetaBulk({ clientId }: { clientId: string }) {
 
   // ── ② 엑셀 ──
   const [fileName, setFileName] = useState("");
+  const [sheetBuf, setSheetBuf] = useState<ArrayBuffer | null>(null); // 올린 엑셀 원본 — '수정할 부분 표시' 내려받기용
   const [rows, setRows] = useState<AdRow[]>([]);
   const [specs, setSpecs] = useState<SetSpec[]>([]);
   const [sheetErr, setSheetErr] = useState<string | null>(null);
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
-  const [done, setDone] = useState<Set<string>>(new Set());
+  // 만든 광고(캠페인|세트|광고 이름) · 실패한 행(세트|광고 이름 → 사유) — 엑셀을 다시 올려도 유지해 중복 생성을 막고 실패 사유를 이어서 보여 준다
+  const [made, setMade] = useState<Set<string>>(new Set());
+  const [failed, setFailed] = useState<Map<string, string>>(new Map());
   const [templBusy, setTemplBusy] = useState(false);
+  // 소재 파일이 바뀌면 템플릿 버튼을 잠깐 반짝여 '템플릿이 파일에 맞춰 바뀜'을 알린다
+  const [templFlash, setTemplFlash] = useState(false);
 
   async function downloadTemplate() {
     setTemplBusy(true);
@@ -220,7 +231,8 @@ export function MetaBulk({ clientId }: { clientId: string }) {
         ? adsFromMedia(files).map((a) => {
             const f = a.feed ? media.get(a.feed)?.name ?? "" : "";
             const v = a.vertical ? media.get(a.vertical)?.name ?? "" : "";
-            return ["", guessSet, a.name, f || v, f ? v : "", ...blank];
+            // 캠페인 칸 = 고른 캠페인(여러 개면 쉼표로 — 비운 것과 같은 뜻이지만 어디로 가는지 보이게, 필요 없는 캠페인은 지우면 됨)
+            return [pickedCampaigns.map(labelOf).join(", "), guessSet, a.name, f || v, f ? v : "", ...blank];
           })
         : pickedCampaigns.length
           ? pickedCampaigns.flatMap((c) => (fresh[c.id].length ? fresh[c.id].map((s) => [labelOf(c), s.name, "", "", "", ...blank]) : [[labelOf(c), "", "", "", "", ...blank]]))
@@ -265,7 +277,8 @@ export function MetaBulk({ clientId }: { clientId: string }) {
     setResult(null);
     setLog([]);
     try {
-      const wb = XLSX.read(await file.arrayBuffer());
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf);
       const sheetOf = (name: string) => wb.Sheets[name] && XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[name], { header: 1, defval: "", raw: true });
       // 시트 이름이 바뀌었어도 머리글로 찾는다
       const adName = wb.SheetNames.find((n) => n === AD_SHEET) ?? wb.SheetNames.find((n) => n !== SET_SHEET && n !== GUIDE_SHEET && n !== AUDIENCE_SHEET);
@@ -275,8 +288,8 @@ export function MetaBulk({ clientId }: { clientId: string }) {
       setRows(p.rows);
       setSpecs(wb.Sheets[SET_SHEET] ? parseSetSheet(sheetOf(SET_SHEET)) : []);
       setExcluded(new Set());
-      setDone(new Set());
       setFileName(file.name);
+      setSheetBuf(buf);
     } catch (e) {
       setSheetErr((e as Error).message);
     }
@@ -284,6 +297,12 @@ export function MetaBulk({ clientId }: { clientId: string }) {
 
   // ── ② 소재 파일 ──
   const [media, setMedia] = useState<Map<string, LocalMedia>>(new Map());
+  useEffect(() => {
+    if (!media.size) return;
+    setTemplFlash(true);
+    const t = setTimeout(() => setTemplFlash(false), 2500);
+    return () => clearTimeout(t);
+  }, [media.size]);
   const [loadingFiles, setLoadingFiles] = useState<string | null>(null);
   const [fileErr, setFileErr] = useState<string[]>([]);
   const [driveUrl, setDriveUrl] = useState("");
@@ -378,7 +397,7 @@ export function MetaBulk({ clientId }: { clientId: string }) {
       const min = acc?.minDailyBudget ?? 1000;
       if (spec?.copyFrom) {
         const src = findSource(campaign, spec.copyFrom);
-        if (!src) problems.push(`복사할 세트 '${spec.copyFrom}'를 선택한 캠페인에서 못 찾음`);
+        if (!src) problems.push(`설정 복사 원본 세트 '${spec.copyFrom}'를 선택한 캠페인에서 못 찾음('원본 세트 ID' 칸 — 비우면 행 값으로 새로)`);
         const g = src ? src.genders.filter((x) => x === 1 || x === 2) : [];
         const draft = {
           mode: "copy" as const,
@@ -399,7 +418,7 @@ export function MetaBulk({ clientId }: { clientId: string }) {
         };
         if (!cbo && spec.budget && spec.budget < min) problems.push(`일 예산 ${min.toLocaleString("ko-KR")}원 이상`);
         // 메타 제약(2026-10-09 르무통 실검증): 기여 설정은 생성 뒤 변경 불가 · Advantage+ 타겟 세트는 최소 연령 25세 이하 · 종료된 원본은 새 종료일 필요
-        if (src && spec.attribution && spec.attribution !== src.attribution) problems.push(`복사 세트는 기여 설정을 바꿀 수 없어요(메타 제한, 원본 ${ATTRIBUTIONS.find((a) => a.key === src.attribution)?.label ?? "?"}) — 칸을 비우거나 '복사할 세트'를 비워 새로 만드세요`);
+        if (src && spec.attribution && spec.attribution !== src.attribution) problems.push(`복사 세트는 기여 설정을 바꿀 수 없어요(메타 제한, 원본 ${ATTRIBUTIONS.find((a) => a.key === src.attribution)?.label ?? "?"}) — 칸을 비우거나 '원본 세트 ID'를 비워 새로 만드세요`);
         if (src?.advantageAudience && draft.ageMin > 25) problems.push("원본이 Advantage+ 타겟이라 최소 연령은 25세 이하만 돼요");
         if (src?.advantageAudience && draft.ageMax < 65) problems.push("원본이 Advantage+ 타겟이라 최대 연령은 65+만 돼요");
         if (src?.endTime && new Date(src.endTime).getTime() < Date.now() && !spec.endDate) problems.push("원본 세트가 이미 종료됐어요 — 종료일(필요하면 시작일도)을 새로 적으세요");
@@ -453,13 +472,20 @@ export function MetaBulk({ clientId }: { clientId: string }) {
         for (const x of t) problems.push(...x.set.problems.map((p) => (t.length > 1 ? `${x.campaign.name}: ${p}` : p)));
         const copy = copyOf({ key, name: "", feed: null, vertical: null, copy: { message: r.message, headline: r.headline, description: r.description, cta: r.cta, url: r.url } }, defaults.copy);
         if (!/^https?:\/\/\S+\.\S+/.test(copy.url)) problems.push("랜딩 URL 없음(행 또는 공통)");
+        else if (landingUrlProblem(copy.url)) problems.push(landingUrlProblem(copy.url)!);
         if (!copy.message.trim()) problems.push("기본 문구 없음(행 또는 공통)");
+        for (const c of targets) {
+          const ctaErr = pairCtaProblem(copy.cta || "LEARN_MORE", !!(m.feed && m.vertical), c.objective);
+          if (ctaErr) problems.push(targets.length > 1 ? `${c.name}: ${ctaErr}` : ctaErr);
+        }
         const name = (r.name || m.name || "").slice(0, 400);
         return { key, row: r, name, feed: m.feed ? media.get(m.feed) ?? null : null, vertical: m.vertical ? media.get(m.vertical) ?? null : null, targets: t, problems: [...new Set(problems)], notes: m.notes };
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [rows, files, media, picked, campaigns, planSet, defaults.copy],
   );
+  const done = useMemo(() => new Set(prepared.filter((p) => p.targets.length > 0 && p.targets.every((t) => made.has(madeSig(t.campaign.id, p)))).map((p) => p.key)), [prepared, made]);
+  const failedRows = prepared.filter((p) => !done.has(p.key) && failed.has(rowSig(p)));
   const runnable = prepared.filter((p) => !p.problems.length && !excluded.has(p.key) && !done.has(p.key));
   const usedFiles = new Set(prepared.flatMap((p) => [p.feed?.id, p.vertical?.id]));
   const unused = files.filter((f) => !usedFiles.has(f.id));
@@ -473,7 +499,14 @@ export function MetaBulk({ clientId }: { clientId: string }) {
   if (!picked.length) globalProblems.push({ where: "① 캠페인", text: "캠페인을 고르세요", target: "bulk-campaigns" });
   if (setsLoading) globalProblems.push({ where: "① 캠페인", text: "광고세트 목록을 불러오는 중" });
   if (!rows.length) globalProblems.push({ where: "② 엑셀", text: "엑셀을 올리세요", target: "bulk-files" });
-  else if (!runnable.length) globalProblems.push({ where: "③ 매칭", text: "실행할 행이 없어요 — 빨간 행을 고치거나 체크하세요", target: "bulk-preview" });
+  else if (!runnable.length)
+    globalProblems.push(
+      done.size && done.size === prepared.length
+        ? { where: "③ 매칭", text: "모두 만들었어요 — 새 엑셀을 올리면 이어서 만들어요", target: "bulk-preview" }
+        : failedRows.length
+          ? { where: "③ 매칭", text: `실패 ${failedRows.length}행 — 원인을 고쳐 엑셀을 다시 올리거나, 그 행을 체크해 다시 실행`, target: "bulk-preview" }
+          : { where: "③ 매칭", text: "실행할 행이 없어요 — 빨간 행을 고치거나 체크하세요", target: "bulk-preview" },
+    );
 
   // ── 실행 ──
   const [running, setRunning] = useState<"validate" | "run" | null>(null);
@@ -506,7 +539,9 @@ export function MetaBulk({ clientId }: { clientId: string }) {
     setResult(null);
     const lines: LogLine[] = [];
     const total: MetaRunResult = { validateOnly, campaignId: null, adSets: [], creatives: [], ads: [], errors: [], warnings: [], activated: false };
-    const madeKeys = new Set<string>();
+    const madeNow: string[] = [];
+    const failedNow = new Map<string, string>();
+    const okRows: string[] = [];
     try {
       for (const [i, x] of byCampaign.entries()) {
         const head: LogLine = { kind: "info", text: `── 캠페인 ${i + 1}/${byCampaign.length} · ${x.c.name}` };
@@ -555,13 +590,28 @@ export function MetaBulk({ clientId }: { clientId: string }) {
         total.warnings.push(...r.warnings);
         total.activated = total.activated || r.activated;
         if (!validateOnly) {
-          // 광고가 하나라도 만들어진 행은 완료(다시 실행 때 중복 생성 방지)
-          for (const a of r.ads) madeKeys.add(a.key);
+          // 광고가 만들어진 행 = 완료(다시 실행 때 중복 생성 방지), 안 만들어진 행 = 실패(사유는 그 광고 이름이 든 오류)
+          const madeKeys = new Set(r.ads.map((a) => a.key));
+          for (const p of x.rows) {
+            if (madeKeys.has(p.key)) {
+              madeNow.push(madeSig(x.c.id, p));
+              okRows.push(rowSig(p));
+            } else failedNow.set(rowSig(p), r.errors.find((e) => e.includes(p.name)) ?? r.errors[0] ?? "광고가 만들어지지 않았어요");
+          }
         }
       }
       setResult(total);
       if (!validateOnly) {
-        setDone((d) => new Set([...d, ...madeKeys]));
+        setMade((d) => new Set([...d, ...madeNow]));
+        setFailed((f) => {
+          const n = new Map(f);
+          for (const k of okRows) n.delete(k);
+          for (const [k, v] of failedNow) n.set(k, v);
+          return n;
+        });
+        // 실패한 행은 체크를 풀어 둔다 — 고친 뒤 체크하면 다시 실행
+        const failedKeys = byCampaign.flatMap((x) => x.rows).filter((p) => failedNow.has(rowSig(p))).map((p) => p.key);
+        setExcluded((e) => new Set([...e, ...failedKeys]));
         // 새로 만든 세트가 '기존'으로 보이게 세트 목록 새로
         setSets((m) => {
           const n = { ...m };
@@ -573,6 +623,102 @@ export function MetaBulk({ clientId }: { clientId: string }) {
       setRunning(null);
     }
   }
+
+  // 올린 엑셀에 행마다 'CTCH 상태'·'수정할 부분'을 덧붙여 내려받기(원본 서식 유지, 고칠 행은 빨간 배경)
+  const [markBusy, setMarkBusy] = useState(false);
+  async function downloadMarked() {
+    if (!sheetBuf || markBusy) return;
+    setMarkBusy(true);
+    try {
+      const ExcelJS = (await import("exceljs")).default;
+      const wb = new ExcelJS.Workbook();
+      await wb.xlsx.load(sheetBuf.slice(0));
+      const text = (v: unknown) => String(v ?? "").trim();
+      const RED = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFEE2E2" } } as const;
+      const GREEN = { type: "pattern", pattern: "solid", fgColor: { argb: "FFDCFCE7" } } as const;
+      // 머리글 행을 찾아 상태·수정 열을 맨 뒤에 붙인다(이미 있으면 그 열을 다시 씀)
+      const mark = (ws: import("exceljs").Worksheet, isHeader: (vals: string[]) => boolean, items: { row: number; status: string; fix: string; tone: "bad" | "ok" | "" }[]) => {
+        let hr = 0;
+        ws.eachRow((row, n) => {
+          if (!hr && isHeader((row.values as unknown[]).map(text))) hr = n;
+        });
+        if (!hr) return false;
+        const header = ws.getRow(hr);
+        let sc = 0;
+        let fc = 0;
+        let last = 0;
+        header.eachCell((c, col) => {
+          const v = text(c.value);
+          if (v === STATUS_HEADER) sc = col;
+          else if (v === FIX_HEADER) fc = col;
+          else if (v) last = Math.max(last, col);
+        });
+        if (!sc) sc = Math.max(last, fc) + 1;
+        if (!fc) fc = Math.max(last, sc) + 1;
+        for (const [c, v] of [[sc, STATUS_HEADER], [fc, FIX_HEADER]] as const) {
+          const cellH = header.getCell(c);
+          cellH.value = v;
+          cellH.font = { bold: true, color: { argb: "FFB42318" } };
+        }
+        ws.getColumn(sc).width = 14;
+        ws.getColumn(fc).width = 70;
+        for (let n = hr + 1; n <= ws.rowCount; n++) {
+          const r = ws.getRow(n);
+          r.getCell(sc).value = null;
+          r.getCell(fc).value = null;
+        }
+        const width = Math.max(sc, fc);
+        for (const it of items) {
+          const r = ws.getRow(it.row);
+          r.getCell(sc).value = it.status;
+          const f = r.getCell(fc);
+          f.value = it.fix || null;
+          f.alignment = { wrapText: true, vertical: "top" };
+          if (it.tone === "bad") {
+            for (let c = 1; c <= width; c++) r.getCell(c).fill = RED;
+            f.font = { color: { argb: "FFB42318" } };
+            r.getCell(sc).font = { bold: true, color: { argb: "FFB42318" } };
+          } else if (it.tone === "ok") r.getCell(sc).fill = GREEN;
+        }
+        return true;
+      };
+      const adWs = wb.getWorksheet(AD_SHEET) ?? wb.worksheets.find((w) => ![SET_SHEET, GUIDE_SHEET, AUDIENCE_SHEET].includes(w.name));
+      if (!adWs || !mark(adWs, (v) => v.includes("광고세트") && v.includes("소재 파일"), prepared.map((p) => {
+        if (done.has(p.key)) return { row: p.row.sheetRow, status: "완료", fix: "이미 만듦 — 다시 올리면 건너뜀", tone: "ok" as const };
+        if (p.problems.length) return { row: p.row.sheetRow, status: "수정 필요", fix: p.problems.join("\n"), tone: "bad" as const };
+        if (failed.has(rowSig(p))) return { row: p.row.sheetRow, status: "실패", fix: `${failed.get(rowSig(p))}\n→ 고친 뒤 다시 올리면 다시 실행`, tone: "bad" as const };
+        if (excluded.has(p.key)) return { row: p.row.sheetRow, status: "제외", fix: "화면에서 체크 해제한 행", tone: "" as const };
+        return { row: p.row.sheetRow, status: "준비됨", fix: "", tone: "" as const };
+      })))
+        throw new Error(`'${AD_SHEET}' 시트 머리글을 못 찾았어요`);
+      const setWs = wb.getWorksheet(SET_SHEET);
+      if (setWs) mark(setWs, (v) => v.includes("광고세트"), specs.filter((s) => s.errors.length).map((s) => ({ row: s.sheetRow, status: "수정 필요", fix: s.errors.join("\n"), tone: "bad" as const })));
+      const blob = new Blob([await wb.xlsx.writeBuffer()], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `${fileName.replace(/\.(xlsx|xls|csv)$/i, "").replace(/_수정표시$/, "")}_수정표시.xlsx`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    } catch (e) {
+      setSheetErr(`수정 표시 엑셀을 못 만들었어요 — ${(e as Error).message}`);
+    } finally {
+      setMarkBusy(false);
+    }
+  }
+  const fixCount = prepared.filter((p) => !done.has(p.key) && (p.problems.length || failed.has(rowSig(p)))).length;
+  const fixButtons = sheetBuf && fixCount > 0 && (
+    <span className="flex flex-wrap gap-2">
+      <button type="button" onClick={downloadMarked} disabled={markBusy} className={BTN}>
+        <i className={`ti ${markBusy ? "ti-loader-2 animate-spin" : "ti-file-alert"} text-[16px]`} aria-hidden />
+        수정할 부분 표시해 내려받기
+      </button>
+      <label className={`${BTN} cursor-pointer`}>
+        <i className="ti ti-file-upload text-[16px]" aria-hidden />
+        수정 후 다시 올리기
+        <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={(e) => onSheet(e.target.files?.[0]).then(() => (e.target.value = ""))} />
+      </label>
+    </span>
+  );
 
   useEffect(() => {
     if (!rows.length && !media.size) return;
@@ -698,9 +844,25 @@ export function MetaBulk({ clientId }: { clientId: string }) {
             <span className="text-[13px] text-ink-muted">시트 2장 — 광고 · 광고세트</span>
           </div>
           <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={downloadTemplate} disabled={templBusy} className={BTN}>
-              <i className={`ti ${templBusy ? "ti-loader-2 animate-spin" : "ti-download"} text-[16px]`} aria-hidden />
-              템플릿 내려받기{media.size ? " (파일로 광고 행 채움)" : pickedCampaigns.length ? " (기존 세트 채움)" : ""}
+            <button
+              type="button"
+              onClick={downloadTemplate}
+              disabled={templBusy}
+              className={
+                media.size
+                  ? `inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border-2 border-[#eb6834] bg-[#FFF4EE] px-3 py-1.5 text-[14px] font-semibold text-[#C2410C] transition hover:bg-[#FFE9DD] disabled:opacity-50 ${templFlash ? "animate-pulse ring-4 ring-[#eb6834]/30" : ""}`
+                  : BTN
+              }
+            >
+              <i className={`ti ${templBusy ? "ti-loader-2 animate-spin" : media.size ? "ti-table-down" : "ti-download"} text-[16px]`} aria-hidden />
+              템플릿 내려받기
+              {media.size ? (
+                <span className="rounded-full bg-[#eb6834] px-2 py-0.5 text-[12px] font-semibold text-white">소재 {media.size}개 반영</span>
+              ) : pickedCampaigns.length ? (
+                " (기존 세트 채움)"
+              ) : (
+                ""
+              )}
             </button>
             <label className={`${BTN_PRIMARY} cursor-pointer`}>
               <i className="ti ti-file-spreadsheet text-[16px]" aria-hidden />
@@ -708,12 +870,21 @@ export function MetaBulk({ clientId }: { clientId: string }) {
               <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={(e) => onSheet(e.target.files?.[0]).then(() => (e.target.value = ""))} />
             </label>
           </div>
+          {media.size > 0 && (
+            <p className="mt-2 flex items-start gap-1.5 rounded-lg bg-[#FFF4EE] px-3 py-2 text-[13px] leading-snug text-[#9A3412]">
+              <i className="ti ti-circle-check mt-px text-[15px] text-[#eb6834]" aria-hidden />
+              <span>
+                불러온 소재 파일 <b>{media.size}개</b>로 템플릿이 바뀌었어요 — 내려받으면 광고 1개 = 1행으로 소재 파일·세로 파일·광고 이름이 채워져요.
+                {fileName && " 이미 올린 엑셀은 그대로라, 파일 기준 행이 필요하면 템플릿을 다시 받으세요."}
+              </span>
+            </p>
+          )}
           <ul className="mt-3 space-y-1 text-[13px] leading-relaxed text-ink-muted">
             <li>
               · <b className="text-ink-soft">소재 파일</b> 칸에 짝 이름 하나(<span className="font-mono">fall_01</span>)만 적으면 <span className="font-mono">fall_01_feed.jpg</span> + <span className="font-mono">fall_01_story.jpg</span>를 찾아 피드 + 스토리·릴스 한 광고로 묶어요
             </li>
             <li>
-              · <b className="text-ink-soft">광고세트</b> 시트의 기존 세트 행을 복사해 이름만 바꾸면 그 세트의 타겟·최적화를 그대로 복사한 새 세트가 돼요
+              · <b className="text-ink-soft">광고세트</b> 시트는 이름 칸 하나 — 이미 있는 세트면 광고만 추가, 없으면 새로 만들어요. 기존 세트 행을 복사해 이름만 바꾸면 그 세트 설정을 그대로 복사해요
             </li>
             <li>· 문구·URL 빈 칸은 아래 공통 문구로 채워요. 엑셀·파일은 화면 어디에 끌어 놓아도 돼요</li>
           </ul>
@@ -723,6 +894,7 @@ export function MetaBulk({ clientId }: { clientId: string }) {
               {errorRows > 0 && <span className="text-bad"> · 확인 필요 {errorRows}행</span>}
             </p>
           )}
+          {fixButtons && <div className="mt-2">{fixButtons}</div>}
           {sheetErr && <p className="mt-2 text-[14px] text-bad">{sheetErr}</p>}
         </div>
 
@@ -817,6 +989,7 @@ export function MetaBulk({ clientId }: { clientId: string }) {
               {done.size > 0 && <span className="text-good"> · 완료 {done.size}</span>}
             </span>
           )}
+          {fixButtons && <div className="basis-full">{fixButtons}</div>}
         </div>
         {!prepared.length ? (
           <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-line py-10 text-center">
@@ -913,6 +1086,12 @@ export function MetaBulk({ clientId }: { clientId: string }) {
                       <td className="max-w-[300px] py-2">
                         {isDone ? (
                           <span className="whitespace-nowrap rounded-full bg-[#ECFDF3] px-2 py-0.5 text-[12px] font-semibold text-[#067647]">완료</span>
+                        ) : failed.has(rowSig(p)) && !bad ? (
+                          <>
+                            <span className="whitespace-nowrap rounded-full bg-[#FEF2F2] px-2 py-0.5 text-[12px] font-semibold text-bad">지난 실행 실패</span>
+                            <p className="mt-1 text-[12px] leading-snug text-bad">{failed.get(rowSig(p))}</p>
+                            <p className="mt-0.5 text-[12px] text-ink-muted">{off ? "고친 뒤 체크하면 다시 실행해요" : "다시 실행 대상이에요"}</p>
+                          </>
                         ) : bad ? (
                           p.problems.map((x) => (
                             <p key={x} className="text-[12px] leading-snug text-bad">
@@ -946,6 +1125,8 @@ export function MetaBulk({ clientId }: { clientId: string }) {
         adSetCount={setKeys.size}
         creativeCount={runnable.length}
         adCount={adCount}
+        doneCount={done.size}
+        failedCount={failedRows.length}
         problems={globalProblems}
         onJump={(t) => document.getElementById(`meta-${t}`)?.scrollIntoView({ behavior: "smooth", block: "start" })}
         running={running}
@@ -957,6 +1138,10 @@ export function MetaBulk({ clientId }: { clientId: string }) {
     </div>
   );
 }
+
+// 만든 광고·실패 행 식별 — 엑셀을 다시 올려도 같은 행이면 같은 값
+const rowSig = (p: Prepared) => `${p.row.adSet.trim()}|${p.name}`;
+const madeSig = (campaignId: string, p: Prepared) => `${campaignId}|${rowSig(p)}`;
 
 function Step({ n }: { n: number }) {
   return <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-[#FFF1EA] text-[13px] font-bold text-[#eb6834]">{n}</span>;

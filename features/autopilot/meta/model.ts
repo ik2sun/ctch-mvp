@@ -434,7 +434,7 @@ export function creativeBody(opts: {
     return body;
   }
   // 게재 위치 맞춤 — 르무통 실소재와 같은 모양: 규칙마다 소재·문구·제목·랜딩 URL 라벨을 모두 연결한다
-  // (랜딩 URL 라벨이 빠지면 영상 소재에서 2446433 '행동 유도 링크의 공유 유형이 잘못됨'으로 거절 — 2026-10-09 실제 오류)
+  // (2446433 '행동 유도 링크의 공유 유형이 잘못됨'의 실제 원인은 랜딩 URL이 인스타 게시물 주소였던 것 — landingUrlProblem)
   const f = opts.feed!;
   const v = opts.vertical!;
   const isVideo = f.kind === "video";
@@ -457,7 +457,8 @@ export function creativeBody(opts: {
     ...(copy.description ? { descriptions: [{ text: copy.description }] } : {}),
     link_urls: [{ website_url: link, adlabels: L("link") }],
     call_to_action_types: [cta === "NO_BUTTON" ? "LEARN_MORE" : cta],
-    ad_formats: [isVideo ? "SINGLE_VIDEO" : "SINGLE_IMAGE"],
+    // 영상 짝은 AUTOMATIC_FORMAT(르무통 실소재와 동일, 2026-10-12 실제 생성 확인). 이미지 짝은 SINGLE_IMAGE로 실제 생성 성공
+    ad_formats: [isVideo ? "AUTOMATIC_FORMAT" : "SINGLE_IMAGE"],
     optimization_type: "PLACEMENT",
     asset_customization_rules: [
       rule("v", { age_min: 13, age_max: 65, publisher_platforms: ["facebook", "instagram"], ...VERTICAL_POSITIONS }, 1),
@@ -473,6 +474,21 @@ export const AI_FEATURES = ["image_brightness_and_contrast", "image_templates", 
 // ── 점검 ─────────────────────────────────────────────
 export type Problem = { where: string; text: string; target?: string };
 const isUrl = (u: string) => /^https?:\/\/[^\s]+\.[^\s]+/.test(u.trim());
+// 버튼(행동 유도) 링크는 외부 사이트만 — 인스타·페이스북 게시물 주소는 메타가 2446433으로 거절(2026-10-12 실제 오류: instagram.com/p/…)
+const META_HOSTS = /^(?:[a-z0-9-]+\.)*(?:instagram\.com|facebook\.com|fb\.com|fb\.me|instagr\.am|threads\.net|threads\.com)$/i;
+// 피드+세로 짝(asset_feed_spec = 메타 '다이내믹 크리에이티브') × 판매 목표는 BUY_NOW 버튼을 거절(1885396, 2026-10-12 르무통 ad validate_only로 확인 — SHOP_NOW·LEARN_MORE는 통과)
+export function pairCtaProblem(cta: string, isPair: boolean, objective: string | null | undefined): string | null {
+  if (isPair && objective === "OUTCOME_SALES" && cta === "BUY_NOW") return "피드+세로 짝 광고는 판매 캠페인에서 '구매하기(BUY_NOW)' 버튼을 쓸 수 없어요(메타 제한) — '지금 구매하기'나 '더 알아보기'로";
+  return null;
+}
+export function landingUrlProblem(u: string): string | null {
+  try {
+    if (META_HOSTS.test(new URL(u.trim()).hostname)) return "랜딩 URL에 인스타그램·페이스북 주소는 쓸 수 없어요(메타가 버튼 링크로 거절) — 자사몰 등 외부 사이트 주소로";
+  } catch {
+    /* 형식 오류는 isUrl 점검이 처리 */
+  }
+  return null;
+}
 
 export function problemsOf(opts: {
   campaign: CampaignDraft;
@@ -518,11 +534,14 @@ export function problemsOf(opts: {
     const cp = copyOf(ad, d.copy);
     if (!ad.name.trim()) p.push({ where: w, text: "광고 이름이 비었어요", target: ad.key });
     if (!isUrl(cp.url)) p.push({ where: w, text: "랜딩 URL(https://…)이 필요해요", target: ad.key });
+    else if (landingUrlProblem(cp.url)) p.push({ where: w, text: landingUrlProblem(cp.url)!, target: ad.key });
     if (!cp.message.trim()) p.push({ where: w, text: "기본 문구가 비었어요", target: ad.key });
     const f = ad.feed ? opts.media.get(ad.feed) : null;
     const v = ad.vertical ? opts.media.get(ad.vertical) : null;
     if (!f && !v) p.push({ where: w, text: "소재 파일이 없어요", target: ad.key });
     if (f && v && f.kind !== v.kind) p.push({ where: w, text: "피드·세로 소재는 둘 다 이미지거나 둘 다 영상이어야 해요", target: ad.key });
+    const ctaErr = pairCtaProblem(cp.cta || "LEARN_MORE", !!(f && v), objective);
+    if (ctaErr) p.push({ where: w, text: ctaErr, target: ad.key });
     if (!opts.adSets.some((a) => a.ads.includes(ad.key))) p.push({ where: w, text: "어느 광고세트에도 연결되지 않았어요", target: ad.key });
   }
   return p;

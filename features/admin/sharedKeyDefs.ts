@@ -32,8 +32,8 @@ export const SHARED_DEFS: SharedChannelDef[] = [
     live: true,
     steps: [
       "비즈니스 설정 → 사용자 → 시스템 사용자(예: nextmediagroup-bot)",
-      "자산 추가 → 광고 계정: 관리하는 광고주 계정에 권한 부여",
-      "새 토큰 생성 → 만료 '사용 안 함', 권한 ads_read(+read_insights) → 토큰 복사",
+      "자산 할당 → 광고 계정(조회) + 페이지·인스타 계정(광고 생성 — 자동 세팅에 필요)",
+      "토큰 생성 → 앱 NMG-CTCH(라이브) · 만료 '사용 안 함' · 권한 ads_management, ads_read, business_management, pages_read_engagement, pages_show_list → 토큰 복사(다른 관리자 승인 후 생성됨)",
     ],
   },
   {

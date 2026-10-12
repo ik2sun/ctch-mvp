@@ -94,7 +94,7 @@ export async function runMeta(opts: {
       if (s.error) throw new Error(`메타 영상 처리 실패 — ${s.error}`);
       if (s.status === "ready") break;
       if (Date.now() - t0 > 6 * 60_000) throw new Error("메타 영상 처리가 6분 넘게 끝나지 않았어요 — 잠시 뒤 다시 실행하면 이어서 진행해요");
-      await sleep(4000);
+      await sleep(10_000); // 4초 → 10초: 개발 등급 앱은 광고계정 호출 한도(#17)가 낮아 상태 확인 호출을 줄인다(2026-10-12)
     }
     const thumbHash = await thumbP;
     opts.cache.videos.set(m.id, { videoId, thumbHash });
@@ -184,13 +184,16 @@ export async function runMeta(opts: {
         continue;
       }
       const action = s.mode === "copy" ? "copyAdSet" : "createAdSet";
-      const r = await postMeta<{ id: string | null; warning?: string }>({ action, clientId, validateOnly: vo, campaignId, adSet: s, pixelId: d.pixelId });
+      const r = await postMeta<{ id: string | null; warning?: string; reused?: boolean }>({ action, clientId, validateOnly: vo, campaignId, adSet: s, pixelId: d.pixelId });
       if (r.warning) {
         out.warnings.push(`${s.name}: ${r.warning}`);
         push({ kind: "err", text: `${s.name}: ${r.warning}` });
       }
       if (vo) push({ kind: "ok", text: `광고세트 검증 통과 ${s.name}${s.mode === "copy" ? " (복사는 실행 때 확인)" : ""}` });
-      else if (r.id) {
+      else if (r.id && r.reused) {
+        out.adSets.push({ key: s.key, id: r.id, name: s.name, mode: "existing" });
+        push({ kind: "info", text: `광고세트 ${s.name}: 같은 이름 세트가 이미 있어 새로 만들지 않고 그 세트에 광고만 추가` });
+      } else if (r.id) {
         out.adSets.push({ key: s.key, id: r.id, name: s.name, mode: s.mode });
         push({ kind: "ok", text: `광고세트 ${s.mode === "copy" ? "복사" : "생성"} ${s.name} (꺼 둠)` });
       }

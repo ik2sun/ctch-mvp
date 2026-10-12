@@ -2,8 +2,9 @@
 // 메타 대량 편집(엑셀 200여 열, 타겟을 JSON으로 다시 입력)보다 단순하게 시트 2장:
 //  · '광고' 한 행 = 광고 하나. '소재 파일'에 짝 이름 하나(fall_01)만 적으면 fall_01_feed.jpg + fall_01_story.jpg 를 찾아 피드 + 스토리·릴스 한 광고로
 //    (파일명을 그대로 적어도 되고, 세로 칸을 비우면 같은 짝 이름의 9:16 파일을 자동으로 붙인다). 문구 빈 칸 = 화면 공통 문구
-//  · '광고세트'(선택) 기존 세트가 설정과 함께 미리 채워진다. 행을 복사해 이름만 바꾸면 '복사할 세트'(원래 이름)의 타겟·최적화·입찰·게재 위치를 그대로 복사한 새 세트,
-//    '복사할 세트'를 비우면 이 행의 성별·연령·예산·최적화·게재 위치로 새로 만든다. 이미 있는 이름이면 그 세트에 광고만 추가(설정 안 바꿈)
+//  · '광고세트'(선택) 이름 칸은 '광고세트' 하나(2026-10-12 사용자 요청 — '복사할 세트'·'새 광고세트' 열 없앰, 예전 템플릿도 읽음).
+//    이름이 캠페인에 이미 있으면 그 세트에 광고만 추가(설정 안 바꿈), 없으면 새로 만든다. 새로 만들 때 '원본 세트 ID' 칸에 ID가 있으면
+//    그 세트 설정(타겟·최적화·입찰·게재 위치·기여)을 복사(/copies) — 미리 채운 기존 세트 행을 복사해 이름만 바꾸면 복사가 된다. ID 칸을 비우면 행 값으로 새로
 // 열 '캠페인'(선택): 비우면 화면에서 고른 캠페인 전부, 이름·ID를 적으면 그 캠페인만(쉼표로 여러 개)
 // 열 구성은 2026-10-09 르무통 실세팅(세트 64·켜진 광고 195) 분석으로 정함 — 실제로 값이 달라지는 옵션만 열로:
 //  세트: 성별·연령(25-65가 55개)·일 예산·기간·최적화·기여 설정(판매 7일 클릭+1일 조회+1일 참여 조회 / 트래픽·인지 1일 클릭)·포함·제외 맞춤 타겟(15개 세트 사용)·게재 위치 묶음·Advantage+ 타겟
@@ -13,13 +14,17 @@ import { ATTRIBUTIONS, CTAS, OPTIMIZATION, PLACEMENT_MODES, isVertical, pairKey,
 
 export const AD_SHEET = "광고";
 export const SET_SHEET = "광고세트";
+// '수정할 부분 표시' 내려받기가 덧붙이는 열 — 다시 올릴 때 상태가 '완료'인 행은 건너뛴다(이미 만든 광고 중복 방지)
+export const STATUS_HEADER = "CTCH 상태";
+export const FIX_HEADER = "수정할 부분";
 export const GUIDE_SHEET = "작성 안내";
 export const AUDIENCE_SHEET = "맞춤 타겟 목록";
 
 export const AD_HEADERS = ["캠페인", "광고세트", "광고 이름", "소재 파일", "세로 소재 파일(9:16)", "기본 문구", "제목", "설명", "버튼", "랜딩 URL", "상품 확장"] as const;
 export const AD_WIDTHS = [26, 30, 30, 34, 30, 50, 28, 22, 14, 44, 10];
-export const SET_HEADERS = ["캠페인", "광고세트", "복사할 세트", "성별", "연령", "일 예산", "시작일", "종료일", "최적화", "기여 설정", "포함 타겟", "제외 타겟", "게재 위치", "Advantage+ 타겟", "참고: 상태·ID(수정 불필요)"] as const;
-export const SET_WIDTHS = [26, 34, 34, 8, 10, 12, 12, 12, 16, 28, 34, 26, 18, 14, 34];
+export const SET_HEADERS = ["캠페인", "광고세트", "성별", "연령", "일 예산", "시작일", "종료일", "최적화", "기여 설정", "포함 타겟", "제외 타겟", "게재 위치", "Advantage+ 타겟", "원본 세트 ID(설정 복사 기준)"] as const;
+const SET_REF_HEADERS = ["원본 세트 ID(설정 복사 기준)", "참고: 상태·ID(수정 불필요)"]; // 예전 이름도 읽음
+export const SET_WIDTHS = [26, 34, 8, 10, 12, 12, 12, 16, 28, 34, 26, 18, 14, 34];
 
 export const AD_SAMPLES: string[][] = [
   ["", "1009_f2544", "", "fall_01", "", "천천히 걸을수록 깊어지는 가을\n걸을 땐 편안한 르무통", "단풍놀이 갈 땐 편안한 르무통", "가을 혜택 확인하기", "더 알아보기", "https://example.com/event/fall", "켬"],
@@ -27,8 +32,8 @@ export const AD_SAMPLES: string[][] = [
   ["", "1009_aall", "", "fall_03.jpg", "", "", "", "", "지금 구매하기", "https://example.com/products/3", ""],
 ];
 export const SET_SAMPLES: string[][] = [
-  ["", "1009_f2544", "", "여", "25-44", "50000", "", "", "구매 전환", "", "", "자사몰 구매_14일", "FB·IG 전체", "끔", ""],
-  ["", "1009_aall", "", "전체", "25-65", "5만", "2026-10-20", "2026-10-31", "구매 전환", "7일 클릭·1일 조회", "유사 타겟 (5%) - 자사몰 결제시작_60일", "", "Advantage+ 게재 위치", "끔", ""],
+  ["", "1009_f2544", "여", "25-44", "50000", "", "", "구매 전환", "", "", "자사몰 구매_14일", "FB·IG 전체", "끔", ""],
+  ["", "1009_aall", "전체", "25-65", "5만", "2026-10-20", "2026-10-31", "구매 전환", "7일 클릭·1일 조회", "유사 타겟 (5%) - 자사몰 결제시작_60일", "", "Advantage+ 게재 위치", "끔", ""],
 ];
 
 const OPT_ALL = [...new Map(Object.values(OPTIMIZATION).flat().map((o) => [o.label, o])).values()];
@@ -40,18 +45,19 @@ export const AD_GUIDE: string[][] = [
   ["소재 파일", "필수. ① 파일명(확장자 생략 가능) 또는 ② 짝 이름 하나 — fall_01 이라고만 적으면 fall_01_feed.jpg(피드 1:1·4:5)와 fall_01_story.jpg(9:16)를 찾아 한 광고로 묶는다. 피드엔 피드 소재, 스토리·릴스엔 세로 소재가 나간다(게재 위치 맞춤). 파일명을 적고 세로 칸을 비워도 같은 짝 이름의 9:16 파일이 있으면 자동으로 붙는다. 짝 이름에서 빼는 표시: feed·story·reels·sq·45·916·1x1·4x5·9x16·1080x1920·피드·스토리·릴스 등"],
   ["세로 소재 파일(9:16)", "선택. 자동 짝 대신 세로 파일을 직접 지정할 때. 'X'를 적으면 자동 짝을 끈다(피드 소재 하나로 모든 지면)"],
   ["기본 문구 / 제목 / 설명", "선택. 비우면 화면의 공통 문구. 기본 문구는 피드 위 본문(125자 안쪽이 잘리지 않음), 제목 40자 안쪽 권장, 설명은 일부 지면만. 셀 안 줄바꿈(Alt+Enter) 그대로 들어간다"],
-  ["버튼", `선택. 비우면 공통(기본 더 알아보기). ${CTAS.map((c) => c.label).join(" · ")} — 또는 SHOP_NOW 같은 코드`],
-  ["랜딩 URL", "필수(빈 칸이면 공통 URL). https로 시작. UTM은 URL에 직접 넣거나(르무통 방식 utm_source=meta&utm_medium=display|video&utm_campaign=pm…&utm_content=infeed_…), 화면 'UTM 자동'을 켜면 utm_이 없는 URL에 메타가 붙인다({형식} = 이미지 display·영상 video)"],
+  ["버튼", `선택. 비우면 공통(기본 더 알아보기). ${CTAS.map((c) => c.label).join(" · ")} — 또는 SHOP_NOW 같은 코드. 판매 캠페인의 피드+세로 짝 광고는 '구매하기(BUY_NOW)'를 메타가 거절 → '지금 구매하기'나 '더 알아보기'`],
+  ["랜딩 URL", "필수(빈 칸이면 공통 URL). https로 시작. 인스타그램·페이스북 게시물 주소는 메타가 거절(외부 사이트만). UTM은 URL에 직접 넣거나(르무통 방식 utm_source=meta&utm_medium=display|video&utm_campaign=pm…&utm_content=infeed_…), 화면 'UTM 자동'을 켜면 utm_이 없는 URL에 메타가 붙인다({형식} = 이미지 display·영상 video)"],
   ["상품 확장", "선택. 켬 / 끔(기본 끔). 켜면 메타가 카탈로그 상품을 광고 아래에 함께 보여 준다(Advantage+ 크리에이티브 '상품 확장'). 다른 AI 보정(밝기·템플릿·문구 바꾸기 등)은 화면 'AI 보정' 하나로"],
   ["이미지 · 영상", "JPG·PNG·WEBP·GIF·MP4·MOV. 영상은 200MB까지, 메타 처리(수십 초~수 분)가 끝난 뒤 광고가 만들어진다"],
 ];
 export const SET_GUIDE: string[][] = [
   ["항목", "설명 — 시트 '광고세트' (선택, 새로 만들 세트만 적으면 된다)"],
-  ["미리 채운 행", "선택한 캠페인의 기존 광고세트와 설정이 들어 있다(참고용 — 기존 세트 설정은 바꾸지 않는다)"],
-  ["설정 복사(추천)", "기존 세트 행을 복사해 '광고세트' 이름만 바꾸면 '복사할 세트'(원래 세트)의 관심사·맞춤 타겟·최적화·입찰·게재 위치·기여 설정을 그대로 복사한 새 세트가 된다. 이 행의 성별·연령·일 예산·시작일·종료일은 바꾼 값이 반영되고, 최적화·게재 위치·Advantage+ 칸은 복사에서는 무시(원본 그대로)"],
-  ["새로 만들기", "'복사할 세트'를 비우면 이 행 값으로 새로 만든다 — 지역 대한민국, 최저 비용 입찰, 노출당 과금"],
+  ["광고세트", "세트 이름 하나로 정한다 — 캠페인에 이미 있는 이름이면 그 세트에 광고만 추가(기존 설정은 안 바꿈), 없는 이름이면 새로 만든다. '광고' 시트의 광고세트 칸에도 같은 이름"],
+  ["미리 채운 행", "선택한 캠페인의 기존 광고세트와 설정(참고용). 그대로 두면 아무것도 바꾸지 않는다"],
+  ["설정 복사(추천)", "기존 세트 행을 복사해 '광고세트' 이름만 새 이름으로 바꾸면, 맨 끝 '원본 세트 ID'의 세트 설정(관심사·맞춤 타겟·최적화·입찰·게재 위치·기여 설정)을 그대로 복사한 새 세트가 된다. 이 행의 성별·연령·일 예산·시작일·종료일은 바꾼 값이 반영되고, 최적화·게재 위치·Advantage+ 칸은 복사에서는 무시(원본 그대로)"],
+  ["새로 만들기", "'원본 세트 ID'를 비운 행은 이 행 값으로 새로 만든다 — 지역 대한민국, 최저 비용 입찰, 노출당 과금"],
   ["캠페인", "선택. 비우면 '광고' 시트에서 이 세트를 쓰는 모든 캠페인에 같은 설정. 캠페인마다 다르게 하려면 캠페인 이름·ID를 적은 행을 따로"],
-  ["복사할 세트", "기존 세트 이름 또는 ID. 같은 캠페인 세트를 먼저 찾고, 없으면 선택한 다른 캠페인의 세트(목표가 같아야 메타가 받음)"],
+  ["원본 세트 ID", "설정을 복사할 기존 세트 ID(미리 채운 행에 들어 있음, 직접 적어도 됨). 선택한 캠페인들의 세트에서 찾는다(목표가 같아야 메타가 받음)"],
   ["성별", "전체 / 여 / 남 (여성·남성·F·M 가능)"],
   ["연령", "25-44, 25~65, 65+ 처럼. 13~65(65 = 65세 이상)"],
   ["일 예산", "원. 50000, 5만, 5만원, 50,000 모두 가능. 캠페인 예산(CBO) 캠페인이면 무시. 복사에서 비우면 원본 예산"],
@@ -111,8 +117,10 @@ export function parseAdSheet(matrix: unknown[][]): { rows: AdRow[]; error?: stri
   if (hi < 0) return { rows: [], error: `'${AD_SHEET}' 시트에서 머리글(광고세트·소재 파일)을 찾지 못했어요. 템플릿을 내려받아 쓰세요.` };
   const col = columns(matrix[hi], AD_HEADERS);
   const get = (r: unknown[], k: string) => (col[k] >= 0 ? cell(r[col[k]]) : "");
+  const statusCol = matrix[hi].findIndex((c) => cell(c) === STATUS_HEADER);
   const rows: AdRow[] = [];
   matrix.slice(hi + 1).forEach((r, i) => {
+    if (statusCol >= 0 && cell(r[statusCol]).startsWith("완료")) return; // 이미 만든 행
     const feedCell = get(r, "소재 파일");
     const verticalCell = get(r, "세로 소재 파일(9:16)");
     const content = [feedCell, verticalCell, get(r, "기본 문구"), get(r, "제목"), get(r, "랜딩 URL")].some(Boolean);
@@ -263,14 +271,20 @@ export function optimizationIndex(objective: string, v: string): number {
 }
 
 export function parseSetSheet(matrix: unknown[][]): SetSpec[] {
-  const hi = matrix.findIndex((r) => r.some((c) => cell(c) === "광고세트") && r.some((c) => cell(c) === "복사할 세트"));
+  const hi = matrix.findIndex((r) => r.some((c) => cell(c) === "광고세트") && r.some((c) => ["성별", "복사할 세트", "새 광고세트"].includes(cell(c))));
   if (hi < 0) return [];
-  const col = columns(matrix[hi], SET_HEADERS);
+  const col = columns(matrix[hi], [...SET_HEADERS, ...SET_REF_HEADERS, "복사할 세트", "새 광고세트"]);
+  const refCol = SET_REF_HEADERS.map((h) => col[h]).find((i) => i >= 0) ?? -1;
   const raw = (r: unknown[], k: string) => (col[k] >= 0 ? r[col[k]] : "");
   const get = (r: unknown[], k: string) => cell(raw(r, k));
   const out: SetSpec[] = [];
   matrix.slice(hi + 1).forEach((r, i) => {
-    const name = get(r, "광고세트");
+    // 이름 = '광고세트'. 원본 = '원본 세트 ID' 칸의 ID(예전 '… · ID 123' 형식도) — 이름이 캠페인에 이미 있으면 화면이 원본을 무시하고 광고만 추가
+    // 예전 템플릿: '복사할 세트'(광고세트 = 만들 이름) / '새 광고세트'(광고세트 = 원본)
+    const fresh = col["새 광고세트"] >= 0 ? get(r, "새 광고세트") : "";
+    const name = fresh || get(r, "광고세트");
+    const refId = refCol >= 0 ? (cell(r[refCol]).match(/(?:ID\s*)?(\d{6,})/)?.[1] ?? "") : "";
+    const copyFrom = col["복사할 세트"] >= 0 ? get(r, "복사할 세트") : fresh ? get(r, "광고세트") : refId;
     if (!name) return;
     const errors: string[] = [];
     const g = parseGender(get(r, "성별"));
@@ -293,7 +307,7 @@ export function parseSetSheet(matrix: unknown[][]): SetSpec[] {
       sheetRow: hi + i + 2,
       campaign: get(r, "캠페인"),
       name,
-      copyFrom: get(r, "복사할 세트"),
+      copyFrom,
       gender: g ?? null,
       ageMin: age?.min ?? null,
       ageMax: age?.max ?? null,
@@ -312,13 +326,12 @@ export function parseSetSheet(matrix: unknown[][]): SetSpec[] {
   return out;
 }
 
-// 기존 세트 → '광고세트' 시트 행(참고·복사용). 복사할 세트 칸에 자기 이름 — 행을 복사해 이름만 바꾸면 이 세트 복사
+// 기존 세트 → '광고세트' 시트 행(참고·복사용). 맨 끝 '원본 세트 ID'에 자기 ID — 행을 복사해 이름만 바꾸면 이 세트 복사
 const OPT_LABEL = (goal: string, event: string | null) => Object.values(OPTIMIZATION).flat().find((o) => o.goal === goal && (o.event ?? null) === (event ?? null))?.label ?? (event ? `${goal}(${event})` : goal);
 export function adSetToRow(campaignLabel: string, s: MetaAdSetLite): string[] {
   const g = s.genders.filter((x) => x === 1 || x === 2);
   return [
     campaignLabel,
-    s.name,
     s.name,
     g.length === 1 ? (g[0] === 1 ? "남" : "여") : "전체",
     s.ageMin != null ? `${s.ageMin}-${s.ageMax ?? 65}` : "",
@@ -331,7 +344,7 @@ export function adSetToRow(campaignLabel: string, s: MetaAdSetLite): string[] {
     s.excludeAudiences.map((a) => a.name).join(", "),
     s.placements,
     s.advantageAudience ? "켬" : "끔",
-    `${{ ACTIVE: "켜짐", PAUSED: "꺼짐", CAMPAIGN_PAUSED: "캠페인 꺼짐" }[s.status] ?? s.status} · ID ${s.id}`,
+    `${s.id} (${{ ACTIVE: "켜짐", PAUSED: "꺼짐", CAMPAIGN_PAUSED: "캠페인 꺼짐" }[s.status] ?? s.status})`,
   ];
 }
 

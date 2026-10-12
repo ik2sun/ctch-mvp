@@ -16,7 +16,8 @@ export async function GET(req: Request) {
   if (!client) return NextResponse.json({ error: "광고주를 찾을 수 없어요." }, { status: 403 });
   const { data, error } = await createAdminClient()
     .from("autopilot_actions")
-    .select("id, media, ad_account_no, campaign_no, kind, summary, detail, created_by, created_at")
+    // campaign_no는 bigint — 메타 ID(18자리)는 JSON 숫자로 받으면 끝자리가 깨져 문자열로 받는다
+    .select("id, media, ad_account_no, campaign_no:campaign_no::text, kind, summary, detail, created_by, created_at")
     .eq("client_id", clientId)
     .order("created_at", { ascending: false })
     .limit(50);

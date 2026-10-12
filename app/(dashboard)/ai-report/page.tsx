@@ -21,10 +21,11 @@ import { DailyRoasChart, DailySpendChart } from "@/features/dashboard/DailyMedia
 import { InsightPanel } from "@/features/dashboard/InsightPanel";
 import { Card, MediaChip, Segmented } from "@/features/dashboard/ui";
 
+// 브라우저 현지 날짜(한국 시간) — toISOString은 UTC라 오전 9시 전엔 하루 밀린다
 function daysAgo(n: number): string {
   const d = new Date();
   d.setDate(d.getDate() - n);
-  return d.toISOString().slice(0, 10);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 type TabKey = "campaign" | "adset" | "ad" | "ai";
@@ -36,11 +37,13 @@ const TABS: { key: TabKey; label: string; icon: string }[] = [
   { key: "ai", label: "AI 분석", icon: "ti-sparkles" },
 ];
 
+// from·to = 오늘에서 며칠 전(0 = 오늘). 실시간 리포트라 기본은 당일
 const PRESETS = [
-  { key: "7", label: "7일", days: 7 },
-  { key: "14", label: "14일", days: 14 },
-  { key: "30", label: "30일", days: 30 },
+  { key: "today", label: "당일", from: 0, to: 0 },
+  { key: "yesterday", label: "어제", from: 1, to: 1 },
+  { key: "7", label: "7일", from: 7, to: 1 },
 ] as const;
+type PresetKey = (typeof PRESETS)[number]["key"];
 
 function shortDate(s?: string) {
   if (!s) return "";
@@ -61,8 +64,8 @@ const CHANNELS: { key: Channel; label: string; icon: string; sheetName: string; 
 export default function AiReportPage() {
   const { selected } = useClients();
 
-  const [since, setSince] = useState(daysAgo(7));
-  const [until, setUntil] = useState(daysAgo(1));
+  const [since, setSince] = useState(daysAgo(0));
+  const [until, setUntil] = useState(daysAgo(0));
   const [data, setData] = useState<MetaHierarchy | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -156,7 +159,7 @@ export default function AiReportPage() {
     [selected],
   );
 
-  // 진입/채널 전환 시 최근 7일 자동 로드
+  // 진입/채널 전환 시 현재 기간(기본 당일) 자동 로드
   useEffect(() => {
     if (canFetch) fetchData(since, until, channel);
     else setData(null);
@@ -253,7 +256,7 @@ export default function AiReportPage() {
   const chColor = MEDIA_COLORS[channel];
   const compareShort = compareBase === "prev" ? "직전 기간" : "전월 동기간";
   const compareLabel = `${compareShort} 대비`;
-  const preset = PRESETS.find((p) => since === daysAgo(p.days) && until === daysAgo(1))?.key ?? null;
+  const preset = PRESETS.find((p) => since === daysAgo(p.from) && until === daysAgo(p.to))?.key ?? null;
   const periodText = data?.period ? `${shortDate(data.period.since)} ~ ${shortDate(data.period.until)}` : "";
 
   // 매체 단위 시리즈(비교 기간 포함) + 캠페인 단위 시리즈(상위 8 + 기타)
@@ -282,11 +285,13 @@ export default function AiReportPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, compareBase, channel]);
 
-  const pickPreset = (days: number) => {
-    const s = daysAgo(days);
+  const pickPreset = (key: PresetKey) => {
+    const p = PRESETS.find((x) => x.key === key)!;
+    const s = daysAgo(p.from);
+    const u = daysAgo(p.to);
     setSince(s);
-    setUntil(daysAgo(1));
-    fetchData(s, daysAgo(1), channel);
+    setUntil(u);
+    fetchData(s, u, channel);
   };
 
   return (
@@ -316,7 +321,7 @@ export default function AiReportPage() {
               className="field h-[34px] w-auto px-2.5 text-[15px]"
               aria-label="종료일"
             />
-            <Segmented value={preset} options={PRESETS.map((p) => ({ key: p.key, label: p.label }))} onChange={(k) => pickPreset(PRESETS.find((p) => p.key === k)!.days)} />
+            <Segmented value={preset} options={PRESETS.map((p) => ({ key: p.key, label: p.label }))} onChange={pickPreset} />
             <button
               type="button"
               onClick={() => fetchData(since, until, channel, true)}

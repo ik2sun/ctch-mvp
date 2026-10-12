@@ -13,6 +13,8 @@ export function RunBar(p: {
   adSetCount: number;
   creativeCount: number;
   adCount: number;
+  doneCount?: number; // 엑셀 벌크: 이미 만든 행
+  failedCount?: number; // 엑셀 벌크: 지난 실행에서 실패한 행
   problems: Problem[];
   onJump: (target: string) => void;
   running: "validate" | "run" | null;
@@ -32,6 +34,8 @@ export function RunBar(p: {
           <span className="mx-2 text-ink-faint">›</span>세트 <b className="tabular-nums text-ink">{p.adSetCount}</b>
           <span className="mx-1.5 text-ink-faint">×</span>소재 <b className="tabular-nums text-ink">{p.creativeCount}</b>
           <span className="mx-1.5 text-ink-faint">=</span>광고 <b className="tabular-nums text-[#C2410C]">{p.adCount}</b>개
+          {!!p.doneCount && <span className="ml-2 whitespace-nowrap text-good">· 완료 {p.doneCount}행</span>}
+          {!!p.failedCount && <span className="ml-1.5 whitespace-nowrap text-bad">· 실패 {p.failedCount}행</span>}
         </p>
 
         <div className="relative">
@@ -78,7 +82,13 @@ export function RunBar(p: {
           </button>
           <button type="button" onClick={p.onRun} disabled={blocked} className="flex items-center gap-1.5 whitespace-nowrap rounded-lg bg-[#eb6834] px-4 py-2 text-[14px] font-semibold text-white hover:bg-[#d95926] disabled:opacity-40">
             <i className={`ti ${p.running === "run" ? "ti-loader-2 animate-spin" : "ti-rocket"} text-[16px]`} aria-hidden />
-            {p.running === "run" ? "만드는 중…" : `광고 ${p.adCount}개 만들기`}
+            {p.running === "run"
+              ? "만드는 중…"
+              : p.adCount > 0
+                ? `광고 ${p.adCount}개 만들기`
+                : p.doneCount && !p.failedCount
+                  ? "모두 완료"
+                  : "만들 광고 없음"}
           </button>
         </div>
       </div>

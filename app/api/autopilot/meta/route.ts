@@ -93,6 +93,12 @@ export async function POST(req: Request) {
         const bad = audIds.filter((id) => !own.has(String(id)));
         if (bad.length) return NextResponse.json({ error: `이 광고계정의 맞춤 타겟이 아니에요(${bad.join(", ")})` }, { status: 400 });
       }
+      // 같은 이름 세트가 캠페인에 이미 있으면 새로 만들지 않고 그 세트를 쓴다(화면 목록이 늦게 갱신돼 같은 이름 세트가 두 번 생긴 일 — 2026-10-12)
+      if (!validateOnly) {
+        dropCache(`${act}:adsets:${camp.id}`);
+        const dup = (await listAdSets(act, camp.id, token, acc.offset)).find((s) => s.name.trim() === String(a.name).trim());
+        if (dup) return NextResponse.json({ id: dup.id, reused: true });
+      }
       if (action === "createAdSet") {
         const pixelId = String(body.pixelId ?? "");
         if (pixelId && !acc.pixels.some((p) => p.id === pixelId)) return NextResponse.json({ error: "이 광고계정의 픽셀이 아니에요." }, { status: 400 });

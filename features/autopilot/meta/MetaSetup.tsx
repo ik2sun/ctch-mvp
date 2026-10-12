@@ -18,7 +18,7 @@ import { RunBar, MetaRunLog } from "./RunBar";
 import { MetaBulk } from "./MetaBulk";
 
 const LS_KEY = (clientId: string) => `ctch_meta_setup_${clientId}`;
-type Saved = Pick<Defaults, "copy" | "urlTags" | "useUtm" | "aiEnhance">;
+type Saved = Pick<Defaults, "urlTags" | "useUtm" | "aiEnhance">;
 
 export function MetaSetup() {
   const { selected } = useClients();
@@ -81,7 +81,8 @@ function MetaQuickSetup({ clientId }: { clientId: string }) {
     const base: Defaults = { pageId: "", igId: "", pixelId: "", copy: { ...EMPTY_COPY, cta: "LEARN_MORE" }, urlTags: DEFAULT_URL_TAGS, useUtm: false, turnOn: false, aiEnhance: false };
     try {
       const s = JSON.parse(localStorage.getItem(LS_KEY(clientId)) ?? "null") as Saved | null;
-      if (s) return { ...base, ...s, copy: { ...base.copy, ...s.copy } };
+      // 공통 문구는 매번 빈칸으로 시작(버튼만 '더 알아보기')
+      if (s) return { ...base, ...s, copy: base.copy };
     } catch {
       /* 저장값 없음 */
     }
@@ -102,15 +103,15 @@ function MetaQuickSetup({ clientId }: { clientId: string }) {
   const cache = useRef(newCache());
   const [readErr, setReadErr] = useState<string[]>([]);
 
-  // 공통 문구·옵션은 광고주별로 기억(다음에 같은 광고주면 그대로)
+  // 옵션(UTM·AI 보정)만 광고주별로 기억 — 공통 문구는 기억하지 않음
   useEffect(() => {
     try {
-      const s: Saved = { copy: defaults.copy, urlTags: defaults.urlTags, useUtm: defaults.useUtm, aiEnhance: defaults.aiEnhance };
+      const s: Saved = { urlTags: defaults.urlTags, useUtm: defaults.useUtm, aiEnhance: defaults.aiEnhance };
       localStorage.setItem(LS_KEY(clientId), JSON.stringify(s));
     } catch {
       /* 저장 못 해도 동작 */
     }
-  }, [clientId, defaults.copy, defaults.urlTags, defaults.useUtm, defaults.aiEnhance]);
+  }, [clientId, defaults.urlTags, defaults.useUtm, defaults.aiEnhance]);
 
   const loadAccount = useCallback(
     async (fresh = false) => {
