@@ -3,10 +3,13 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { sendEmail } from "@/lib/email/resend";
 import { CLIENT_MEDIA_COLUMNS, fetchClientCampaigns } from "@/features/correlation/fetchClient";
 import { writeComments } from "./ai";
-import { computeReport } from "./compute";
+import { computeReport, earliestNeeded } from "./compute";
+import { buildNaverSections } from "./naverSections";
+import { fetchNaverDetail } from "@/lib/naver-ad/statReport";
+import { resolveNaverAdCredentials } from "@/lib/naver-ad/auth";
 import { kstToday, rangeLabel, reportPeriod } from "./period";
 import { fillVars, renderHtml, renderXlsx } from "./render";
-import { DEFAULT_SCHEDULE, type AutoReport, type ReportOptions, type ReportRun, type ReportSpec, type Schedule } from "./types";
+import { DEFAULT_SCHEDULE, NAVER_DETAIL_TYPES, type AutoReport, type ReportOptions, type ReportRun, type ReportSpec, type Schedule } from "./types";
 
 const MISSING = /Could not find the table|relation .* does not exist|column .* does not exist/i;
 export function migrationHint(e: { message?: string } | null | undefined): string | null {
@@ -123,10 +126,27 @@ export async function generate(report: AutoReport, today = kstToday()): Promise<
   if (error || !client) throw new Error("광고주 정보를 읽지 못했어요.");
   const clientName = String((client as Record<string, unknown>).name ?? "");
   const p = reportPeriod(report.schedule, today);
-  const since = p.prev && p.prev.since < p.cur.since ? p.prev.since : p.cur.since;
-  const res = await fetchClientCampaigns(admin, report.clientId, client as Record<string, unknown>, since, p.cur.until);
+  const secs = report.spec.sections;
+  const weeks = Math.max(0, ...secs.filter((s) => s.type === "weekly_table").map((s) => Math.min(12, Math.max(1, s.weeks ?? 4))));
+  const achievement = secs.some((s) => s.type === "achievement");
+  const since = earliestNeeded(p.cur, p.prev, { weeks, achievement });
+  const row = client as Record<string, unknown>;
+  const wantNaver = (secs.some((s) => NAVER_DETAIL_TYPES.includes(s.type)) || !!report.options.naverRaw) && !!row.naver_ad_customer_id && (!report.options.media.length || report.options.media.includes("naver"));
+  // 캠페인 일별(전 매체)과 네이버 상세 보고서를 동시에
+  const [res, naver] = await Promise.all([
+    fetchClientCampaigns(admin, report.clientId, row, since, p.cur.until),
+    wantNaver
+      ? (async () => {
+          const cr = await resolveNaverAdCredentials(row as never);
+          return buildNaverSections(cr, await fetchNaverDetail(cr, p.cur.since, p.cur.until), !!report.options.naverRaw);
+        })().catch((e: Error) => e)
+      : Promise.resolve(null),
+  ]);
   const warnings = res.media.filter((m) => m.error).map((m) => `${m.label}: ${m.error}`);
-  const data = computeReport(res.campaigns, p.cur, p.prev, report.options.media);
+  if (naver instanceof Error) warnings.push(`네이버 SA 상세(키워드·상품·기기): ${naver.message}`);
+  else if (naver?.missingDays.length) warnings.push(`네이버 SA 상세: ${naver.missingDays.join(", ")} 보고서를 받지 못해 빠졌어요`);
+  const data = computeReport(res.campaigns, p.cur, p.prev, report.options.media, { weeks, achievement });
+  if (naver && !(naver instanceof Error)) data.naver = naver;
   const compareLabel = p.prev ? rangeLabel(p.prev) : null;
   const texts = await writeComments({ spec: report.spec, data, clientName, periodLabel: p.label, compareLabel });
   const input = { spec: report.spec, data, clientName, periodLabel: p.label, compareLabel, texts };

@@ -65,6 +65,22 @@ function kpi(total: Row, metrics: MetricKey[], compare: boolean): string {
   return `<table cellpadding="0" cellspacing="0" style="border-collapse:collapse;width:100%"><tr>${cells}</tr></table>`;
 }
 
+function achievementHtml(d: ReportData, metrics: MetricKey[]): string {
+  const a = d.achievement;
+  if (!a) return "";
+  const md = (s: string) => `${Number(s.slice(5, 7))}/${Number(s.slice(8, 10))}`;
+  const th = (t: string, left = false) => `<th style="padding:8px 10px;border-bottom:2px solid ${INK};font-size:12px;color:${MUTED};text-align:${left ? "left" : "right"};white-space:nowrap">${esc(t)}</th>`;
+  const rows = metrics
+    .map((k) => {
+      const c = a.cur[k];
+      const p = a.prev[k];
+      const rate = c != null && p ? `${Math.round((c / p) * 1000) / 10}%` : "—";
+      return `<tr><td style="padding:8px 10px;border-bottom:1px solid ${LINE}">${METRICS[k].label}</td><td style="padding:8px 10px;border-bottom:1px solid ${LINE};text-align:right">${fmt(k, c)}</td><td style="padding:8px 10px;border-bottom:1px solid ${LINE};text-align:right">${fmt(k, p)}</td><td style="padding:8px 10px;border-bottom:1px solid ${LINE};text-align:right;font-weight:700">${rate}</td></tr>`;
+    })
+    .join("");
+  return `<table cellpadding="0" cellspacing="0" style="border-collapse:collapse;width:100%;font-size:13px;color:${INK}"><tr>${th("지표", true)}${th(`이번 달 ${md(a.curRange.since)}~${md(a.curRange.until)}`)}${th(`지난달 ${md(a.prevRange.since)}~${md(a.prevRange.until)}`)}${th("달성률")}</tr>${rows}</table>`;
+}
+
 export type RenderInput = {
   spec: ReportSpec;
   data: ReportData;
@@ -74,8 +90,33 @@ export type RenderInput = {
   texts: Record<string, string>; // insights 섹션 id → AI가 쓴 글
 };
 
+const topRows = (rows: Row[], s: ReportSection): Row[] => {
+  const by = s.sortBy ?? "cost";
+  return [...rows].sort((a, b) => (b.cur[by] ?? -Infinity) - (a.cur[by] ?? -Infinity)).slice(0, Math.max(1, Math.min(50, s.limit ?? 10)));
+};
+// 표 섹션의 첫 열 이름
+export const FIRST_COL: Partial<Record<ReportSection["type"], string>> = {
+  media_table: "매체",
+  campaign_table: "캠페인",
+  daily_table: "날짜",
+  type_table: "유형",
+  weekly_table: "주차",
+  naver_device: "기기",
+  naver_keyword_top: "키워드",
+  naver_product_top: "상품",
+};
+export function sectionNote(s: ReportSection, d: ReportData): string | null {
+  if ((s.type === "naver_device" || s.type === "naver_keyword_top" || s.type === "naver_product_top") && !d.naver) return "네이버 SA가 연동되지 않았거나 상세 보고서를 받지 못했어요.";
+  return null;
+}
+
 export function sectionRows(s: ReportSection, d: ReportData): Row[] {
   if (s.type === "media_table") return [...d.byMedia, d.total];
+  if (s.type === "type_table") return [...d.byType, d.total];
+  if (s.type === "weekly_table") return d.weekly;
+  if (s.type === "naver_device") return d.naver?.device ?? [];
+  if (s.type === "naver_keyword_top") return d.naver ? topRows(d.naver.keywords[s.device ?? "all"], s) : [];
+  if (s.type === "naver_product_top") return d.naver ? topRows(d.naver.products[s.device ?? "all"], s) : [];
   if (s.type === "campaign_table") {
     const by = s.sortBy ?? "cost";
     const sorted = [...d.byCampaign].sort((a, b) => (b.cur[by] ?? -Infinity) - (a.cur[by] ?? -Infinity));
@@ -94,11 +135,15 @@ export function renderHtml(i: RenderInput): string {
   for (const s of i.spec.sections) {
     const title = `<h2 style="font-size:16px;color:${INK};margin:28px 0 10px;padding-bottom:6px;border-bottom:1px solid ${LINE}">${esc(s.title)}</h2>`;
     const metrics = s.metrics.length ? s.metrics : (["cost", "conversions", "roas"] as MetricKey[]);
-    if (s.type === "kpi") parts.push(title + kpi(i.data.total, metrics, !!s.showCompare));
-    else if (s.type === "media_table") parts.push(title + table(sectionRows(s, i.data), metrics, !!s.showCompare, "매체"));
-    else if (s.type === "campaign_table") parts.push(title + table(sectionRows(s, i.data), metrics, !!s.showCompare, "캠페인"));
-    else if (s.type === "daily_table") parts.push(title + table(sectionRows(s, i.data), metrics, false, "날짜"));
-    else if (s.type === "insights") {
+    const note = sectionNote(s, i.data);
+    if (note) parts.push(title + `<p style="font-size:13px;color:${MUTED}">${esc(note)}</p>`);
+    else if (s.type === "kpi") parts.push(title + kpi(i.data.total, metrics, !!s.showCompare));
+    else if (s.type === "achievement") parts.push(title + achievementHtml(i.data, metrics));
+    else if (FIRST_COL[s.type]) {
+      const rows = sectionRows(s, i.data);
+      const cmp = s.type === "weekly_table" ? s.showCompare !== false : s.type !== "daily_table" && !!s.showCompare;
+      parts.push(title + (rows.length ? table(rows, metrics, cmp, FIRST_COL[s.type]!) : `<p style="font-size:13px;color:${MUTED}">이 기간 데이터가 없어요.</p>`));
+    } else if (s.type === "insights") {
       const t = i.texts[s.id] ?? "";
       parts.push(title + `<div style="font-size:14px;line-height:1.75;color:${INK}">${esc(t).replace(/\n/g, "<br>") || `<span style="color:${MUTED}">(코멘트 없음)</span>`}</div>`);
     } else if (s.type === "text") parts.push((s.title ? title : "") + `<p style="font-size:14px;line-height:1.7;color:${INK}">${esc(fillVars(s.note ?? "", vars)).replace(/\n/g, "<br>")}</p>`);
@@ -128,10 +173,18 @@ export function renderXlsx(i: RenderInput): Buffer {
         const c = change(i.data.total.cur[k], i.data.total.prev?.[k]);
         aoa.push([head(k), num(k, i.data.total.cur[k]), ...(i.data.total.prev ? [num(k, i.data.total.prev[k]), c == null ? "" : Math.round(c * 1000) / 10] : [])]);
       }
-    } else if (s.type === "media_table" || s.type === "campaign_table" || s.type === "daily_table") {
+    } else if (s.type === "achievement" && i.data.achievement) {
+      const a = i.data.achievement;
+      aoa = [["지표", `이번 달(${a.curRange.since}~${a.curRange.until})`, `지난달(${a.prevRange.since}~${a.prevRange.until})`, "달성률(%)"]];
+      for (const k of metrics) {
+        const c = a.cur[k];
+        const p = a.prev[k];
+        aoa.push([head(k), num(k, c), num(k, p), c != null && p ? Math.round((c / p) * 1000) / 10 : ""]);
+      }
+    } else if (FIRST_COL[s.type] && !sectionNote(s, i.data)) {
       const rows = sectionRows(s, i.data);
-      const first = s.type === "media_table" ? "매체" : s.type === "campaign_table" ? "캠페인" : "날짜";
-      const cmp = s.type !== "daily_table" && !!s.showCompare;
+      const first = FIRST_COL[s.type]!;
+      const cmp = s.type === "weekly_table" ? s.showCompare !== false : s.type !== "daily_table" && !!s.showCompare;
       aoa = [[first, ...(s.type === "campaign_table" ? ["매체"] : []), ...metrics.map(head), ...(cmp ? metrics.map((k) => `${METRICS[k].label} 증감(%)`) : [])]];
       for (const r of rows) {
         aoa.push([
@@ -147,6 +200,11 @@ export function renderXlsx(i: RenderInput): Buffer {
       ws["!cols"] = aoa[0].map((_, c) => ({ wch: c === 0 ? (s.type === "campaign_table" ? 40 : 14) : 14 }));
       XLSX.utils.book_append_sheet(wb, ws, sheetName(s.title));
     }
+  }
+  if (i.data.naver?.raw.length) {
+    const ws = XLSX.utils.aoa_to_sheet(i.data.naver.raw);
+    ws["!cols"] = [12, 12, 28, 28, 22, 36, 8, 10, 10, 12, 8, 12].map((wch) => ({ wch }));
+    XLSX.utils.book_append_sheet(wb, ws, sheetName("RD_네이버SA"));
   }
   const notes = i.spec.sections.filter((s) => s.type === "insights" && i.texts[s.id]);
   if (notes.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["항목", "내용"], ...notes.map((s) => [s.title, i.texts[s.id]])]), sheetName("코멘트"));

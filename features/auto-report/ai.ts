@@ -4,7 +4,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { MEDIA_LABEL } from "@/features/correlation/types";
 import { change, type ReportData } from "./compute";
 import { fmt } from "./render";
-import { COMPARES, FREQUENCIES, METRIC_KEYS, METRICS, PERIODS, SECTION_TYPES, type CompareKey, type Frequency, type MetricKey, type PeriodKey, type ReportSpec, type SectionType } from "./types";
+import { COMPARES, FREQUENCIES, METRIC_KEYS, METRICS, PERIODS, SECTION_TYPES, TOP_TYPES, type CompareKey, type Frequency, type MetricKey, type PeriodKey, type ReportSpec, type SectionType } from "./types";
 
 const MODEL = "claude-sonnet-5-5";
 
@@ -48,7 +48,7 @@ async function jsonCall<T>(opts: { system: string; content: Anthropic.Beta.BetaC
 const LEARN_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["name", "subject", "intro", "tone", "sections", "learnedFrom", "unsupported", "period", "compare", "frequency", "weekday", "monthDay"],
+  required: ["name", "subject", "intro", "tone", "sections", "learnedFrom", "unsupported", "period", "compare", "frequency", "weekday", "monthDay", "naverRaw"],
   properties: {
     name: { type: "string" },
     subject: { type: "string" },
@@ -61,12 +61,13 @@ const LEARN_SCHEMA = {
     frequency: { type: "string" },
     weekday: { type: "integer" },
     monthDay: { type: "integer" },
+    naverRaw: { type: "boolean" },
     sections: {
       type: "array",
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["type", "title", "metrics", "limit", "sortBy", "showCompare", "note"],
+        required: ["type", "title", "metrics", "limit", "sortBy", "showCompare", "note", "weeks", "device"],
         properties: {
           type: { type: "string" },
           title: { type: "string" },
@@ -75,6 +76,8 @@ const LEARN_SCHEMA = {
           sortBy: { type: "string" },
           showCompare: { type: "boolean" },
           note: { type: "string" },
+          weeks: { type: "integer" },
+          device: { type: "string" },
         },
       },
     },
@@ -93,11 +96,13 @@ type LearnRaw = {
   frequency: string;
   weekday: number;
   monthDay: number;
-  sections: { type: string; title: string; metrics: string[]; limit: number; sortBy: string; showCompare: boolean; note: string }[];
+  naverRaw: boolean;
+  sections: { type: string; title: string; metrics: string[]; limit: number; sortBy: string; showCompare: boolean; note: string; weeks: number; device: string }[];
 };
 
 export type LearnResult = {
   name: string;
+  naverRaw: boolean;
   spec: ReportSpec;
   schedule: { period: PeriodKey; compare: CompareKey; frequency: Frequency; weekday: number; monthDay: number };
 };
@@ -110,14 +115,15 @@ ${Object.entries(SECTION_TYPES)
   .join("\n")}
 
 쓸 수 있는 지표(metrics, 키 그대로): ${METRIC_KEYS.map((k) => `${k}(${METRICS[k].label})`).join(", ")}
-데이터는 메타·네이버 SA·GFA·카카오모먼트·구글 Ads의 캠페인 단위 일별 광고비·노출·클릭·전환·매출뿐이다. 광고그룹·소재·키워드·GA4 유입·자사몰 매출·경쟁사 동향 같은 것은 만들 수 없다.
+데이터: 메타·네이버 SA·GFA·카카오모먼트·구글 Ads의 캠페인 단위 일별 광고비·노출·클릭·전환·매출 + 네이버 SA만 키워드·쇼핑 상품(소재)·기기(PC/모바일) 단위 기간 합계와 일별 원본. 그 밖의 매체의 광고그룹·소재·키워드, GA4 유입, 자사몰 매출, 경쟁사 동향, 목표 대비 달성률(목표값)은 만들 수 없다.
 
 규칙:
 - 원본의 순서·제목·말투를 최대한 그대로 따른다. 섹션 제목은 원본에서 쓰던 이름을 쓴다.
-- 원본의 표가 매체별이면 media_table, 캠페인별이면 campaign_table, 날짜별이면 daily_table, 상단 요약 숫자는 kpi로 옮긴다. 원본 열 순서대로 metrics를 고른다(원본 열 이름이 달라도 뜻이 같으면 매핑: 집행금액·소진액=cost, 전환수·구매=conversions, 전환매출·구매액=revenue, ROAS·광고수익률=roas 등).
+- 원본의 표가 매체별이면 media_table, 캠페인별이면 campaign_table, 날짜별이면 daily_table, 상단 요약 숫자는 kpi로 옮긴다. '매체별'이라고 적혀 있어도 행이 쇼핑검색·파워링크·브랜드검색처럼 캠페인 유형이면 type_table이다. 주 단위 행(주차별)은 weekly_table(weeks = 원본 주 수, 모르면 4), '전월 대비 달성율'처럼 이번 달 누적을 지난달과 비교하는 표는 achievement(metrics = 원본 열 순서).
+- 네이버: 디바이스(PC/MO)별 표는 naver_device, 키워드별 TOP은 naver_keyword_top, 쇼핑검색 상품별 TOP은 naver_product_top(limit = 원본 줄 수, sortBy = 원본 정렬 기준 지표 — 노출 TOP이면 impressions, 클릭 TOP이면 clicks, device = 원본이 'PC 노출 TOP'처럼 기기를 한정하면 "P"·모바일이면 "M", 아니면 "all"). 원본에 같은 표가 기준 지표만 달리 여러 개(노출 TOP·클릭 TOP)면 섹션도 여러 개. 키워드·소재 단위 원본 데이터(RD) 시트가 있으면 naverRaw true. 원본 열 순서대로 metrics를 고른다(원본 열 이름이 달라도 뜻이 같으면 매핑: 집행금액·소진액=cost, 전환수·구매=conversions, 전환매출·구매액=revenue, ROAS·광고수익률=roas 등).
 - 원본의 서술(총평·인사이트·다음 액션)은 insights로 옮기고, note에 원본이 무엇을 중심으로 썼는지 적는다. 인사말·안내처럼 매번 같은 글은 text로 옮기고 note에 그 글을 넣는다({광고주} {기간} 변수 사용 가능).
 - 만들 수 없는 항목은 sections에 넣지 말고 unsupported에 짧게 적는다(예: "GA4 유입 채널 표", "소재별 성과 이미지").
-- 해당 없는 칸은 limit 0, sortBy "", note "" 로 둔다. 캠페인 표 limit은 원본 줄 수(모르면 10).
+- 해당 없는 칸은 limit 0, sortBy "", note "", weeks 0, device "" 로 둔다. 캠페인 표 limit은 원본 줄 수(모르면 10).
 - period: ${Object.keys(PERIODS).join(" | ")} 중 원본 기간과 가장 가까운 것. compare: ${Object.keys(COMPARES).join(" | ")}. frequency: ${Object.keys(FREQUENCIES).join(" | ")} (주간 리포트면 weekly, weekday 1=월…7=일, 월간이면 monthly·monthDay).
 - subject는 메일 제목 — {광고주} {기간} 변수를 넣는다. tone은 원본 말투를 한 줄로(예: "보고서체, 항목당 2~3문장, 수치 근거").
 - learnedFrom에는 원본에서 읽은 구조를 2~4문장으로 요약한다. 수치는 지어내지 않는다.`;
@@ -144,15 +150,18 @@ export function normalizeLearn(r: LearnRaw): LearnResult {
         type,
         title: String(s.title || SECTION_TYPES[type].label).slice(0, 80),
         metrics: type === "insights" || type === "text" ? [] : metrics.length ? metrics : (["cost", "conversions", "roas"] as MetricKey[]),
-        limit: type === "campaign_table" ? Math.max(1, Math.min(50, s.limit || 10)) : undefined,
-        sortBy: type === "campaign_table" ? pick(s.sortBy, METRIC_KEYS, "cost") : undefined,
-        showCompare: type === "daily_table" || type === "insights" || type === "text" ? undefined : !!s.showCompare,
+        limit: TOP_TYPES.includes(type) ? Math.max(1, Math.min(50, s.limit || 10)) : undefined,
+        sortBy: TOP_TYPES.includes(type) ? pick(s.sortBy, METRIC_KEYS, "cost") : undefined,
+        weeks: type === "weekly_table" ? Math.max(1, Math.min(12, s.weeks || 4)) : undefined,
+        device: type === "naver_keyword_top" || type === "naver_product_top" ? pick(s.device, ["all", "P", "M"] as const, "all") : undefined,
+        showCompare: ["daily_table", "insights", "text", "achievement", "naver_device", "naver_keyword_top", "naver_product_top"].includes(type) ? undefined : type === "weekly_table" ? s.showCompare !== false : !!s.showCompare,
         note: s.note || undefined,
       };
     })
     .slice(0, 12);
   return {
     name: String(r.name || "자동 리포트").slice(0, 60),
+    naverRaw: !!r.naverRaw,
     spec: {
       subject: r.subject || "[{광고주}] 광고 성과 리포트 ({기간})",
       intro: r.intro || undefined,
@@ -196,6 +205,18 @@ function dataText(d: ReportData, periodLabel: string, compareLabel: string | nul
     ...d.byMedia.map((r) => line(r.label, r)),
     "## 캠페인별(광고비 상위 15)",
     ...d.byCampaign.slice(0, 15).map((r) => line(`[${MEDIA_LABEL[r.media ?? ""] ?? r.media}] ${r.label}`, r)),
+    ...(d.byType.length > 1 ? ["## 캠페인 유형별", ...d.byType.map((r) => line(r.label, r))] : []),
+    ...(d.weekly.length ? ["## 주차별(괄호 = 전 주 대비)", ...d.weekly.map((r) => line(r.label, r))] : []),
+    ...(d.naver
+      ? [
+          "## 네이버 SA 기기별",
+          ...d.naver.device.map((r) => line(r.label, r)),
+          "## 네이버 SA 키워드(광고비 상위 10)",
+          ...[...d.naver.keywords.all].sort((a, b) => (b.cur.cost ?? 0) - (a.cur.cost ?? 0)).slice(0, 10).map((r) => line(r.label, r)),
+          "## 네이버 쇼핑검색 상품(광고비 상위 10)",
+          ...[...d.naver.products.all].sort((a, b) => (b.cur.cost ?? 0) - (a.cur.cost ?? 0)).slice(0, 10).map((r) => line(r.label, r)),
+        ]
+      : []),
   ].join("\n");
 }
 

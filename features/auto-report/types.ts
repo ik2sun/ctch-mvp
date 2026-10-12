@@ -23,6 +23,12 @@ export const SECTION_TYPES = {
   media_table: { label: "매체별 성과 표", desc: "연동 매체마다 한 줄" },
   campaign_table: { label: "캠페인별 성과 표", desc: "광고비 상위 N개 캠페인" },
   daily_table: { label: "일별 추이 표", desc: "기간 안 날짜마다 한 줄" },
+  type_table: { label: "캠페인 유형별 표", desc: "쇼핑검색·파워링크·판매·트래픽처럼 캠페인 유형마다 한 줄" },
+  weekly_table: { label: "주차별 표", desc: "기준일까지 최근 N주, 주마다 한 줄(전주 대비 증감)" },
+  achievement: { label: "전월 대비 달성률", desc: "이번 달 1일~기준일 누적 ÷ 지난달 전체" },
+  naver_device: { label: "네이버 SA 디바이스별", desc: "PC·모바일별 성과(네이버 검색광고)" },
+  naver_keyword_top: { label: "네이버 파워링크 키워드 TOP", desc: "파워링크 캠페인 키워드 단위 상위 N개" },
+  naver_product_top: { label: "네이버 쇼핑검색 상품 TOP", desc: "쇼핑검색 상품(소재) 단위 상위 N개" },
   insights: { label: "AI 분석 코멘트", desc: "표의 수치만으로 쓴 요약·원인 후보·다음 액션" },
   text: { label: "고정 문구", desc: "인사말·안내 등 매번 같은 글(변수 {광고주} {기간} 사용 가능)" },
 } as const;
@@ -33,7 +39,9 @@ export type ReportSection = {
   type: SectionType;
   title: string;
   metrics: MetricKey[]; // 표·KPI에 보여 줄 지표(순서대로)
-  limit?: number; // 캠페인 표 줄 수
+  limit?: number; // 캠페인·키워드·상품 표 줄 수
+  weeks?: number; // 주차별 표 주 수(기본 4)
+  device?: "all" | "P" | "M"; // 네이버 키워드·상품 TOP 기기 필터(원본 'PC 노출 TOP' 등)
   sortBy?: MetricKey; // 캠페인 표 정렬(기본 광고비)
   showCompare?: boolean; // 비교 기간 대비 증감 표시
   note?: string; // insights: 무엇을 중심으로 쓸지 / text: 그대로 넣을 문구
@@ -73,6 +81,7 @@ export type Schedule = {
 
 export type ReportOptions = {
   attachXlsx: boolean;
+  naverRaw?: boolean; // 첨부 엑셀에 네이버 SA 원본(일별 캠페인·광고그룹·키워드·소재·기기) 시트
   media: string[]; // 포함할 매체 키(비면 연동된 전부)
 };
 
@@ -118,5 +127,9 @@ export const DEFAULT_SPEC: ReportSpec = {
     { id: "s4", type: "insights", title: "분석 및 다음 액션", metrics: [], note: "증감이 큰 매체·캠페인 중심으로 원인 후보와 다음 주 액션" },
   ],
 };
+
+// 네이버 상세(대용량 보고서)가 필요한 섹션
+export const NAVER_DETAIL_TYPES: SectionType[] = ["naver_device", "naver_keyword_top", "naver_product_top"];
+export const TOP_TYPES: SectionType[] = ["campaign_table", "naver_keyword_top", "naver_product_top"];
 
 export const sectionId = () => `s${Math.random().toString(36).slice(2, 8)}`;

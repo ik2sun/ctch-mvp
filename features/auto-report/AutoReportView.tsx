@@ -15,6 +15,7 @@ import {
   METRICS,
   PERIODS,
   SECTION_TYPES,
+  TOP_TYPES,
   sectionId,
   type AutoReport,
   type MetricKey,
@@ -105,6 +106,7 @@ export function AutoReportView({ client }: { client: { id: string; name: string 
         ...d,
         name: d.id ? d.name : j.name,
         spec: j.spec,
+        options: { ...d.options, naverRaw: !!j.naverRaw },
         schedule: { ...d.schedule, ...j.schedule },
         source: { kind: ex.kind, name: ex.name, excerpt: ex.text.slice(0, 2000) },
       }));
@@ -332,6 +334,9 @@ export function AutoReportView({ client }: { client: { id: string; name: string 
                 </Field>
                 <div className="flex flex-col justify-end gap-2 pb-1 text-[14px] text-ink-soft">
                   <label className="flex items-center gap-2"><input type="checkbox" className="accent-[#1baf7a]" checked={d.options.attachXlsx} onChange={(e) => edit((x) => ({ ...x, options: { ...x.options, attachXlsx: e.target.checked } }))} />엑셀 첨부</label>
+                  {connected.includes("naver") && (
+                    <label className="flex items-center gap-2" title="첨부 엑셀에 네이버 SA 일별 캠페인·광고그룹·키워드·소재·기기 원본(광고비 상위 3,000행) 시트를 넣어요"><input type="checkbox" className="accent-[#1baf7a]" disabled={!d.options.attachXlsx} checked={!!d.options.naverRaw} onChange={(e) => edit((x) => ({ ...x, options: { ...x.options, naverRaw: e.target.checked } }))} />네이버 원본(RD) 시트</label>
+                  )}
                   <label className="flex items-center gap-2"><input type="checkbox" className="accent-[#1baf7a]" checked={d.enabled} onChange={(e) => edit((x) => ({ ...x, enabled: e.target.checked }))} />자동 발송 켜기</label>
                 </div>
               </div>
@@ -381,7 +386,9 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 function SectionEditor({ s, first, last, onChange, onMove, onRemove }: { s: ReportSection; first: boolean; last: boolean; onChange: (p: Partial<ReportSection>) => void; onMove: (dir: -1 | 1) => void; onRemove: () => void }) {
-  const table = s.type === "kpi" || s.type === "media_table" || s.type === "campaign_table" || s.type === "daily_table";
+  const table = s.type !== "insights" && s.type !== "text";
+  const top = TOP_TYPES.includes(s.type);
+  const noCompare = ["daily_table", "achievement", "naver_device", "naver_keyword_top", "naver_product_top"].includes(s.type);
   const toggle = (k: MetricKey) => onChange({ metrics: s.metrics.includes(k) ? s.metrics.filter((x) => x !== k) : [...s.metrics, k] });
   return (
     <div className="rounded-xl border border-line bg-white p-4">
@@ -411,8 +418,16 @@ function SectionEditor({ s, first, last, onChange, onMove, onRemove }: { s: Repo
             })}
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-4 text-[13px] text-ink-soft">
-            {s.type !== "daily_table" && <label className="flex items-center gap-1.5"><input type="checkbox" className="accent-[#1baf7a]" checked={!!s.showCompare} onChange={(e) => onChange({ showCompare: e.target.checked })} />비교 기간 대비 증감</label>}
-            {s.type === "campaign_table" && (
+            {!noCompare && <label className="flex items-center gap-1.5"><input type="checkbox" className="accent-[#1baf7a]" checked={s.type === "weekly_table" ? s.showCompare !== false : !!s.showCompare} onChange={(e) => onChange({ showCompare: e.target.checked })} />{s.type === "weekly_table" ? "전 주 대비 증감" : "비교 기간 대비 증감"}</label>}
+            {s.type === "weekly_table" && <label className="flex items-center gap-1.5">최근<input type="number" min={1} max={12} className={`${INP} w-16`} value={s.weeks ?? 4} onChange={(e) => onChange({ weeks: Math.max(1, Math.min(12, Number(e.target.value) || 4)) })} />주</label>}
+            {(s.type === "naver_keyword_top" || s.type === "naver_product_top") && (
+              <label className="flex items-center gap-1.5">기기
+                <select className={`${INP} w-auto`} value={s.device ?? "all"} onChange={(e) => onChange({ device: e.target.value as ReportSection["device"] })}>
+                  <option value="all">전체</option><option value="P">PC</option><option value="M">모바일</option>
+                </select>
+              </label>
+            )}
+            {top && (
               <>
                 <label className="flex items-center gap-1.5">상위<input type="number" min={1} max={50} className={`${INP} w-16`} value={s.limit ?? 10} onChange={(e) => onChange({ limit: Math.max(1, Math.min(50, Number(e.target.value) || 10)) })} />개</label>
                 <label className="flex items-center gap-1.5">정렬
