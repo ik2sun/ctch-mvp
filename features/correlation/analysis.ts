@@ -5,6 +5,8 @@
 // 2) 광고 효과는 며칠 남는다 → 잔존 효과(adstock: a_t = x_t + θ·a_{t-1}, θ ∈ 0/0.3/0.5/0.7)와 시차 0~14일을 모두 시험해 가장 강한 조합을 찾는다.
 // 3) 일별 값은 서로 이어져(자기상관) 표본 수가 부풀려지므로 유효 표본 수로 유의성을 계산하고, 여러 조합을 시험한 만큼 보수적으로 본다.
 // 4) 원인 전부를 한 번에 넣은 회귀(릿지)로 '원인 1만 원당 결과 몇 건'과 기여분(90% 구간)을 추정한다.
+// 5) 통제 변수(선택): 성과 캠페인 광고비·행사 기간을 요일·추세와 함께 걷어낸다 — 인지 광고를 켤 때 성과 예산도 같이 늘렸거나
+//    행사 기간에 둘 다 몰렸다면, 그 몫을 빼고도 관계가 남는지 본다(편상관 + 회귀 통제 변수).
 // 상관은 인과가 아니다 — 화면 문구도 "함께 움직였다"로 쓴다.
 import { DRIVER_ROLES, ROLE_META, type CorrCampaign, type DriverRole, type Role } from "./types";
 
@@ -126,30 +128,46 @@ function invert(A: number[][]): number[][] | null {
 }
 
 // 요일 더미 6개 + 추세 + 절편
-function controls(dates: string[], i: number, withTrend = true): number[] {
+// extra = 추가 통제 변수 열(날짜 순, 표준화된 값) — 성과 캠페인 광고비·행사 기간 더미
+export type Extra = number[][];
+function controls(dates: string[], i: number, withTrend = true, extra?: Extra): number[] {
   const dow = new Date(`${dates[i]}T00:00:00Z`).getUTCDay();
   const row = [1];
   if (withTrend) row.push(i / Math.max(1, dates.length - 1));
   for (let k = 1; k < 7; k++) row.push(dow === k ? 1 : 0);
+  if (extra) for (const col of extra) row.push(col[i] ?? 0);
   return row;
 }
 
+// 통제 변수 열 만들기 — 표준화(z), 값이 하나뿐이면(변동 없음) 버린다
+export function makeExtra(cols: (number[] | null | undefined)[]): Extra | undefined {
+  const out: Extra = [];
+  for (const c of cols) {
+    if (!c || !c.length) continue;
+    const m = c.reduce((s, v) => s + v, 0) / c.length;
+    const sd = Math.sqrt(c.reduce((s, v) => s + (v - m) ** 2, 0) / c.length);
+    if (!(sd > 0)) continue;
+    out.push(c.map((v) => (v - m) / sd));
+  }
+  return out.length ? out : undefined;
+}
+
 // 요일·추세를 걷어낸 잔차(없는 값은 null 유지)
-export function residualize(y: (number | null)[], dates: string[], withTrend = true): (number | null)[] {
+export function residualize(y: (number | null)[], dates: string[], withTrend = true, extra?: Extra): (number | null)[] {
   const rows: number[][] = [];
   const ys: number[] = [];
   y.forEach((v, i) => {
     if (v == null || !Number.isFinite(v)) return;
-    rows.push(controls(dates, i, withTrend));
+    rows.push(controls(dates, i, withTrend, extra));
     ys.push(v);
   });
   const p = rows[0]?.length ?? 0;
   if (rows.length < p + 3) return y.map((v) => v);
-  const XtX = Array.from({ length: p }, (_, a) => Array.from({ length: p }, (_, b) => rows.reduce((s, r) => s + r[a] * r[b], 0) + (a === b ? 1e-9 : 0)));
+  const XtX = Array.from({ length: p }, (_, a) => Array.from({ length: p }, (_, b) => rows.reduce((s, r) => s + r[a] * r[b], 0) + (a === b ? 1e-6 : 0)));
   const Xty = Array.from({ length: p }, (_, a) => rows.reduce((s, r, k) => s + r[a] * ys[k], 0));
   const beta = solve(XtX, Xty);
   if (!beta) return y.map((v) => v);
-  return y.map((v, i) => (v == null || !Number.isFinite(v) ? null : v - controls(dates, i, withTrend).reduce((s, x, k) => s + x * beta[k], 0)));
+  return y.map((v, i) => (v == null || !Number.isFinite(v) ? null : v - controls(dates, i, withTrend, extra).reduce((s, x, k) => s + x * beta[k], 0)));
 }
 
 export function adstock(x: number[], theta: number): number[] {
@@ -278,19 +296,25 @@ function strengthOf(p: number, r: number | null): Strength {
   return "none";
 }
 
-export function lagCorrelation(driver: Series, outcome: Series, dates: string[]): LagResult {
-  const yr = residualize(outcome.values, dates);
+// extra가 있으면 편상관 — 원인(시차 적용 후)과 결과 모두에서 같은 날의 통제 변수를 걷어낸다.
+// fixed를 주면 시차·잔존을 그 값으로 고정해 검정만 한다(통제 후 60개 조합을 다시 뒤지면 행사 한 번에 맞춘 우연한 조합이 뽑힌다 — 르무통 90일 실측).
+export function lagCorrelation(driver: Series, outcome: Series, dates: string[], extra?: Extra, fixed?: { lag: number; theta: number }): LagResult {
+  const yr = residualize(outcome.values, dates, true, extra);
   const rhoY = lag1(yr);
   let best: { r: number; lag: number; theta: number; n: number; ar: (number | null)[] } | null = null;
-  const byTheta = new Map<number, (number | null)[]>();
-  for (const th of THETAS) {
-    const ar = residualize(adstock(driver.values.map((v) => v ?? 0), th), dates);
-    byTheta.set(th, ar);
+  const byTheta = new Map<number, (number | null)[][]>(); // θ → 시차별 원인 잔차
+  for (const th of fixed ? [fixed.theta] : THETAS) {
+    const a = adstock(driver.values.map((v) => v ?? 0), th);
+    const base = extra ? null : residualize(a, dates);
+    const perLag: (number | null)[][] = [];
     for (let L = 0; L <= MAX_LAG; L++) {
-      const { r, n } = pearson(lagged(ar, L), yr);
-      if (r == null) continue;
-      if (!best || Math.abs(r) > Math.abs(best.r)) best = { r, lag: L, theta: th, n, ar };
+      const xr = extra ? residualize(lagged(a, L), dates, true, extra) : lagged(base!, L);
+      perLag.push(xr);
+      const { r, n } = pearson(xr, yr);
+      if (r == null || (fixed && L !== fixed.lag)) continue;
+      if (!best || Math.abs(r) > Math.abs(best.r)) best = { r, lag: L, theta: th, n, ar: xr };
     }
+    byTheta.set(th, perLag);
   }
   if (!best) {
     return { driver: driver.key, outcome: outcome.key, r: null, lag: 0, theta: 0, n: 0, nEff: 0, p: 1, strength: "none", profile: [], rCrit: 1 };
@@ -299,18 +323,19 @@ export function lagCorrelation(driver: Series, outcome: Series, dates: string[])
   const nEff = Math.max(4, Math.min(best.n, (best.n * (1 - rhoX * rhoY)) / (1 + rhoX * rhoY)));
   const df = nEff - 2;
   const t = best.r * Math.sqrt(df / Math.max(1e-9, 1 - best.r * best.r));
-  const p = Math.min(1, tPValue(t, df) * MULTI);
+  const multi = fixed ? 1 : MULTI; // 고정 검정은 한 번만 시험
+  const p = Math.min(1, tPValue(t, df) * multi);
   // 보정 후 5% 경계 r: 이분 탐색
   let lo = 0;
   let hi = 0.999;
   for (let i = 0; i < 40; i++) {
     const mid = (lo + hi) / 2;
     const tt = mid * Math.sqrt(df / (1 - mid * mid));
-    if (tPValue(tt, df) * MULTI > 0.05) lo = mid;
+    if (tPValue(tt, df) * multi > 0.05) lo = mid;
     else hi = mid;
   }
-  const arBest = byTheta.get(best.theta)!;
-  const profile = Array.from({ length: MAX_LAG + 1 }, (_, L) => ({ lag: L, r: pearson(lagged(arBest, L), yr).r }));
+  const perLag = byTheta.get(best.theta)!;
+  const profile = perLag.map((xr, L) => ({ lag: L, r: pearson(xr, yr).r }));
   return { driver: driver.key, outcome: outcome.key, r: best.r, lag: best.lag, theta: best.theta, n: best.n, nEff, p, strength: strengthOf(p, best.r), profile, rCrit: hi };
 }
 
@@ -334,12 +359,12 @@ export type RegressionResult = {
   outcome: string;
   n: number;
   r2: number;
-  r2Base: number; // 요일·추세만
+  r2Base: number; // 요일·추세(+통제 변수)만
   outcomeTotal: number;
   contributions: Contribution[];
 };
 
-export function regress(drivers: Series[], outcome: Series, dates: string[], picks: Record<string, { lag: number; theta: number }>, unitScale: number): RegressionResult | null {
+export function regress(drivers: Series[], outcome: Series, dates: string[], picks: Record<string, { lag: number; theta: number }>, unitScale: number, extra?: Extra): RegressionResult | null {
   if (!outcome.additive || !drivers.length) return null;
   const start = Math.max(0, ...drivers.map((d) => picks[d.key]?.lag ?? 0));
   const cols = drivers.map((d) => {
@@ -353,19 +378,19 @@ export function regress(drivers: Series[], outcome: Series, dates: string[], pic
     if (cols.some((c) => c[i] == null)) continue;
     rowIdx.push(i);
   }
-  const base = controls(dates, 0).length;
+  const base = controls(dates, 0, true, extra).length;
   const k = drivers.length;
   if (rowIdx.length < base + k + 10) return null;
 
   // 원인 열은 표준화 후 릿지(λ=1) — 예산이 같이 움직일 때 계수가 튀는 것을 줄인다
   const mean = cols.map((c) => rowIdx.reduce((s, i) => s + (c[i] as number), 0) / rowIdx.length);
   const sd = cols.map((c, j) => Math.sqrt(rowIdx.reduce((s, i) => s + ((c[i] as number) - mean[j]) ** 2, 0) / rowIdx.length) || 1);
-  const X = rowIdx.map((i) => [...controls(dates, i), ...cols.map((c, j) => ((c[i] as number) - mean[j]) / sd[j])]);
+  const X = rowIdx.map((i) => [...controls(dates, i, true, extra), ...cols.map((c, j) => ((c[i] as number) - mean[j]) / sd[j])]);
   const y = rowIdx.map((i) => outcome.values[i] as number);
   const p = base + k;
   const lam = 1;
   const XtX = Array.from({ length: p }, (_, a) => Array.from({ length: p }, (_, b) => X.reduce((s, r) => s + r[a] * r[b], 0)));
-  const A = XtX.map((row, a) => row.map((v, b) => v + (a === b ? (a >= base ? lam : 1e-9) : 0)));
+  const A = XtX.map((row, a) => row.map((v, b) => v + (a === b ? (a >= base ? lam : 1e-6) : 0)));
   const Xty = Array.from({ length: p }, (_, a) => X.reduce((s, r, i) => s + r[a] * y[i], 0));
   const beta = solve(A, Xty);
   const Ainv = invert(A);
@@ -386,7 +411,7 @@ export function regress(drivers: Series[], outcome: Series, dates: string[], pic
     return s * sigma2 * inflate;
   };
 
-  const baseOnly = residualize(outcome.values.map((v, i) => (rowIdx.includes(i) ? v : null)), dates);
+  const baseOnly = residualize(outcome.values.map((v, i) => (rowIdx.includes(i) ? v : null)), dates, true, extra);
   const sseBase = rowIdx.reduce((s, i) => s + (baseOnly[i] as number) ** 2, 0);
   const outcomeTotal = y.reduce((s, v) => s + v, 0);
 
@@ -454,6 +479,50 @@ export function onOff(driver: Series, outcome: Series, dates: string[], lag: num
 // 원인 광고비와 성과 캠페인 광고비가 같이 움직였는지(같이 늘리고 줄였다면 효과 분리가 어렵다)
 export function coMovement(driver: Series, perfCost: number[], dates: string[]): number | null {
   return pearson(residualize(driver.values, dates), residualize(perfCost, dates)).r;
+}
+
+// 시차까지 본 동반 증감 — 원인을 늘리고 0~14일 안에 성과 예산도 늘렸는지(가장 강한 시차). 같은 날만 보면 '인지 먼저 → 며칠 뒤 성과 증액'을 놓친다
+export function coMovementLag(driver: Series, perfCost: number[], dates: string[]): { r: number; lag: number } | null {
+  const pc = residualize(perfCost, dates);
+  const dr = residualize(driver.values, dates);
+  let best: { r: number; lag: number } | null = null;
+  for (let L = 0; L <= MAX_LAG; L++) {
+    const { r } = pearson(lagged(dr, L), pc);
+    if (r != null && (!best || Math.abs(r) > Math.abs(best.r))) best = { r, lag: L };
+  }
+  return best;
+}
+
+// 행사 기간 입력 → 날짜별 0/1. "2026-08-31~2026-09-06, 9/28~10/3" (연도 생략 시 분석 기간의 연도)
+export function parsePromoRanges(text: string, dates: string[]): { dummy: number[] | null; days: number; error?: string } {
+  const t = text.trim();
+  if (!t) return { dummy: null, days: 0 };
+  const years = [...new Set(dates.map((d) => d.slice(0, 4)))];
+  const toIso = (raw: string): string | null => {
+    const s = raw.trim();
+    let m = s.match(/^(\d{4})[-./](\d{1,2})[-./](\d{1,2})$/);
+    if (m) return `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
+    m = s.match(/^(\d{1,2})[./](\d{1,2})$/);
+    if (m) {
+      const md = `${m[1].padStart(2, "0")}-${m[2].padStart(2, "0")}`;
+      const y = years.find((yy) => dates.includes(`${yy}-${md}`)) ?? years[0];
+      return `${y}-${md}`;
+    }
+    return null;
+  };
+  const dummy = dates.map(() => 0);
+  for (const part of t.split(/[,\n]+/).map((x) => x.trim()).filter(Boolean)) {
+    const [a, b] = part.split(/\s*~\s*/);
+    const s = toIso(a ?? "");
+    const e = toIso(b ?? a ?? "");
+    if (!s || !e) return { dummy: null, days: 0, error: `날짜를 읽지 못했어요: "${part}" — 예: 2026-08-31~2026-09-06 또는 9/28~10/3` };
+    dates.forEach((d, i) => {
+      if (d >= s && d <= e) dummy[i] = 1;
+    });
+  }
+  const days = dummy.filter((v) => v).length;
+  if (!days) return { dummy: null, days: 0, error: "입력한 기간이 분석 기간과 겹치지 않아요." };
+  return { dummy, days };
 }
 
 // ── 외부 지표 CSV ─────────────────────────────────────

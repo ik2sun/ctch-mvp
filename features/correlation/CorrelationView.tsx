@@ -8,10 +8,13 @@ import { MEDIA_COLORS } from "@/features/dashboard/analysis";
 import {
   buildSeries,
   coMovement,
+  coMovementLag,
   dateRange,
   lagCorrelation,
+  makeExtra,
   onOff,
   parseExternalCsv,
+  parsePromoRanges,
   regress,
   type DriverMetric,
   type LagResult,
@@ -43,6 +46,20 @@ function loadRoles(clientId: string): Record<string, Role> {
     return JSON.parse(localStorage.getItem(`ctch_corr_roles_${clientId}`) || "{}");
   } catch {
     return {};
+  }
+}
+function loadStr(key: string, fallback: string) {
+  try {
+    return localStorage.getItem(key) ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+function saveStr(key: string, v: string) {
+  try {
+    localStorage.setItem(key, v);
+  } catch {
+    /* 저장 실패는 무시 */
   }
 }
 function saveRoles(clientId: string, v: Record<string, Role>) {
@@ -77,6 +94,18 @@ export function CorrelationView({ data, clientId }: { data: CorrDataRes; clientI
   const fileRef = useRef<HTMLInputElement>(null);
 
   const built = useMemo(() => buildSeries(data.campaigns, roles, dates, metric), [data.campaigns, roles, dates, metric]);
+
+  // 통제 변수 — 성과 캠페인 광고비(기본 켬)·행사 기간(광고주별 기억). 인지 광고를 켤 때 성과 예산·행사가 함께 몰리면 그 몫을 빼고 본다
+  const [ctrlPerf, setCtrlPerf] = useState(true);
+  const [promoText, setPromoText] = useState("");
+  const [promoOpen, setPromoOpen] = useState(false);
+  useEffect(() => {
+    setCtrlPerf(loadStr("ctch_corr_ctrl_perf", "1") === "1");
+    setPromoText(loadStr(`ctch_corr_promo_${clientId}`, ""));
+  }, [clientId]);
+  const promo = useMemo(() => parsePromoRanges(promoText, dates), [promoText, dates]);
+  const extra = useMemo(() => makeExtra([ctrlPerf ? built.perfCost : null, promo.dummy]), [ctrlPerf, built.perfCost, promo.dummy]);
+  const ctrlLabel = [ctrlPerf && "성과 캠페인 광고비", promo.dummy && "행사 기간"].filter(Boolean).join("·");
   const drivers = useMemo(() => [...built.drivers, ...external.filter((s) => (extRole[s.key] ?? "driver") === "driver")], [built.drivers, external, extRole]);
   const outcomes = useMemo(() => [...built.outcomes, ...external.filter((s) => extRole[s.key] === "outcome")], [built.outcomes, external, extRole]);
 
@@ -86,12 +115,23 @@ export function CorrelationView({ data, clientId }: { data: CorrDataRes; clientI
   const driver = drivers.find((d) => d.key === driverKey) ?? drivers[0];
   const [highlight, setHighlight] = useState<string | null>(null);
 
-  // 모든 원인 × 결과 시차 상관
-  const cells = useMemo(() => {
+  // 모든 원인 × 결과 시차 상관 — 먼저 통제 전(rawCells)에서 가장 강한 시차·잔존을 찾고,
+  // 통제 변수가 있으면 그 시차·잔존을 고정한 채 편상관으로 '통제 후에도 남는지'만 검정(cells)
+  const rawCells = useMemo(() => {
     const m: Record<string, LagResult> = {};
     for (const d of drivers) for (const o of outcomes) m[`${d.key}|${o.key}`] = lagCorrelation(d, o, dates);
     return m;
   }, [drivers, outcomes, dates]);
+  const cells = useMemo(() => {
+    if (!extra) return rawCells;
+    const m: Record<string, LagResult> = {};
+    for (const d of drivers)
+      for (const o of outcomes) {
+        const raw = rawCells[`${d.key}|${o.key}`];
+        m[`${d.key}|${o.key}`] = lagCorrelation(d, o, dates, extra, { lag: raw.lag, theta: raw.theta });
+      }
+    return m;
+  }, [drivers, outcomes, dates, extra, rawCells]);
 
   // 회귀 — 각 원인은 매트릭스에서 찾은 최적 시차·잔존(양의 관계일 때), 아니면 기본값
   const regression = useMemo(() => {
@@ -99,11 +139,11 @@ export function CorrelationView({ data, clientId }: { data: CorrDataRes; clientI
     const ds = drivers.filter((d) => !d.external || d.additive);
     const picks: Record<string, { lag: number; theta: number }> = {};
     for (const d of ds) {
-      const c = cells[`${d.key}|${outcome.key}`];
+      const c = rawCells[`${d.key}|${outcome.key}`];
       picks[d.key] = c && c.r != null && c.r > 0 ? { lag: c.lag, theta: c.theta } : { lag: 0, theta: 0.3 };
     }
-    return regress(ds, outcome, dates, picks, metric === "cost" ? 10000 : 1000);
-  }, [drivers, outcome, cells, dates, metric]);
+    return regress(ds, outcome, dates, picks, metric === "cost" ? 10000 : 1000, extra);
+  }, [drivers, outcome, rawCells, dates, metric, extra]);
 
   const onoffs = useMemo(() => {
     if (!outcome) return {};
@@ -122,19 +162,20 @@ export function CorrelationView({ data, clientId }: { data: CorrDataRes; clientI
       if (!o) continue;
       const picks: Record<string, { lag: number; theta: number }> = {};
       for (const d of ds) {
-        const c = cells[`${d.key}|${key}`];
+        const c = rawCells[`${d.key}|${key}`];
         picks[d.key] = c && c.r != null && c.r > 0 ? { lag: c.lag, theta: c.theta } : { lag: 0, theta: 0.3 };
       }
-      regs[key] = ds.length ? regress(ds, o, dates, picks, metric === "cost" ? 10000 : 1000) : null;
+      regs[key] = ds.length ? regress(ds, o, dates, picks, metric === "cost" ? 10000 : 1000, extra) : null;
       oos[key] = Object.fromEntries(drivers.map((d) => [d.key, onOff(d, o, dates, cells[`${d.key}|${key}`]?.lag ?? 0)]));
     }
     const signals = roleSignals(outcomes, cells, regs, oos);
     const driverKeys = new Set(built.drivers.map((d) => d.key));
     const cm = Object.fromEntries(built.drivers.map((d) => [d.key, coMovement(d, built.perfCost, dates)]));
     return { signals, driverKeys, rows: awarenessRows(data.campaigns, roles, dates.length, signals, driverKeys, cm) };
-  }, [drivers, outcomes, cells, dates, metric, built, data.campaigns, roles]);
+  }, [drivers, outcomes, cells, rawCells, dates, metric, built, data.campaigns, roles, extra]);
 
-  const coMove = useMemo(() => Object.fromEntries(built.drivers.map((d) => [d.key, coMovement(d, built.perfCost, dates)])), [built, dates]);
+  // 원인 ↔ 성과 캠페인 광고비 동반 증감(시차 0~14일 중 가장 강한 것)
+  const coMove = useMemo(() => Object.fromEntries(built.drivers.map((d) => [d.key, coMovementLag(d, built.perfCost, dates)])), [built, dates]);
 
   const onFile = async (f: File | undefined) => {
     if (!f) return;
@@ -159,20 +200,36 @@ export function CorrelationView({ data, clientId }: { data: CorrDataRes; clientI
       const reg = regression?.contributions.find((x) => x.driver === d.key);
       if (!c || c.r == null) continue;
       const when = c.lag === 0 ? "같은 날" : `${c.lag}일 뒤`;
+      const raw = rawCells[`${d.key}|${outcome.key}`];
+      const sig = (x?: LagResult) => !!x && x.r != null && x.r > 0 && (x.strength === "strong" || x.strength === "moderate");
+      if (extra && raw?.r != null && sig(raw) && !sig(c)) {
+        out.push({
+          tone: "warn",
+          text: `${josa(d.label, "이", "가")} 늘면 ${outcome.label}도 함께 늘어 보였지만(r=${raw.r.toFixed(2)}), ${ctrlLabel}을 같게 놓고 보면 관계가 약해져요(r=${c.r.toFixed(2)}) — 같이 늘린 ${ctrlLabel}의 몫이 컸을 가능성이 커요${(() => {
+            const cm = coMove[d.key];
+            return ctrlPerf && cm && cm.r >= 0.4 ? ` (${josa(d.label, "을", "를")} 늘리고 ${cm.lag === 0 ? "같은 날" : `${cm.lag}일 뒤`} 성과 캠페인 광고비도 함께 늘었어요, r=${cm.r.toFixed(2)})` : "";
+          })()}`,
+        });
+        continue;
+      }
       if ((c.strength === "strong" || c.strength === "moderate") && c.r > 0) {
         out.push({
           tone: "good",
-          text: `${josa(d.label, "이", "가")} 늘면 ${when} ${outcome.label}도 함께 늘었어요 (r=${c.r.toFixed(2)})${reg?.confirmed ? ` · ${unitWord}당 +${fmtValue(reg.perUnit, outcome.unit, outcome.noun)}` : ""}`,
+          text: `${josa(d.label, "이", "가")} 늘면 ${when} ${outcome.label}도 함께 늘었어요 (r=${c.r.toFixed(2)})${reg?.confirmed ? ` · ${unitWord}당 +${fmtValue(reg.perUnit, outcome.unit, outcome.noun)}` : ""}${extra && raw?.r != null ? ` · ${ctrlLabel} 통제 후에도 유지(통제 전 r=${raw.r.toFixed(2)})` : ""}`,
         });
-      } else if ((c.strength === "strong" || c.strength === "moderate") && c.r < 0) {
+      } else if ((c.strength === "strong" || c.strength === "moderate") && c.r < 0 && !(extra && raw?.r != null && raw.r > 0)) {
         out.push({ tone: "warn", text: `${josa(d.label, "이", "가")} 늘 때 ${when} ${josa(outcome.label, "은", "는")} 오히려 줄었어요 (r=${c.r.toFixed(2)}) — 예산 이동·잠식 여부를 확인해 보세요` });
       }
       const cm = coMove[d.key];
-      if (cm != null && Math.abs(cm) >= 0.7) out.push({ tone: "muted", text: `${josa(d.label, "과", "와")} 성과 캠페인 광고비가 거의 같이 움직였어요(r=${cm.toFixed(2)}) — 두 효과를 따로 떼어 보기 어려워요` });
+      if (cm && cm.r >= 0.4) {
+        const lagTxt = cm.lag === 0 ? "같은 날" : `${cm.lag}일 뒤`;
+        if (!ctrlPerf) out.push({ tone: "warn", text: `${josa(d.label, "을", "를")} 늘리면 ${lagTxt} 성과 캠페인 광고비도 함께 늘었어요(r=${cm.r.toFixed(2)}) — 위 관계에 성과 예산 효과가 섞였을 수 있어요. '성과 광고비 통제'를 켜 보세요` });
+        else if (cm.r >= 0.7) out.push({ tone: "muted", text: `${josa(d.label, "과", "와")} 성과 캠페인 광고비가 ${lagTxt} 거의 같이 움직였어요(r=${cm.r.toFixed(2)}) — 통제해도 두 효과를 완전히 떼어 보기 어려워요. 한쪽만 바꾸는 기간을 두면 분리돼요` });
+      }
     }
     if (!out.some((x) => x.tone !== "muted") && drivers.length) out.push({ tone: "muted", text: `이 기간에는 상위 퍼널 캠페인과 ${outcome.label} 사이에 뚜렷한 관계가 보이지 않아요. 기간을 늘리거나 집행을 켰다 끈 구간이 있으면 더 잘 드러나요.` });
-    return out.slice(0, 6);
-  }, [drivers, outcome, cells, regression, coMove, unitWord]);
+    return out.slice(0, 8);
+  }, [drivers, outcome, cells, rawCells, regression, coMove, unitWord, extra, ctrlLabel, ctrlPerf]);
 
   const roleCount = (r: Role) => data.campaigns.filter((c) => roles[c.id] === r).length;
   const hasDriverCampaigns = DRIVER_ROLES.some((r) => roleCount(r) > 0);
@@ -203,6 +260,32 @@ export function CorrelationView({ data, clientId }: { data: CorrDataRes; clientI
             ]}
             onChange={setMetric}
           />
+          <span className="ml-2 text-[13px] text-ink-muted">통제</span>
+          <button
+            type="button"
+            aria-pressed={ctrlPerf}
+            onClick={() => {
+              setCtrlPerf((v) => {
+                saveStr("ctch_corr_ctrl_perf", v ? "0" : "1");
+                return !v;
+              });
+            }}
+            title="성과(전환·검색) 캠페인 광고비를 같은 수준으로 놓고 본다 — 인지 광고를 켤 때 성과 예산도 같이 늘렸다면 그 몫을 뺀다"
+            className={`flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[13px] ${ctrlPerf ? "border-signal/40 bg-signal-soft text-ink" : "border-line text-ink-soft hover:border-ink/30"}`}
+          >
+            <i className={`ti ${ctrlPerf ? "ti-square-check" : "ti-square"} text-[15px]`} aria-hidden />
+            성과 광고비
+          </button>
+          <button
+            type="button"
+            aria-expanded={promoOpen}
+            onClick={() => setPromoOpen((v) => !v)}
+            title="행사(할인) 기간을 입력하면 그 기간 효과를 빼고 본다"
+            className={`flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[13px] ${promo.dummy ? "border-signal/40 bg-signal-soft text-ink" : "border-line text-ink-soft hover:border-ink/30"}`}
+          >
+            <i className={`ti ${promo.dummy ? "ti-square-check" : "ti-calendar-event"} text-[15px]`} aria-hidden />
+            행사 기간{promo.dummy ? ` ${promo.days}일` : ""}
+          </button>
         </div>
         <div className="flex items-center gap-2">
           <input ref={fileRef} type="file" accept=".csv,.tsv,.txt" className="hidden" onChange={(e) => onFile(e.target.files?.[0])} />
@@ -217,6 +300,34 @@ export function CorrelationView({ data, clientId }: { data: CorrDataRes; clientI
           </button>
         </div>
       </div>
+
+      {promoOpen && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-surface px-3.5 py-2.5 text-[13px]">
+          <span className="text-ink-soft">행사 기간</span>
+          <input
+            value={promoText}
+            onChange={(e) => {
+              setPromoText(e.target.value);
+              saveStr(`ctch_corr_promo_${clientId}`, e.target.value);
+            }}
+            placeholder="예: 2026-08-31~2026-09-06, 9/28~10/3"
+            className="min-w-[320px] flex-1 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-[13px] text-ink outline-none focus:border-ink/40"
+          />
+          {promo.error ? <span className="text-bad">{promo.error}</span> : promo.dummy ? <span className="text-ink-muted">{promo.days}일을 행사 기간으로 보고 그 효과를 빼요</span> : <span className="text-ink-muted">쉼표로 여러 기간 · 이 광고주 기준으로 기억돼요</span>}
+          {promoText && (
+            <button
+              type="button"
+              onClick={() => {
+                setPromoText("");
+                saveStr(`ctch_corr_promo_${clientId}`, "");
+              }}
+              className="text-ink-muted underline underline-offset-2 hover:text-ink"
+            >
+              지우기
+            </button>
+          )}
+        </div>
+      )}
 
       {(external.length > 0 || extError) && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-surface px-3.5 py-2.5 text-[13px]">
@@ -257,7 +368,7 @@ export function CorrelationView({ data, clientId }: { data: CorrDataRes; clientI
       ) : (
         <>
           {/* 핵심 발견 + 원인별 요약 */}
-          <Card title={`상위 퍼널 → ${outcome.label}`} sub={`${data.since} ~ ${data.until} · ${days}일 · 요일·추세를 걷어낸 뒤 0~14일 시차와 잔존 효과를 함께 시험해요`}>
+          <Card title={`상위 퍼널 → ${outcome.label}`} sub={`${data.since} ~ ${data.until} · ${days}일 · 요일·추세${ctrlLabel ? `·${ctrlLabel}` : ""}를 걷어낸 뒤 0~14일 시차와 잔존 효과를 함께 시험해요`}>
             <ul className="mb-4 space-y-1.5">
               {findings.map((f, i) => (
                 <li
@@ -301,6 +412,14 @@ export function CorrelationView({ data, clientId }: { data: CorrDataRes; clientI
                       {c?.r == null ? "—" : `${c.r > 0 ? "+" : "−"}${Math.abs(c.r).toFixed(2)}`}
                       <span className="ml-1.5 font-sans text-[13px] font-medium text-ink-muted">{c?.r == null ? "" : c.lag === 0 ? "당일 상관" : `${c.lag}일 뒤 상관`}</span>
                     </p>
+                    {extra && rawCells[`${d.key}|${outcome.key}`]?.r != null && (
+                      <p className="mt-1.5 text-[12px] text-ink-muted">
+                        통제 전 {(() => {
+                          const rr = rawCells[`${d.key}|${outcome.key}`];
+                          return `${rr.r! > 0 ? "+" : "−"}${Math.abs(rr.r!).toFixed(2)}${rr.lag ? ` (${rr.lag}일 뒤)` : ""} · ${STRENGTH[rr.strength].label}`;
+                        })()}
+                      </p>
+                    )}
                     <dl className="mt-3 space-y-1 text-[13px]">
                       {reg && (
                         <div className="flex justify-between gap-2">
@@ -328,7 +447,7 @@ export function CorrelationView({ data, clientId }: { data: CorrDataRes; clientI
                       )}
                       {oo && (
                         <div className="flex justify-between gap-2">
-                          <dt className="text-ink-muted">집행일 vs 미집행일</dt>
+                          <dt className="text-ink-muted">집행일 vs 미집행일{extra ? " (통제 전)" : ""}</dt>
                           <dd className={`font-mono tabular-nums ${oo.p < 0.05 ? "font-semibold text-ink" : "text-ink-muted"}`}>
                             {oo.diffPct == null ? "—" : `${oo.diffPct >= 0 ? "+" : "−"}${Math.abs(Math.round(oo.diffPct * 100))}%`}
                             <span className="ml-1 font-sans text-[12px] text-ink-muted">
@@ -425,7 +544,8 @@ export function CorrelationView({ data, clientId }: { data: CorrDataRes; clientI
           <li>인지·영상 캠페인은 자기 ROAS로 판단하지 않아요. &lsquo;인지·영상 캠페인 판단 근거&rsquo;에서 전달 효율(CPM·도달 단가·빈도), 주목도(재생률), 하위 퍼널 신호(브랜드검색·검색 클릭·성과 전환이 함께 움직였는지)로 봐요. 메타 인지 목표 캠페인은 이름에 vvc·ThruPlay·조회가 있을 때만 &lsquo;영상&rsquo;, 나머지(tvc·릴스 소재 포함)는 &lsquo;도달·인지&rsquo;로 분류해요.</li>
           <li>두 지표 모두에서 요일 효과와 선형 추세를 먼저 걷어내요. 둘 다 시즌에 함께 오르기만 해도 상관이 높게 나오는 착시를 줄이기 위해서예요.</li>
           <li>광고 효과는 며칠 남으므로 잔존 효과(θ 0·0.3·0.5·0.7)와 시차(0~14일)를 모두 시험해 가장 강한 조합을 보여줘요. 일별 값끼리 이어져 있는 만큼 유효 표본을 줄이고, 여러 조합을 시험한 만큼 보수적으로 유의성을 판단해요.</li>
-          <li>기여도는 모든 원인을 함께 넣은 회귀(요일·추세 통제, 릿지)로 추정해요. &lsquo;{unitWord}당&rsquo;은 잔존 효과까지 합친 값이에요. 원인과 성과 캠페인 예산을 늘 같이 늘리고 줄였다면 효과를 분리하기 어려워요(핵심 발견에 표시).</li>
+          <li>기여도는 모든 원인을 함께 넣은 회귀(요일·추세 통제, 릿지)로 추정해요. &lsquo;{unitWord}당&rsquo;은 잔존 효과까지 합친 값이에요.</li>
+          <li>통제: &lsquo;성과 광고비&rsquo;(기본 켬)는 같은 날의 성과(전환·검색) 캠페인 광고비를, &lsquo;행사 기간&rsquo;은 입력한 할인 기간을 상관·회귀 모두에서 함께 걷어내요. 인지 광고를 켤 때 성과 예산도 늘렸거나 행사 기간에 둘 다 몰렸다면 그 몫을 빼고도 관계가 남는지 보는 거예요. 시차·잔존 효과는 통제 전에 찾은 값을 그대로 두고 검정해요(통제 후 다시 고르면 우연한 조합이 뽑혀요). 카드의 &lsquo;통제 전&rsquo;과 비교해 크게 약해지면 성과 예산·행사의 몫이 컸다는 뜻이에요. 둘을 늘 같이 늘리고 줄였다면 통제해도 완전히 분리되지 않아요(핵심 발견에 표시).</li>
           <li>상관은 인과가 아니에요. 확실히 보려면 지역·기간을 나눈 홀드아웃(켰다 끄기) 테스트가 필요해요. 집행일 vs 미집행일 비교는 그 근사치예요.</li>
           <li>네이버 SA는 일별을 캠페인 하나씩만 조회할 수 있어 광고비 상위 15개 + 브랜드검색 캠페인만 써요. 구글 Ads는 채널 유형 + 입찰 방식으로 분류해요(검색 = 검색, 동영상 CPM 입찰(VRC·범퍼·마스트헤드) = 도달·인지, 동영상 CPV 입찰(VVC) = 영상, 동영상 전환 입찰 = 전환, 디스플레이 = 도달·인지, 디맨드젠 = 이름에 영상 키워드가 있으면 영상·없으면 전환, PMax·쇼핑 = 전환). 매체마다 전환 집계 기준이 달라요.</li>
           <li>외부 지표 CSV: 첫 열 날짜(2026-09-01·2026.09.01·20260901), 나머지 열은 숫자(GRP·SOV·검색량 등). 비어 있는 날은 직전 값으로 채워 주간 데이터도 쓸 수 있어요.</li>
