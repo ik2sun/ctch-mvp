@@ -85,7 +85,7 @@ const REPORT_TOOLS: Anthropic.Beta.BetaTool[] = [
   },
   {
     name: "get_creative_report",
-    description: "메타 소재 단위 리포트(CTCH 소재 분석과 같은 엔진): 판정(키우기·지켜보기·끄기·예산 못 받음·신규, 목표 ROAS 기준), 소재 유형별 성과(성과 맵 기준), 소재별 광고비·ROAS·CPA·CTR·CVR, 피로 의심. 처음 조회는 20~40초.",
+    description: "메타 소재 단위 리포트(CTCH 소재 분석과 같은 엔진): 판정(키우기·지켜보기·끄기·집행 부족·신규, 목표 ROAS 기준), 소재 유형별 성과(성과 맵 기준), 소재별 광고비·ROAS·CPA·CTR·CVR, 피로 의심. 처음 조회는 20~40초.",
     strict: true,
     input_schema: {
       type: "object",

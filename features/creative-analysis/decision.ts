@@ -1,5 +1,5 @@
 // 소재 판정 엔진 — 순수 함수(화면 계산, API 비용 없음).
-// 상태: 🟢 키우기 / 🟡 지켜보기 / 🔴 끄기 / 🌱 신규(학습 중) / 💤 예산 못 받음 + 이유 한 줄 + 신뢰도 + ROAS 90% 구간.
+// 상태: 🟢 키우기 / 🟡 지켜보기 / 🔴 끄기 / 🌱 신규(학습 중) / 💤 집행 부족 + 이유 한 줄 + 신뢰도 + ROAS 90% 구간.
 //
 // 전환(CV) 소재 — 광고주 목표 ROAS(절대 기준, 기본 500%)와 비교. 캠페인 유형별 목표(프로모션·상시·브랜딩/TVC)가 있으면 그걸 쓴다.
 //   · 신뢰 구간: 전환 수를 포아송으로 보고 ROAS 90% 구간 = ROAS × (1 ± 1.645/√전환). 주문 금액 편차는 반영 못 함(구간이 실제보다 좁을 수 있다).
@@ -7,7 +7,7 @@
 //   · 끄기:   구간 상한 < 목표(확실히 목표 미만), 또는 전환이 거의 없이 계정 CPA의 3배↑ 소진
 //   · 지켜보기: 구간이 목표를 걸침(아직 구분 안 됨), 또는 좋지만 최근 꺾임·피로
 //   · 신규:   전환 5건 미만 & 집행 7일 이하 — 기다리면 판단 가능
-//   · 예산 못 받음: 전환 5건 미만 & 집행 8일 이상 — 메타가 예산을 안 줘서 데이터가 안 쌓임 → 정리 대상
+//   · 집행 부족: 전환 5건 미만 & 집행 8일 이상 — 예산이 충분히 집행되지 않아 판단할 데이터가 없음 → 정리 대상
 // 트래픽(TR) 소재 — 같은 목표 소재들의 CTR 중앙값 대비(상대 기준).
 // 광고세트 행동(adsetActions) — 메타 예산은 광고세트(ABO)·캠페인(CBO·Advantage+)에 있으니, 소재 판정을 세트 단위 행동으로 묶는다.
 import type { Enriched } from "./analyze";
@@ -34,7 +34,7 @@ export const STATUS_META: Record<DecisionStatus, { label: string; icon: string; 
   kill: { label: "끄기", icon: "🔴", chip: "bg-bad/10 text-bad", head: "text-bad" },
   scale: { label: "키우기", icon: "🟢", chip: "bg-good/10 text-good", head: "text-good" },
   watch: { label: "지켜보기", icon: "🟡", chip: "bg-warn/10 text-warn", head: "text-warn" },
-  starved: { label: "예산 못 받음", icon: "💤", chip: "bg-[#EEF0F3] text-ink-soft", head: "text-ink-soft" },
+  starved: { label: "집행 부족", icon: "💤", chip: "bg-[#EEF0F3] text-ink-soft", head: "text-ink-soft" },
   new: { label: "신규", icon: "🌱", chip: "bg-canvas text-ink-muted", head: "text-ink-soft" },
 };
 
@@ -97,7 +97,7 @@ export function decide(rows: Enriched[], baseTarget: number, rules: TargetRules,
 
     if (r.group === "upper") {
       if (!r.judged || r.ctr == null || upperCtr == null) {
-        out.set(r.id, { ...base, status: age > 7 ? "starved" : "new", reason: age > 7 ? `집행 ${age}일째인데 노출이 판단 기준보다 적어요` : "노출이 판단 기준보다 적어요", confidence: "낮음", basis: "relative", interval: null });
+        out.set(r.id, { ...base, status: age > 7 ? "starved" : "new", reason: age > 7 ? `${age}일째 집행 중이지만 예산이 충분히 집행되지 않아 노출이 판단 기준보다 적어요` : "노출이 판단 기준보다 적어요", confidence: "낮음", basis: "relative", interval: null });
         continue;
       }
       const ratio = r.ctr / upperCtr;
@@ -126,7 +126,7 @@ export function decide(rows: Enriched[], baseTarget: number, rules: TargetRules,
           interval: null,
         });
       } else if (age > 7) {
-        out.set(r.id, { ...base, status: "starved", reason: `집행 ${age}일째, 광고비 ${won(r.cost)} · 전환 ${r.conversions.toFixed(0)}건 — 메타가 예산을 거의 안 줘요. 정리 대상`, confidence: "보통", basis: "target", interval: null });
+        out.set(r.id, { ...base, status: "starved", reason: `집행 ${age}일째, 광고비 ${won(r.cost)} · 전환 ${r.conversions.toFixed(0)}건 — 예산이 충분히 집행되지 않아 판단할 데이터가 부족해요. 정리 대상`, confidence: "보통", basis: "target", interval: null });
       } else {
         out.set(r.id, { ...base, status: "new", reason: `집행 ${age || "?"}일째 · 전환 ${r.conversions.toFixed(0)}건 — ${MIN_CONV}건 이상 쌓이면 판정해요`, confidence: "낮음", basis: "target", interval: null });
       }
