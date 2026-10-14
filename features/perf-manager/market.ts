@@ -18,12 +18,12 @@ export async function marketSignals(supabase: SupabaseClient, clientId: string, 
     for (const k of kws) {
       const { data: chk } = await supabase.from("competitor_rank_checks").select("device, matched_rank, ads_snapshot, checked_at").eq("keyword_id", k.id).order("checked_at", { ascending: false }).limit(2);
       if (!chk?.length) {
-        out.push(`- '${k.keyword}' (${k.target_domain}): 체크 기록 없음`);
+        out.push(`- '${k.keyword}' (${k.target_domain ?? "타겟 도메인 없음"}): 체크 기록 없음`);
         continue;
       }
       for (const c of chk) {
         const ads = ((c.ads_snapshot as Ad[]) ?? []).slice(0, 5).map((a) => `${a.rank ?? "?"}.${a.domain ?? ""}`).join(" ");
-        out.push(`- '${k.keyword}' ${c.device} ${String(c.checked_at).slice(0, 10)}: ${k.target_domain} ${c.matched_rank ? `${c.matched_rank}위` : "순위 밖"} · 상위 광고 ${ads || "—"}`);
+        out.push(`- '${k.keyword}' ${c.device} ${String(c.checked_at).slice(0, 10)}: ${k.target_domain ? `${k.target_domain} ${c.matched_rank ? `${c.matched_rank}위` : "순위 밖"}` : "(타겟 없음)"} · 상위 광고 ${ads || "—"}`);
       }
     }
   }

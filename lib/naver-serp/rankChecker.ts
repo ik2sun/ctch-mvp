@@ -4,6 +4,8 @@
 // `a=pwl(_nop)?.tit&...&d="+(urlencode|encodeURIComponent)("<광고주 도메인>")` 패턴이 광고 순서·
 // 랜딩 도메인을 가장 안정적으로 담고 있어 이를 기준으로 파싱한다(2026-08 기준 구조).
 
+import { findShopRank, parseShopping, type ShoppingResult } from "./shopping";
+
 export type Device = "pc" | "mobile";
 
 export type PowerLinkAd = {
@@ -21,6 +23,7 @@ export type RankCheckResult = {
   ads: PowerLinkAd[];
   matchedRank: number | null;
   checkedAt: string;
+  shopping?: ShoppingResult; // withShopping일 때만 — 네이버 가격비교·플러스 스토어
 };
 
 const UA: Record<Device, string> = {
@@ -51,7 +54,8 @@ function sleep(ms: number): Promise<void> {
 
 // 네이버에 짧은 간격으로 요청이 몰리면 차단/캡차 페이지로 응답할 수 있다.
 // 이 프로세스에서 나가는 모든 SERP 요청을 하나의 대기열로 묶어 최소 간격을 둔다.
-const MIN_REQUEST_INTERVAL_MS = 1500;
+// 1.5초 간격 연속 요청에서도 PC 검색이 '이용 제한' 페이지로 바뀐 적이 있어(2026-10-14) 2.5초로 늘림.
+const MIN_REQUEST_INTERVAL_MS = 2500;
 let queue: Promise<void> = Promise.resolve();
 let lastRequestAt = 0;
 
@@ -159,26 +163,49 @@ async function fetchSerpHtml(device: Device, keyword: string): Promise<string> {
   if (!res.ok) {
     throw new Error(`네이버 검색 페이지를 불러오지 못했어요. (${res.status})`);
   }
-  return res.text();
+  const html = await res.text();
+  // 차단 페이지를 그대로 파싱하면 '광고 없음 = 10위 밖'으로 잘못 저장된다 → 오류로 돌려 기록하지 않음
+  if (html.includes("검색 서비스 이용이 제한되었습니다")) throw new SerpBlockedError();
+  return html;
+}
+
+export class SerpBlockedError extends Error {
+  constructor() {
+    super("네이버가 이 서버의 검색을 잠시 제한했어요(짧은 간격 반복 요청 감지). 잠시 뒤 다시 확인해 주세요.");
+  }
 }
 
 export async function checkPowerLinkRank(
   keyword: string,
-  targetDomain: string,
+  targetDomain: string | null,
   device: Device,
+  opts: { withShopping?: boolean; targetMall?: string | null } = {},
 ): Promise<RankCheckResult> {
   let html: string;
   try {
     html = await fetchSerpHtml(device, keyword);
-  } catch {
-    // 일시적인 차단/타임아웃일 수 있어 잠깐 대기 후 1회 재시도
+  } catch (e) {
+    // 이용 제한은 바로 재시도하면 더 길어지므로 그대로 알림
+    if (e instanceof SerpBlockedError) throw e;
+    // 일시적인 타임아웃일 수 있어 잠깐 대기 후 1회 재시도
     await sleep(3000);
     html = await fetchSerpHtml(device, keyword);
   }
 
   const ads = parsePowerLinkAds(html, device);
-  const target = normalizeDomain(targetDomain);
-  const matched = ads.find((a) => domainMatches(a.domain, target));
+  const target = targetDomain ? normalizeDomain(targetDomain) : "";
+  const matched = target ? ads.find((a) => domainMatches(a.domain, target)) : undefined;
+
+  let shopping: ShoppingResult | undefined;
+  if (opts.withShopping) {
+    const { price, store } = parseShopping(html, device);
+    shopping = {
+      price,
+      store,
+      priceRank: findShopRank(price, target || null, opts.targetMall ?? null),
+      storeRank: findShopRank(store, target || null, opts.targetMall ?? null),
+    };
+  }
 
   return {
     device,
@@ -186,5 +213,6 @@ export async function checkPowerLinkRank(
     ads,
     matchedRank: matched?.rank ?? null,
     checkedAt: new Date().toISOString(),
+    shopping,
   };
 }
