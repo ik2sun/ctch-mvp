@@ -257,7 +257,7 @@ NMG(넥스트미디어그룹) 내부용 AI 기반 퍼포먼스 마케팅 대시�
 - 자동 체크 주기 1시간 추가 + `auto_paused`(주기 유지·자동만 중지). 스윕 `autoCheckSweep.ts`는 차례대로·주기 10분 여유·이용 제한 시 중단. **Vercel Hobby 크론은 하루 1회**라 1시간 주기는 로컬 서버(instrumentation 15분 스윕)에서만 실제로 돈다
 - 네이버 이용 제한 페이지('검색 서비스 이용이 제한되었습니다')를 `SerpBlockedError`로 감지(예전엔 '10위 밖'으로 잘못 저장). 1.5초 간격 연속 요청에서도 차단돼 간격 2.5초
 - 키워드 체크박스(모두 선택·해제·머리 체크) + 일괄: 지금 확인 · 자동 체크 중지/재개 · 주기 일괄 변경 · 엑셀 · 삭제. 행 펼치면 최신 결과(파워링크·상품 카드 이미지)
-- 엑셀은 서버 `/api/naver-serp/export`(exceljs, POST keywordIds·days): 요약 · 파워링크_PC/모바일 · 네이버 가격비교 · 네이버플러스 스토어(이미지 셀, 최근부터 최대 400개 — pstatic.net만) · 안내. 기간 1/7/30일/전체
+- 엑셀은 서버 `/api/naver-serp/export`(exceljs, POST keywordIds·days): 요약 · **순위 추이**(`rankTrendSheet.ts` — 키워드×기기×영역 블록마다 업체별 노출 회차·노출률·평균·최고·3위 내 노출률 + 시간대별 순위 표(색 척도) + 꺾은선 차트(위=1위, 상위 8곳, ★ 타겟). 업체 = 파워링크 도메인(모바일 업체명 병기)·쇼핑 판매처(가격비교 묶음은 상품명). exceljs는 차트를 못 만들어 xlsx에 엑셀 기본 차트 XML을 직접 넣음(`injectTrendCharts`, jszip) — Excel COM으로 6개 차트 렌더 확인) · 파워링크_PC/모바일 · 네이버 가격비교 · 네이버플러스 스토어(이미지 셀, 최근부터 최대 400개 — pstatic.net만) · 안내. 기간 1/7/30일/전체
 - **수집 영역 선택**(키워드별, `collect_sections` text[] 기본 전부, 최소 1개): 추가 폼·각 행(키워드 칸 아래 체크)·일괄 '수집 항목 변경'. 검색 페이지는 어차피 한 번 받으므로 요청 수는 같고, 고르지 않은 영역은 저장·화면·엑셀에서 빠진다. 이력의 `shopping_snapshot.sections` = 그 회차에 수집한 영역(`snapshotHas` — 없으면 예전 기록: snapshot null=파워링크만, sections 없음=전부)
 - 마이그레이션 `0035_competitor_monitor_v2.sql`(target_domain null 허용·target_mall·auto_paused·shopping_snapshot) — 2026-10-14 실행됨 / `0036_competitor_collect_sections.sql` — 2026-10-14 실행됨
 

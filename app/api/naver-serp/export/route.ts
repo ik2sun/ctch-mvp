@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { dataOwnerId } from "@/lib/workspace";
 import type { PowerLinkAd } from "@/lib/naver-serp/rankChecker";
+import { buildTrendBlocks, injectTrendCharts, writeTrendSheet } from "@/lib/naver-serp/rankTrendSheet";
 import { SHOP_KIND_LABEL, snapshotHas, type ShopItem, type ShoppingSnapshot } from "@/lib/naver-serp/shopping";
 
 export const dynamic = "force-dynamic";
@@ -154,6 +155,9 @@ export async function POST(req: Request) {
     ]);
   }
 
+  // ①-2 순위 추이 — 업체별 × 시간대별 순위 표 + 꺾은선 차트(차트는 파일을 쓴 뒤 넣는다)
+  const trendSpecs = writeTrendSheet(wb, buildTrendBlocks(keywords, checks));
+
   // ② 파워링크 — 기기별 시트(예전 형식 유지)
   for (const device of ["pc", "mobile"] as const) {
     const ws = sheetWith(wb, `파워링크_${DEVICE_LABEL[device]}`, [
@@ -262,16 +266,17 @@ export async function POST(req: Request) {
     ["기간", days ? `최근 ${days}일` : "전체"],
     ["키워드", keywords.map((k) => k.keyword).join(", ")],
     ["확인 회차", `${checks.length}건(기기별)`],
+    ["순위 추이", "키워드 × 기기 × 영역마다 업체별 노출 회차·평균·최고 순위·3위 내 노출률(전체 회차 중 3위 안에 든 비율)과 시간대별 순위, 꺾은선 차트(위 = 1위, 상위 8곳). 최근 168회차까지"],
     ["이미지", `상품 이미지는 최근 확인부터 최대 ${MAX_IMAGES}개까지 셀에 넣고, 나머지는 '이미지 URL' 칸을 보세요.`],
     ["가격비교 구분", "광고 = 쇼핑검색 광고, 가격비교 = 여러 판매처를 묶은 상품(판매처 수 표시), 일반 = 개별 판매처 상품, 슈퍼적립 = 네이버 적립 프로모션"],
     ["모바일 가격비교", "모바일은 옆으로 넘기는 여러 페이지가 함께 오는데, 첫 화면(1페이지)만 기록합니다."],
   ].forEach((r) => info.addRow(r));
   info.getColumn(1).font = { bold: true };
 
-  const buf = await wb.xlsx.writeBuffer();
+  const buf = await injectTrendCharts((await wb.xlsx.writeBuffer()) as ArrayBuffer, trendSpecs);
   const date = new Date().toISOString().slice(0, 10);
   const koreanName = `CTCH_경쟁사모니터링${body.clientName ? `_${body.clientName}` : ""}_${date}.xlsx`;
-  return new Response(new Uint8Array(buf as ArrayBuffer), {
+  return new Response(new Uint8Array(buf), {
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       "Content-Disposition": `attachment; filename="competitor_${date}.xlsx"; filename*=UTF-8''${encodeURIComponent(koreanName)}`,
