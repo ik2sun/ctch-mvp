@@ -18,13 +18,17 @@ export class KakaoMomentApiError extends Error {
   }
 }
 
-export type RateBucket = "account-report" | "campaign-report" | "adgroup-report" | "creative-report" | "list";
+export type RateBucket = "account-report" | "campaign-report" | "adgroup-report" | "creative-report" | "list" | "write-adgroup" | "write-creative" | "write-onoff";
 const BUCKET_INTERVAL_MS: Record<RateBucket, number> = {
   "account-report": 5200,
   "campaign-report": 5200,
   "adgroup-report": 1200,
   "creative-report": 5200,
   list: 250,
+  // 쓰기(캠페인 오토파일럿) — 광고그룹 생성·수정 5초/1회, 소재 생성 1초/1회, ON/OFF 1초/1회(공식 문서)
+  "write-adgroup": 5300,
+  "write-creative": 1200,
+  "write-onoff": 1200,
 };
 
 type Query = Record<string, string | number | Array<string | number> | undefined>;
@@ -53,6 +57,8 @@ export type KakaoRequestOptions = {
   adAccountId?: string; // 광고계정 목록 조회처럼 계정 헤더가 필요 없는 호출은 생략
   query?: Query;
   bucket?: RateBucket;
+  method?: "GET" | "POST" | "PUT" | "DELETE";
+  json?: unknown; // 쓰기 본문(application/json)
 };
 
 async function performRequest<T>(path: string, opts: KakaoRequestOptions): Promise<T> {
@@ -69,8 +75,9 @@ async function performRequest<T>(path: string, opts: KakaoRequestOptions): Promi
     Accept: "application/json",
   };
   if (opts.adAccountId) headers.adAccountId = opts.adAccountId;
+  if (opts.json !== undefined) headers["Content-Type"] = "application/json";
 
-  const res = await fetch(url.toString(), { method: "GET", headers, cache: "no-store" });
+  const res = await fetch(url.toString(), { method: opts.method ?? "GET", headers, body: opts.json !== undefined ? JSON.stringify(opts.json) : undefined, cache: "no-store" });
   const text = await res.text();
   let json: unknown = null;
   if (text) {
@@ -82,22 +89,30 @@ async function performRequest<T>(path: string, opts: KakaoRequestOptions): Promi
   }
 
   if (!res.ok) {
-    const body = json as { code?: number | string; msg?: string; message?: string; extras?: unknown } | null;
-    const detail = body?.msg ?? body?.message ?? `카카오모먼트 API 요청이 실패했어요. (${res.status})`;
+    // 실패 응답 { code: -813, msg: "KakaoMomentException", extras: { detailCode, detailMsg } } — 사람이 읽을 문구는 detailMsg
+    const body = json as { code?: number | string; msg?: string; message?: string; extras?: { detailCode?: number; detailMsg?: string } } | null;
+    const detail = body?.extras?.detailMsg ? `${body.extras.detailMsg}${body.extras.detailCode ? ` (${body.extras.detailCode})` : ""}` : (body?.msg ?? body?.message ?? `카카오모먼트 API 요청이 실패했어요. (${res.status})`);
     if (res.status === 401) throw new KakaoMomentApiError("카카오 토큰이 유효하지 않아요. 광고주 관리에서 카카오 계정을 다시 연결해 주세요.", "UNAUTHORIZED", 401);
     if (res.status === 403) throw new KakaoMomentApiError(`카카오모먼트 권한이 없어요. 앱의 카카오모먼트 API 사용 권한과 광고계정 멤버 권한을 확인해 주세요. (${detail})`, "FORBIDDEN", 403);
     if (res.status === 429 || /too many|limit/i.test(detail)) throw new KakaoMomentApiError("카카오모먼트 요청 제한에 걸렸어요. 잠시 후 다시 시도해 주세요.", "RATE_LIMITED", 429);
     throw new KakaoMomentApiError(detail, undefined, res.status);
   }
+  // 소재 ON/OFF처럼 200 OK에 실패 본문({ code: -813, extras })을 주는 API가 있다(공식 문서 예시)
+  const okBody = json as { code?: number; msg?: string; extras?: { detailCode?: number; detailMsg?: string } } | null;
+  if (okBody && !Array.isArray(okBody) && typeof okBody.code === "number" && okBody.code < 0 && okBody.extras) {
+    throw new KakaoMomentApiError(`${okBody.extras.detailMsg ?? okBody.msg ?? "카카오모먼트 요청 실패"}${okBody.extras.detailCode ? ` (${okBody.extras.detailCode})` : ""}`, undefined, res.status);
+  }
   return json as T;
 }
 
 // 요청 제한(429)이나 일시 오류면 버킷 간격만큼 기다렸다 1회 재시도
+// 쓰기(GET 외)는 요청 제한일 때만 재시도 — 서버 오류 뒤 재시도하면 같은 광고그룹·소재가 두 번 생길 수 있다
 export async function kakaoRequest<T>(path: string, opts: KakaoRequestOptions): Promise<T> {
   try {
     return await performRequest<T>(path, opts);
   } catch (e) {
     if (e instanceof KakaoMomentApiError && (e.code === "UNAUTHORIZED" || e.code === "FORBIDDEN")) throw e;
+    if ((opts.method ?? "GET") !== "GET" && !(e instanceof KakaoMomentApiError && e.code === "RATE_LIMITED")) throw e;
     await sleep(BUCKET_INTERVAL_MS[opts.bucket ?? "list"]);
     return await performRequest<T>(path, opts);
   }

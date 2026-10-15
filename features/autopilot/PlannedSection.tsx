@@ -7,11 +7,12 @@ import { NAV } from "@/components/layout/nav";
 import { useClients } from "@/features/clients/ClientContext";
 import { Card } from "@/features/dashboard/ui";
 
-// 2026-10-04 결정: 첫 매체 GFA, 실행은 승인 후 실행(완성도가 확인되면 완전 자동으로 전환). 2026-10-09 메타 추가
-export type AutopilotMediaKey = "gfa" | "meta";
+// 2026-10-04 결정: 첫 매체 GFA, 실행은 승인 후 실행(완성도가 확인되면 완전 자동으로 전환). 2026-10-09 메타, 2026-10-15 카카오모먼트 추가
+export type AutopilotMediaKey = "gfa" | "meta" | "kakao";
 export const AUTOPILOT_MEDIAS: Record<AutopilotMediaKey, { key: AutopilotMediaKey; label: string; full: string }> = {
   gfa: { key: "gfa", label: "GFA", full: "네이버 성과형 디스플레이" },
   meta: { key: "meta", label: "메타", full: "메타(페이스북·인스타그램) 광고" },
+  kakao: { key: "kakao", label: "카카오", full: "카카오모먼트(비즈보드·디스플레이·동영상)" },
 };
 export const AUTOPILOT_MEDIA = AUTOPILOT_MEDIAS.gfa;
 export const AUTOPILOT_MODE = "승인 후 실행";
@@ -82,7 +83,7 @@ export function PlannedSection({
 
 // 오토파일럿 화면 공통 머리 — 이동 경로 + 파스텔 안내 배너(설명·매체·실행 방식·현재 광고주)
 export function AutopilotHeader({ intro, status, media = "gfa" }: { intro: string; status?: string; media?: AutopilotMediaKey | "all" }) {
-  const m = media === "all" ? { label: "GFA · 메타", full: "GFA · 메타" } : AUTOPILOT_MEDIAS[media];
+  const m = media === "all" ? { label: "GFA · 메타 · 카카오", full: "GFA · 메타 · 카카오" } : AUTOPILOT_MEDIAS[media];
   const { selected } = useClients();
   const pathname = usePathname();
   const group = NAV.find((n) => n.children?.some((c) => c.href === pathname));

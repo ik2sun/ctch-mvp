@@ -49,10 +49,10 @@ export default function AutopilotLogsPage() {
             <li key={r.id} className="py-3">
               <button type="button" onClick={() => setOpen(open === r.id ? null : r.id)} className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 text-left">
                 <span className="tabular-nums text-[14px] text-ink-muted">{new Date(r.created_at).toLocaleString("ko-KR")}</span>
-                <span className="rounded-full border border-line px-2 py-0.5 text-[12px] text-ink-soft">{r.media === "meta" ? "메타" : r.media.toUpperCase()} · {r.kind === "setup" ? "자동 대량 세팅" : r.kind}</span>
+                <span className="rounded-full border border-line px-2 py-0.5 text-[12px] text-ink-soft">{r.media === "meta" ? "메타" : r.media === "kakao" ? "카카오" : r.media.toUpperCase()} · {r.kind === "setup" ? "자동 대량 세팅" : r.kind}</span>
                 <span className="text-[15px] font-semibold text-ink">{r.summary?.campaignName ?? `캠페인 #${r.campaign_no}`}</span>
                 <span className="text-[14px] text-ink-soft">
-                  {r.media === "meta" ? `광고세트 ${(r.summary?.adSets ?? 0) + (r.summary?.copiedAdSets ?? 0)} · 소재 ${r.summary?.creatives ?? 0} · 광고 ${r.summary?.ads ?? 0}` : `광고그룹 ${r.summary?.adSets ?? 0} · 소재 ${r.summary?.creatives ?? 0}`}
+                  {r.media === "meta" ? `광고세트 ${(r.summary?.adSets ?? 0) + (r.summary?.copiedAdSets ?? 0)} · 소재 ${r.summary?.creatives ?? 0} · 광고 ${r.summary?.ads ?? 0}` : `광고그룹 ${(r.summary?.adSets ?? 0) + (r.summary?.copiedAdSets ?? 0)} · 소재 ${r.summary?.creatives ?? 0}`}
                   {r.summary?.dailyBudget ? ` · 일 ${r.summary.dailyBudget.toLocaleString("ko-KR")}원` : ""} · {r.summary?.activated ? "켜짐" : "꺼진 상태로 생성"}
                 </span>
                 {!!r.summary?.errors && <span className="text-[14px] text-bad">오류 {r.summary.errors}</span>}

@@ -7,7 +7,7 @@ export type MarkItem = { row: number; status: string; fix: string; tone: "bad" |
 
 const cell = (v: unknown) => (v == null ? "" : String(v).trim());
 
-function markSheet(ws: XLSX.WorkSheet, isHeader: (vals: string[]) => boolean, items: MarkItem[]): boolean {
+export function markSheet(ws: XLSX.WorkSheet, isHeader: (vals: string[]) => boolean, items: MarkItem[]): boolean {
   const m = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: "", blankrows: true });
   const hi = m.findIndex((r) => isHeader(r.map(cell)));
   if (hi < 0) return false;
