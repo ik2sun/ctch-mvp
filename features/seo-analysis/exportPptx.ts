@@ -72,12 +72,20 @@ function sectionLabel(slide: Slide, text: string, y = 0.95, dark = false) {
   slide.addText(text, { x: MX, y, w: CW, h: 0.28, fontFace: F, fontSize: 9, color: dark ? C.signalSoft : C.signal, bold: true, charSpacing: 2, margin: 0 });
 }
 
+function safePptText(text: string, limit = 180): string {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  if (!normalized) return "";
+  if (normalized.length <= limit) return normalized;
+  const trimmed = normalized.slice(0, Math.max(20, limit - 1)).trim();
+  return `${trimmed.replace(/[.,;:!?]$/, "")}…`;
+}
+
 function headline(slide: Slide, text: string, y = 1.25, size = 26, dark = false, h = 1.1) {
-  slide.addText(text, { x: MX, y, w: CW, h, fontFace: F, fontSize: size, bold: true, color: dark ? C.surface : C.ink, valign: "top", margin: 0, fit: "shrink" });
+  slide.addText(safePptText(text, 120), { x: MX, y, w: CW, h, fontFace: F, fontSize: size, bold: true, color: dark ? C.surface : C.ink, valign: "top", margin: 0, fit: "shrink" });
 }
 
 function para(slide: Slide, text: string, x: number, y: number, w: number, h: number, size = 11, color = C.soft, dark = false) {
-  slide.addText(text, { x, y, w, h, fontFace: F, fontSize: size, color: dark ? C.faint : color, valign: "top", margin: 0, fit: "shrink", lineSpacingMultiple: 1.15 });
+  slide.addText(safePptText(text, 360), { x, y, w, h, fontFace: F, fontSize: size, color: dark ? C.faint : color, valign: "top", margin: 0, fit: "shrink", lineSpacingMultiple: 1.15 });
 }
 
 function box(slide: Slide, x: number, y: number, w: number, h: number, fill = C.canvas, line = C.line) {
@@ -105,7 +113,7 @@ function cell(text: string, opts: Partial<PptxGenJS.TableCellProps> = {}): Cell 
 }
 
 function table(slide: Slide, rows: Cell[][], x: number, y: number, w: number, colW: number[], rowH?: number) {
-  slide.addTable(rows, { x, y, w, colW, rowH, fontFace: F, fontSize: 9, border: { type: "solid", pt: 0.5, color: C.line }, valign: "top", margin: 0.06, autoPage: false });
+  slide.addTable(rows, { x, y, w, colW, rowH, fontFace: F, fontSize: 8.4, border: { type: "solid", pt: 0.5, color: C.line }, valign: "top", margin: 0.04, autoPage: false });
 }
 
 // ---------- 슬라이드 ----------

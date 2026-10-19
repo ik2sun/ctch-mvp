@@ -54,6 +54,16 @@ function Section({ title, desc, children, right }: { title: string; desc?: strin
   );
 }
 
+type SeoHistoryEntry = {
+  id: string;
+  url: string;
+  title: string;
+  timestamp: string;
+  status: "tech" | "tech+ai";
+  audit: AuditResult;
+  diagnosis?: SeoDiagnosis | null;
+};
+
 const SEV_ORDER: Record<string, number> = { HIGH: 0, MID: 1, LOW: 2 };
 
 // ---------- 페이지 ----------
@@ -63,6 +73,7 @@ export default function SeoAnalysisPage() {
   const [audit, setAudit] = useState<AuditResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [history, setHistory] = useState<SeoHistoryEntry[]>([]);
 
   const [diagnosis, setDiagnosis] = useState<SeoDiagnosis | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
@@ -77,6 +88,7 @@ export default function SeoAnalysisPage() {
 
   // 마지막 결과를 브라우저에 보존 — 새로고침·코드 반영(HMR)으로 상태가 사라져 AI 진단 없이 내려받는 일을 막는다
   const STORAGE_KEY = "ctch_seo_analysis_last";
+  const HISTORY_KEY = "ctch_seo_analysis_history";
   const [restored, setRestored] = useState(false);
   useEffect(() => {
     try {
@@ -87,6 +99,11 @@ export default function SeoAnalysisPage() {
         if (saved.audit) setAudit(saved.audit);
         if (saved.diagnosis) setDiagnosis(normalizeDiagnosis(saved.diagnosis));
         if (saved.brief) setBrief(saved.brief);
+      }
+      const rawHistory = localStorage.getItem(HISTORY_KEY);
+      if (rawHistory) {
+        const parsed = JSON.parse(rawHistory) as SeoHistoryEntry[];
+        if (Array.isArray(parsed)) setHistory(parsed.filter((r) => r && r.url && r.audit).slice(0, 8));
       }
     } catch {
       /* 저장소 사용 불가 — 무시 */
@@ -102,6 +119,41 @@ export default function SeoAnalysisPage() {
       /* 용량 초과 등 — 무시 */
     }
   }, [restored, input, audit, diagnosis, brief]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, 8)));
+    } catch {
+      /* 용량 초과 등 — 무시 */
+    }
+  }, [history]);
+
+  function saveHistoryEntry(nextAudit: AuditResult, nextDiagnosis: SeoDiagnosis | null) {
+    const now = new Date().toISOString();
+    const title = nextDiagnosis?.summary ? nextDiagnosis.summary.split(/(?<=[.다!?])\s+/)[0] ?? nextDiagnosis.summary : "기술 진단 완료";
+    const entry: SeoHistoryEntry = {
+      id: `${nextAudit.finalUrl}-${now}`,
+      url: nextAudit.finalUrl,
+      title: title.slice(0, 80),
+      timestamp: now,
+      status: nextDiagnosis ? "tech+ai" : "tech",
+      audit: nextAudit,
+      diagnosis: nextDiagnosis,
+    };
+    setHistory((prev) => {
+      const deduped = prev.filter((row) => row.url !== entry.url || row.timestamp !== entry.timestamp);
+      return [entry, ...deduped].slice(0, 8);
+    });
+  }
+
+  function restoreHistory(entry: SeoHistoryEntry) {
+    setInput(entry.url);
+    setAudit(entry.audit);
+    setDiagnosis(entry.diagnosis ? normalizeDiagnosis(entry.diagnosis) : null);
+    setAiError(null);
+    setError(null);
+    setAskDiagnosisFor(null);
+  }
 
   const modulesReady = hasExecutionModules(diagnosis);
   const [askDiagnosisFor, setAskDiagnosisFor] = useState<"pptx" | "xlsx" | null>(null);
@@ -184,7 +236,9 @@ export default function SeoAnalysisPage() {
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "진단에 실패했어요.");
-      setAudit(json as AuditResult);
+      const nextAudit = json as AuditResult;
+      setAudit(nextAudit);
+      saveHistoryEntry(nextAudit, diagnosis);
     } catch (e) {
       setError(e instanceof Error ? e.message : "오류가 발생했어요.");
     } finally {
@@ -206,6 +260,7 @@ export default function SeoAnalysisPage() {
       if (!res.ok) throw new Error(json.error || "AI 진단에 실패했어요.");
       const d = normalizeDiagnosis(json as SeoDiagnosis);
       setDiagnosis(d);
+      if (audit) saveHistoryEntry(audit, d);
       return d;
     } catch (e) {
       setAiError(e instanceof Error ? e.message : "오류가 발생했어요.");
@@ -236,6 +291,35 @@ export default function SeoAnalysisPage() {
             {loading ? "진단 중…" : "진단 시작"}
           </button>
         </div>
+        {history.length > 0 && (
+          <div className="mt-4 overflow-hidden rounded-card border border-line bg-canvas">
+            <div className="flex items-center justify-between gap-3 border-b border-line px-3.5 py-2.5">
+              <div className="flex items-center gap-2">
+                <i className="ti ti-history text-[16px] text-signal" aria-hidden />
+                <p className="text-[13px] font-medium text-ink-soft">최근 SEO 진단 기록</p>
+              </div>
+              <span className="rounded-full border border-line bg-surface px-2 py-0.5 text-[11px] text-ink-muted">최대 8개</span>
+            </div>
+            <div className="grid gap-2 p-3 md:grid-cols-2 xl:grid-cols-4">
+              {history.map((entry) => (
+                <button
+                  key={entry.id}
+                  onClick={() => restoreHistory(entry)}
+                  className="group rounded-lg border border-line bg-surface p-3 text-left transition hover:border-signal/40 hover:bg-signal-soft/20"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className={`rounded-full px-1.5 py-0.5 text-[11px] font-medium ${entry.status === "tech+ai" ? "bg-good/10 text-good" : "bg-surface text-ink-muted"}`}>
+                      {entry.status === "tech+ai" ? "기술 + AI" : "기술"}
+                    </span>
+                    <span className="text-[11px] text-ink-muted">{new Date(entry.timestamp).toLocaleDateString("ko-KR")}</span>
+                  </div>
+                  <p className="mt-2 line-clamp-2 min-h-[40px] text-[14px] font-medium text-ink">{entry.title}</p>
+                  <p className="mt-1 truncate text-[12px] text-ink-muted">{entry.url}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         <p className="mt-2 text-[13px] text-ink-muted">
           AI 크롤러가 보는 방식(JS 미실행)으로 페이지를 읽어 크롤러 접근 · 렌더링 · JSON-LD · 정합성 · 온페이지 · 인용 적합도를 점검하고, 엔진별(ChatGPT · Gemini/AI Overviews · Claude · Perplexity · 네이버) 처방을 나눕니다.
         </p>

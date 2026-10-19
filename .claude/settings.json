@@ -63,7 +63,9 @@
       "PowerShell(try { $r = Invoke-WebRequest -Uri \"http://localhost:3000/ai-report\" -MaximumRedirection 0 -SkipHttpErrorCheck } catch {}; \"status: $\\($r.StatusCode\\)\")",
       "PowerShell(\\(Get-Content .env.local | Select-String '^NEXT_PUBLIC_SUPABASE_URL='\\).Line)",
       "PowerShell(Set-Clipboard)",
-      "PowerShell(\"clipboard: OK\")"
+      "PowerShell(\"clipboard: OK\")",
+      "ClaudeInChromeDomain(localhost:3001)",
+      "mcp__claude-in-chrome__tabs_context_mcp"
     ],
     "additionalDirectories": [
       "C:\\Users\\NMG\\AppData\\Local\\Temp\\claude\\c--Users-NMG-Desktop-ctch-mvp\\f43587c9-c152-45a2-ba67-d9a41cdbfa98\\scratchpad",
