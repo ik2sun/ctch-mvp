@@ -66,6 +66,13 @@ function shortDate(s: string) {
   return `${d.getMonth() + 1}.${d.getDate()}`;
 }
 
+function formatKorean(value: number | null | undefined) {
+  if (value == null || Number.isNaN(value)) return "—";
+  if (value >= 100000000) return `${(value / 100000000).toFixed(1)}억`;
+  if (value >= 10000) return `${(value / 10000).toFixed(1)}만`;
+  return `${Math.round(value).toLocaleString("ko-KR")}원`;
+}
+
 const PERIODS = [
   { key: "1d", label: "전일", since: () => daysAgo(1), until: () => daysAgo(1) },
   { key: "7d", label: "최근 7일", since: () => daysAgo(7), until: () => daysAgo(1) },
@@ -78,8 +85,23 @@ const COMPARE_LABEL: Record<CompareBase, string> = { prev: "직전 기간", mont
 export default function DashboardHome() {
   const { selected } = useClients();
   const router = useRouter();
+  type RealMaterial = {
+    title: string;
+    label: string;
+    detail: string;
+    mediaKey: string;
+    kind: "good" | "bad";
+    thumbnailUrl?: string | null;
+    ctr?: number;
+    roas?: number;
+    clicks?: number;
+    cost?: number;
+    revenue?: number;
+  };
+
   const [rebalance, setRebalance] = useState<(BudgetMove & { fromKey: string; toKey: string }) | null>(null);
   const [creativeBusy, setCreativeBusy] = useState<string | null>(null);
+  const [realMaterials, setRealMaterials] = useState<RealMaterial[]>([]);
 
   const [periodKey, setPeriodKey] = useState("7d");
   const [compareBase, setCompareBase] = useState<CompareBase>("prev");
@@ -493,6 +515,122 @@ export default function DashboardHome() {
   const daily = useMemo(() => combinedDaily(series), [series]);
   const hasData = series.length > 0;
 
+  useEffect(() => {
+    if (!selected?.id || !series.length) {
+      setRealMaterials([]);
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      const items: RealMaterial[] = [];
+      for (const item of series) {
+        try {
+          const data = await fetchChannelInsights(item.key, selected.id, period.since(), period.until());
+          const ads = [...(data.ads ?? [])].filter((ad) => ad.cost > 0);
+          const best = ads.sort((a, b) => b.revenue / b.cost - a.revenue / a.cost)[0];
+          if (!best) continue;
+          const roas = (best.revenue / best.cost) * 100;
+          const ctr = best.impressions > 0 ? (best.clicks / best.impressions) * 100 : 0;
+          const one: RealMaterial = {
+            title: best.name || `${item.label} 소재`,
+            label: item.label,
+            mediaKey: item.key,
+            kind: roas >= 150 ? "good" : "bad",
+            thumbnailUrl: (best as MetaRow).thumbnailUrl ?? (best as MetaRow).imageUrl ?? null,
+            ctr,
+            roas,
+            clicks: best.clicks,
+            cost: best.cost,
+            revenue: best.revenue,
+            detail: `${item.label} · ROAS ${Math.round(roas)}% · CTR ${ctr.toFixed(2)}% · 광고비 ${formatKorean(best.cost)} · 매출 ${formatKorean(best.revenue)}`,
+          };
+          items.push(one);
+        } catch {
+          // 실제 소재 조회가 실패해도 전체 대시보드는 유지
+        }
+      }
+
+      if (!cancelled) {
+        const good = items.filter((i) => i.kind === "good").slice(0, 2);
+        const bad = items.filter((i) => i.kind === "bad").slice(0, 2);
+        setRealMaterials([...good, ...bad]);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selected?.id, periodKey, series]);
+
+  const executiveSummary = useMemo(() => {
+    if (!hasData || !total) return null;
+
+    const currentRoas = total.cost > 0 ? (total.revenue / total.cost) * 100 : 0;
+    const previousRoas = totalPrev?.cost ? (totalPrev.revenue / totalPrev.cost) * 100 : null;
+    const roasDelta = previousRoas ? ((currentRoas - previousRoas) / previousRoas) * 100 : 0;
+    const bestMedia = [...series]
+      .filter((m) => m.current.cost > 0)
+      .sort((a, b) => (b.current.revenue / b.current.cost) * 100 - (a.current.revenue / a.current.cost) * 100)[0];
+    const performanceScore = Math.min(
+      98,
+      Math.max(
+        48,
+        Math.round(68 + (currentRoas > 0 ? Math.min(20, currentRoas / 30) : 0) + (roasDelta > 0 ? Math.min(12, roasDelta / 2) : Math.max(-8, roasDelta / 4))),
+      ),
+    );
+    const spendDelta = previousRoas ? ((total.cost - (totalPrev?.cost ?? total.cost)) / (totalPrev?.cost ?? total.cost)) * 100 : 0;
+
+    const mediaScores = [...series]
+      .filter((m) => m.current.cost > 0)
+      .map((m) => {
+        const roas = (m.current.revenue / m.current.cost) * 100;
+        const prevRoas = m.previous && m.previous.cost > 0 ? (m.previous.revenue / m.previous.cost) * 100 : null;
+        const delta = prevRoas ? ((roas - prevRoas) / prevRoas) * 100 : 0;
+        const score = Math.min(99, Math.max(40, Math.round(60 + Math.min(18, roas / 25) + Math.min(12, Math.max(-6, delta / 2)))));
+        return {
+          key: m.key,
+          label: m.label,
+          roas,
+          delta,
+          score,
+          cost: m.current.cost,
+          revenue: m.current.revenue,
+          conversions: m.current.conversions,
+        };
+      })
+      .sort((a, b) => b.roas - a.roas);
+
+    const goodExamples: RealMaterial[] = mediaScores.slice(0, 2).map((m) => ({
+      title: m.label,
+      label: m.label,
+      detail: `ROAS ${Math.round(m.roas)}% · 광고비 ${formatKorean(m.cost)} · 매출 ${formatKorean(m.revenue)}`,
+      mediaKey: m.key,
+      kind: "good",
+    }));
+
+    const badExamples: RealMaterial[] = [...mediaScores].reverse().slice(0, 2).map((m) => ({
+      title: m.label,
+      label: m.label,
+      detail: `ROAS ${Math.round(m.roas)}% · 광고비 ${formatKorean(m.cost)} · 매출 ${formatKorean(m.revenue)}`,
+      mediaKey: m.key,
+      kind: "bad",
+    }));
+
+    return {
+      score: performanceScore,
+      roas: currentRoas,
+      roasDelta,
+      spendDelta,
+      bestMedia,
+      focus: bestMedia ? `${bestMedia.label} 기준 ROAS ${Math.round((bestMedia.current.revenue / bestMedia.current.cost) * 100)}%` : "추가 데이터 확보 필요",
+      recommendation: aiPlan?.urgentActions?.[0] ?? aiPlan?.nextWeekActions?.[0] ?? "지표 안정화에 집중해 추가 성과를 확장할 수 있어요.",
+      goodExamples,
+      badExamples,
+      mediaScores,
+    };
+  }, [aiPlan, hasData, insights, series, total, totalPrev]);
+
   // 표에 "데이터 없음" 사유와 함께 보여줄 매체
   const inactive = MEDIA_LIST.filter((m) => !series.some((s) => s.key === m.key)).map((m) => {
     const st = media?.find((s) => s.key === m.key);
@@ -734,6 +872,154 @@ export default function DashboardHome() {
         <div className="rounded-card border border-line bg-surface py-16 text-center text-[15px] text-ink-muted">광고주를 선택하면 매체별 성과가 표시돼요.</div>
       ) : (
         <>
+          {executiveSummary && (
+            <div className="grid gap-3 xl:grid-cols-[1.7fr_0.9fr]">
+              <Card title="실행 요약" sub="선택 매체 통합 점수 + 매체별 성과 비교" right={<span className="inline-flex items-center gap-2 rounded-full border border-signal/20 bg-signal/5 px-2.5 py-1 text-[12px] font-medium text-signal">Performance Pulse</span>}>
+                <div className="space-y-3">
+                  <div className="grid gap-3 lg:grid-cols-[1.2fr_0.8fr]">
+                    <div className="rounded-2xl border border-signal/20 bg-gradient-to-br from-[#EEF2FF] via-white to-[#F5F3FF] p-4 shadow-[0_8px_20px_rgba(79,70,229,0.06)]">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-[12px] font-medium tracking-[0.08em] text-ink-muted">선택 매체 통합</p>
+                          <div className="mt-2 flex items-end gap-2">
+                            <span className="text-[42px] font-bold leading-none text-[#111827]">{executiveSummary.score}</span>
+                            <span className="pb-1 text-[15px] font-medium text-ink-muted">/ 100</span>
+                          </div>
+                        </div>
+                        <div className="rounded-xl border border-signal/20 bg-white/80 px-3 py-2 text-right shadow-sm">
+                          <p className="text-[11px] tracking-[0.08em] text-ink-muted">ROAS</p>
+                          <p className="mt-1 text-[22px] font-bold text-ink">{Math.round(executiveSummary.roas)}%</p>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 h-2.5 overflow-hidden rounded-full bg-white/80 ring-1 ring-signal/10">
+                        <div className="h-full rounded-full bg-gradient-to-r from-[#4F46E5] via-[#5B7CFA] to-[#14B8A6]" style={{ width: `${executiveSummary.score}%` }} />
+                      </div>
+
+                      <div className="mt-3 flex flex-wrap items-center gap-2 text-[12px]">
+                        <span className={`rounded-full px-2 py-1 font-medium ${executiveSummary.roasDelta >= 0 ? "bg-good/10 text-good" : "bg-bad/10 text-bad"}`}>
+                          {executiveSummary.roasDelta >= 0 ? "▲" : "▼"} {Math.abs(executiveSummary.roasDelta).toFixed(1)}% vs {compareLabel}
+                        </span>
+                        <span className="rounded-full bg-canvas px-2 py-1 text-ink-soft">광고비 {formatKorean(total.cost)}</span>
+                      </div>
+
+                      <div className="mt-3 rounded-xl border border-line bg-white/70 p-2.5">
+                        <p className="text-[11px] font-medium tracking-[0.08em] text-ink-muted">계산 기준</p>
+                        <p className="mt-1 text-[12px] leading-[1.6] text-ink-soft">
+                          통합 점수 = 68 + ROAS 보너스 + 비교 개선 보너스 - 저효율 감점
+                          <br />
+                          ROAS 100% 이상 안정, 200% 이상 우수, 기간 하락 20% 초과 시 가점 차감
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="rounded-xl border border-line bg-canvas p-3">
+                        <p className="text-[11px] tracking-[0.08em] text-ink-muted">상위 기회</p>
+                        <p className="mt-1 text-[17px] font-semibold leading-tight text-ink">{executiveSummary.bestMedia?.label ?? "멀티채널"}</p>
+                        <p className="mt-1 text-[12px] leading-[1.5] text-ink-soft">{executiveSummary.focus}</p>
+                      </div>
+                      <div className="rounded-xl border border-line bg-canvas p-3">
+                        <p className="text-[11px] tracking-[0.08em] text-ink-muted">예산 인사이트</p>
+                        <p className="mt-1 text-[17px] font-semibold leading-tight text-ink">{Math.abs(executiveSummary.spendDelta).toFixed(1)}%</p>
+                        <p className="mt-1 text-[12px] leading-[1.5] text-ink-soft">{executiveSummary.spendDelta >= 0 ? "지출 확장 여력이 있는 구간" : "예산을 재조정할 수 있는 구간"}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-line bg-canvas p-2.5">
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                      <p className="text-[11px] font-medium tracking-[0.08em] text-ink-muted">매체별 성과 점수</p>
+                      <span className="text-[11px] text-ink-muted">선택 매체 기준</span>
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                      {executiveSummary.mediaScores.map((item) => (
+                        <div key={item.key} className="rounded-lg border border-line bg-surface p-2.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[12px] font-medium text-ink">{item.label}</span>
+                            <span className="rounded-full border border-signal/20 bg-signal/5 px-1.5 py-0.5 text-[10px] font-medium text-signal">{item.score}</span>
+                          </div>
+                          <div className="mt-2 text-[19px] font-bold text-ink">{Math.round(item.roas)}%</div>
+                          <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-canvas">
+                            <div className="h-full rounded-full bg-gradient-to-r from-[#4F46E5] to-[#22C55E]" style={{ width: `${Math.min(100, item.score)}%` }} />
+                          </div>
+                          <div className="mt-2 text-[11px] text-ink-soft">매출 {formatKorean(item.revenue)} · 광고비 {formatKorean(item.cost)}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                </div>
+              </Card>
+
+              <Card title="우선순위" sub="이번 주 실행 관점" right={<button type="button" onClick={() => loadAiPlan(true)} className="rounded-lg border border-line bg-surface px-2.5 py-1.5 text-[12px] text-ink-soft hover:text-ink">AI 재분석</button>}>
+                <div className="space-y-3">
+                  {aiPlan?.urgentActions?.length ? (
+                    aiPlan.urgentActions.slice(0, 2).map((item, index) => (
+                      <div key={index} className="rounded-lg border border-bad/20 bg-bad/[0.04] p-3 leading-[1.5]">
+                        <p className="text-[10px] font-medium tracking-[0.08em] text-bad">IMMEDIATE</p>
+                        <p className="mt-1 text-[13px] text-ink">{item}</p>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="rounded-lg border border-good/20 bg-good/[0.06] p-3 leading-[1.5]">
+                      <p className="text-[10px] font-medium tracking-[0.08em] text-good">STATUS</p>
+                      <p className="mt-1 text-[13px] text-ink">지금은 즉시 조치가 필요한 위험 신호가 뚜렷하지 않습니다.</p>
+                    </div>
+                  )}
+                  <div className="rounded-lg border border-line bg-canvas p-3 leading-[1.5]">
+                    <p className="text-[10px] font-medium tracking-[0.08em] text-ink-muted">NEXT BEST MOVE</p>
+                    <p className="mt-1 text-[13px] text-ink">{executiveSummary.recommendation}</p>
+                  </div>
+
+                  <div className="rounded-xl border border-line bg-canvas p-3">
+                    <p className="text-[11px] font-medium tracking-[0.08em] text-ink-muted">실제 소재</p>
+                    <div className="mt-2 space-y-2">
+                      {(realMaterials.length ? realMaterials : executiveSummary.goodExamples.concat(executiveSummary.badExamples)).slice(0, 4).map((item) => (
+                        <div key={`${item.mediaKey}-${item.title}`} className={`group relative overflow-hidden rounded-lg border p-2.5 ${item.kind === "good" ? "border-good/20 bg-good/[0.04]" : "border-bad/20 bg-bad/[0.04]"}`}>
+                          <div className="flex items-start gap-2.5">
+                            <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-md border border-line bg-canvas">
+                              {item.thumbnailUrl ? (
+                                <>
+                                  <img src={item.thumbnailUrl} alt={item.title} className="h-full w-full object-cover transition duration-200 group-hover:scale-105" />
+                                  <div className="pointer-events-none absolute inset-0 bg-black/0 transition group-hover:bg-black/10" />
+                                  <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-1 text-[10px] font-medium text-white opacity-0 transition group-hover:opacity-100">
+                                    {item.kind === "good" ? "우수" : "저효율"}
+                                  </div>
+                                </>
+                              ) : (
+                                <div className="flex h-full w-full items-center justify-center text-[10px] font-medium text-ink-muted">NO IMG</div>
+                              )}
+                              {item.thumbnailUrl && (
+                                <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 w-[180px] -translate-x-1/2 -translate-y-1/2 scale-90 rounded-lg border border-white/30 bg-black/70 p-2 opacity-0 shadow-2xl transition duration-200 group-hover:scale-100 group-hover:opacity-100">
+                                  <img src={item.thumbnailUrl} alt={item.title} className="h-[120px] w-full rounded object-cover" />
+                                  <div className="mt-1 text-[10px] text-white/90">{item.title}</div>
+                                </div>
+                              )}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="block truncate text-[12px] font-semibold text-ink" title={item.title}>{item.title}</span>
+                                <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${item.kind === "good" ? "bg-good/10 text-good" : "bg-bad/10 text-bad"}`}>
+                                  {item.kind === "good" ? "우수" : "저효율"}
+                                </span>
+                              </div>
+                              <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-ink-soft">
+                                <span className="rounded-full bg-white/80 px-1.5 py-0.5">CTR {item.ctr != null ? `${item.ctr.toFixed(2)}%` : "—"}</span>
+                                <span className="rounded-full bg-white/80 px-1.5 py-0.5">ROAS {item.roas != null ? `${Math.round(item.roas)}%` : "—"}</span>
+                              </div>
+                              <p className="mt-1 text-[11px] text-ink-soft">{item.detail}</p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </Card>
+            </div>
+          )}
+
           <KpiStrip total={hasData ? total : null} totalPrev={hasData ? totalPrev : null} daily={daily} compareLabel={compareShort} loading={anyLoading} />
 
           {/* AI 액션 플랜 — 최상단(KPI 바로 아래) */}

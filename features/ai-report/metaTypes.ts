@@ -37,6 +37,8 @@ export type MetaRow = {
   frequency: number;
   conversions: number;
   revenue: number;
+  thumbnailUrl?: string | null;
+  imageUrl?: string | null;
   daily?: DailyPoint[];
 };
 
