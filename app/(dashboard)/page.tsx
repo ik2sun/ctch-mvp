@@ -16,6 +16,7 @@ import { AiPlanView, type AiPlan, type BudgetMove } from "@/features/dashboard/A
 import { TrendShareCard } from "@/features/dashboard/TrendShareCard";
 import { MediaDrilldown, fetchChannelInsights } from "@/features/dashboard/MediaDrilldown";
 import { RebalanceDialog } from "@/features/dashboard/RebalanceDialog";
+import { CreativeThumb } from "@/features/dashboard/CreativeThumb";
 import type { MetaHierarchy, MetaRow } from "@/features/ai-report/metaTypes";
 
 type Period = { since: string; until: string };
@@ -73,6 +74,12 @@ function formatKorean(value: number | null | undefined) {
   return `${Math.round(value).toLocaleString("ko-KR")}원`;
 }
 
+// 카탈로그(DPA·어드밴티지+ 카탈로그·쇼핑 피드) 광고 — 캠페인·광고세트·소재 이름으로 판별
+const CATALOG_RE = /catalog|카탈로그|(^|[^a-z])(dpa|daba|cpas)([^a-z]|$)|product[_ ]?set|상품\s?세트/i;
+function isCatalogAd(ad: { name?: string | null; campaignName?: string | null; adsetName?: string | null }) {
+  return [ad.campaignName, ad.adsetName, ad.name].some((v) => !!v && CATALOG_RE.test(v));
+}
+
 const PERIODS = [
   { key: "1d", label: "전일", since: () => daysAgo(1), until: () => daysAgo(1) },
   { key: "7d", label: "최근 7일", since: () => daysAgo(7), until: () => daysAgo(1) },
@@ -92,6 +99,11 @@ export default function DashboardHome() {
     mediaKey: string;
     kind: "good" | "bad";
     thumbnailUrl?: string | null;
+    imageUrl?: string | null;
+    adId?: string;
+    rel?: number; // 매체 평균 ROAS 대비 배수
+    video?: boolean;
+    live?: boolean;
     ctr?: number;
     roas?: number;
     clicks?: number;
@@ -102,6 +114,7 @@ export default function DashboardHome() {
   const [rebalance, setRebalance] = useState<(BudgetMove & { fromKey: string; toKey: string }) | null>(null);
   const [creativeBusy, setCreativeBusy] = useState<string | null>(null);
   const [realMaterials, setRealMaterials] = useState<RealMaterial[]>([]);
+  const [materialsLoading, setMaterialsLoading] = useState(false);
 
   const [periodKey, setPeriodKey] = useState("7d");
   const [compareBase, setCompareBase] = useState<CompareBase>("prev");
@@ -515,53 +528,110 @@ export default function DashboardHome() {
   const daily = useMemo(() => combinedDaily(series), [series]);
   const hasData = series.length > 0;
 
+  // 우수·저효율 소재 TOP 5 — 매체마다 광고비 비중 1% 이상 소재(소액 고ROAS 제외)를 매체 평균 ROAS와 비교해 모은 뒤 전체에서 고른다
+  // 소재 비교에서 빼는 것: 네이버 SA·카카오(매체 전체), 카탈로그(DPA) 광고 — 소재가 상품 피드라 크리에이티브 비교가 안 됨
+  const materialSeries = useMemo(() => series.filter((s) => s.key !== "naver" && s.key !== "kakao"), [series]);
+  const seriesKeys = materialSeries.map((s) => s.key).join(",");
   useEffect(() => {
-    if (!selected?.id || !series.length) {
+    if (!selected?.id || !seriesKeys) {
       setRealMaterials([]);
       return;
     }
 
     let cancelled = false;
+    setMaterialsLoading(true);
     void (async () => {
-      const items: RealMaterial[] = [];
-      for (const item of series) {
+      const since = period.since();
+      const until = period.until();
+      const perMedia = await Promise.all(
+        materialSeries.map(async (item) => {
+          try {
+            const data = await fetchChannelInsights(item.key, selected.id, since, until);
+            const ads = (data.ads ?? []).filter((ad) => ad.cost > 0 && !isCatalogAd(ad));
+            const spend = ads.reduce((a, b) => a + b.cost, 0);
+            const revenue = ads.reduce((a, b) => a + b.revenue, 0);
+            if (!spend) return [];
+            const avg = revenue / spend;
+            // 광고비 비중 1% 이상(소액 고ROAS 제외) — 그래도 적으면 광고비 상위 10개
+            let eligible = ads.filter((ad) => ad.cost >= spend * 0.01);
+            if (eligible.length < 10) eligible = [...ads].sort((a, b) => b.cost - a.cost).slice(0, 10);
+            const roasOf = (ad: MetaRow) => ad.revenue / ad.cost;
+            // 우수 = 전환 있고 매체 평균 ROAS 초과, 저효율 = 매체 평균 미만(80% 미만을 먼저, 모자라면 평균 미만으로 채움)
+            const goods = eligible.filter((ad) => ad.conversions > 0 && roasOf(ad) > avg);
+            const bads = eligible.filter((ad) => roasOf(ad) < avg);
+            const toItem = (ad: MetaRow, kind: "good" | "bad"): RealMaterial => {
+              const roas = roasOf(ad) * 100;
+              const ctr = ad.impressions > 0 ? (ad.clicks / ad.impressions) * 100 : 0;
+              return {
+                title: ad.name || `${item.label} 소재`,
+                label: item.label,
+                mediaKey: item.key,
+                kind,
+                adId: ad.id,
+                thumbnailUrl: ad.thumbnailUrl ?? ad.imageUrl ?? null,
+                imageUrl: ad.imageUrl ?? null,
+                ctr,
+                roas,
+                clicks: ad.clicks,
+                cost: ad.cost,
+                revenue: ad.revenue,
+                rel: avg > 0 ? roasOf(ad) / avg : 0,
+                detail: `${item.label} · 광고비 ${formatKorean(ad.cost)} · 매출 ${formatKorean(ad.revenue)} · 매체 평균 ROAS ${Math.round(avg * 100)}%`,
+              };
+            };
+            return [...goods.map((ad) => toItem(ad, "good")), ...bads.map((ad) => toItem(ad, "bad"))];
+          } catch {
+            return []; // 실제 소재 조회가 실패해도 전체 대시보드는 유지
+          }
+        }),
+      );
+      const items = perMedia.flat();
+      // 우수 = ROAS 높은 순, 저효율 = 광고비 큰 순
+      const good = items.filter((i) => i.kind === "good").sort((a, b) => (b.roas ?? 0) - (a.roas ?? 0)).slice(0, 8);
+      const byCost = (a: RealMaterial, b: RealMaterial) => (b.cost ?? 0) - (a.cost ?? 0);
+      const badAll = items.filter((i) => i.kind === "bad");
+      const bad = [...badAll.filter((i) => (i.rel ?? 1) < 0.8).sort(byCost), ...badAll.filter((i) => (i.rel ?? 1) >= 0.8).sort(byCost)].slice(0, 8);
+      // 썸네일 조회 뒤 인스타 라이브 광고(장면 이미지 없음)를 빼야 하므로 3개씩 여유를 두고 고른다
+      const picked = [...good, ...bad];
+
+      // 소재 썸네일·이름 — 성과 응답엔 이미지가 없어 매체별 소재 상세로 따로 받는다
+      const need = picked.filter((i) => i.adId && !i.thumbnailUrl);
+      if (need.length) {
         try {
-          const data = await fetchChannelInsights(item.key, selected.id, period.since(), period.until());
-          const ads = [...(data.ads ?? [])].filter((ad) => ad.cost > 0);
-          const best = ads.sort((a, b) => b.revenue / b.cost - a.revenue / a.cost)[0];
-          if (!best) continue;
-          const roas = (best.revenue / best.cost) * 100;
-          const ctr = best.impressions > 0 ? (best.clicks / best.impressions) * 100 : 0;
-          const one: RealMaterial = {
-            title: best.name || `${item.label} 소재`,
-            label: item.label,
-            mediaKey: item.key,
-            kind: roas >= 150 ? "good" : "bad",
-            thumbnailUrl: (best as MetaRow).thumbnailUrl ?? (best as MetaRow).imageUrl ?? null,
-            ctr,
-            roas,
-            clicks: best.clicks,
-            cost: best.cost,
-            revenue: best.revenue,
-            detail: `${item.label} · ROAS ${Math.round(roas)}% · CTR ${ctr.toFixed(2)}% · 광고비 ${formatKorean(best.cost)} · 매출 ${formatKorean(best.revenue)}`,
-          };
-          items.push(one);
+          const res = await fetch("/api/dashboard/ad-thumbnails", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ clientId: selected.id, items: need.map((i) => ({ media: i.mediaKey, id: i.adId })) }),
+          });
+          const json = (await res.json()) as { items?: Record<string, { thumb: string | null; image: string | null; name?: string | null; video?: boolean; live?: boolean }> };
+          for (const i of need) {
+            const hit = json.items?.[`${i.mediaKey}:${i.adId}`];
+            if (!hit) continue;
+            i.thumbnailUrl = hit.thumb;
+            i.imageUrl = hit.image;
+            i.video = !!hit.video;
+            i.live = !!hit.live;
+            // 이름이 id·'소재 123'처럼 비어 있던 소재는 상세의 이름으로
+            if (hit.name && (i.title === i.adId || /^소재 \d+$/.test(i.title))) i.title = hit.name;
+          }
         } catch {
-          // 실제 소재 조회가 실패해도 전체 대시보드는 유지
+          // 썸네일 없이 표시
         }
       }
 
       if (!cancelled) {
-        const good = items.filter((i) => i.kind === "good").slice(0, 2);
-        const bad = items.filter((i) => i.kind === "bad").slice(0, 2);
-        setRealMaterials([...good, ...bad]);
+        // 인스타 라이브 광고는 비교에서 제외 → 남은 것 중 각 TOP 5
+        const kept = picked.filter((i) => !i.live);
+        setRealMaterials([...kept.filter((i) => i.kind === "good").slice(0, 5), ...kept.filter((i) => i.kind === "bad").slice(0, 5)]);
+        setMaterialsLoading(false);
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [selected?.id, periodKey, series]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.id, periodKey, seriesKeys]);
 
   const executiveSummary = useMemo(() => {
     if (!hasData || !total) return null;
@@ -973,47 +1043,60 @@ export default function DashboardHome() {
                   </div>
 
                   <div className="rounded-xl border border-line bg-canvas p-3">
-                    <p className="text-[11px] font-medium tracking-[0.08em] text-ink-muted">실제 소재</p>
-                    <div className="mt-2 space-y-2">
-                      {(realMaterials.length ? realMaterials : executiveSummary.goodExamples.concat(executiveSummary.badExamples)).slice(0, 4).map((item) => (
-                        <div key={`${item.mediaKey}-${item.title}`} className={`group relative overflow-hidden rounded-lg border p-2.5 ${item.kind === "good" ? "border-good/20 bg-good/[0.04]" : "border-bad/20 bg-bad/[0.04]"}`}>
-                          <div className="flex items-start gap-2.5">
-                            <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-md border border-line bg-canvas">
-                              {item.thumbnailUrl ? (
-                                <>
-                                  <img src={item.thumbnailUrl} alt={item.title} className="h-full w-full object-cover transition duration-200 group-hover:scale-105" />
-                                  <div className="pointer-events-none absolute inset-0 bg-black/0 transition group-hover:bg-black/10" />
-                                  <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-1 text-[10px] font-medium text-white opacity-0 transition group-hover:opacity-100">
-                                    {item.kind === "good" ? "우수" : "저효율"}
+                    <div className="flex items-baseline justify-between gap-2">
+                      <p className="text-[13px] font-semibold text-ink">우수 · 저효율 소재</p>
+                      <p className="text-[11px] text-ink-muted">매체 평균 ROAS 대비 · 광고비 비중 1% 이상 · 네이버 SA·카카오·카탈로그·인스타 라이브 제외</p>
+                    </div>
+                    {materialsLoading && !realMaterials.length ? (
+                      <p className="mt-3 text-[12px] text-ink-muted">매체별 소재를 불러오는 중…</p>
+                    ) : !realMaterials.length ? (
+                      <p className="mt-3 text-[12px] text-ink-muted">비교할 만한 소재가 없어요(광고비가 고르게 퍼졌거나 소재 단위 조회가 안 되는 매체).</p>
+                    ) : (
+                      (["good", "bad"] as const).map((kind) => {
+                        const list = realMaterials.filter((m) => m.kind === kind);
+                        if (!list.length) return null;
+                        return (
+                          <div key={kind} className="mt-3">
+                            <p className={`mb-1.5 text-[12px] font-semibold ${kind === "good" ? "text-good" : "text-bad"}`}>
+                              {kind === "good" ? "▲ 우수 소재 TOP 5" : "▼ 저효율 소재 TOP 5"}
+                              <span className="ml-1.5 font-normal text-ink-muted">{kind === "good" ? "ROAS 높은 순" : "광고비 큰 순"}</span>
+                            </p>
+                            <div className="grid grid-cols-5 gap-1.5">
+                              {list.map((item, idx) => {
+                                const color = MEDIA_COLORS[item.mediaKey as MediaKey] ?? "#475467";
+                                const roasText = item.roas != null ? `${Math.round(item.roas).toLocaleString("ko-KR")}%` : "—";
+                                const ctrText = item.ctr != null ? `${item.ctr.toFixed(2)}%` : "—";
+                                const clickText = item.clicks != null ? item.clicks.toLocaleString("ko-KR") : "—";
+                                return (
+                                  <div key={`${item.mediaKey}-${item.adId ?? item.title}`} className="relative min-w-0">
+                                    <CreativeThumb
+                                      thumb={item.thumbnailUrl ?? null}
+                                      image={item.imageUrl}
+                                      title={item.title}
+                                      lines={[`ROAS ${roasText}`, `CTR ${ctrText}`, `클릭 ${clickText}`, `광고비 ${formatKorean(item.cost)}`, `매출 ${formatKorean(item.revenue)}`]}
+                                      color={color}
+                                      mediaLabel={item.label}
+                                      video={item.video}
+                                      live={item.live}
+                                    />
+                                    <span className={`pointer-events-none absolute left-1 top-1 rounded px-1 text-[10px] font-bold text-white ${kind === "good" ? "bg-good" : "bg-bad"}`}>{idx + 1}</span>
+                                    <div className="mt-1 space-y-px text-[11px] leading-tight tabular-nums">
+                                      <p className="flex items-center gap-1 truncate text-ink-soft" title={item.label}>
+                                        <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: color }} />
+                                        <span className="truncate">{item.label}</span>
+                                      </p>
+                                      <p className={`font-semibold ${kind === "good" ? "text-good" : "text-bad"}`}>{roasText}</p>
+                                      <p className="truncate text-ink-muted">CTR {ctrText}</p>
+                                      <p className="truncate text-ink-muted">클릭 {clickText}</p>
+                                    </div>
                                   </div>
-                                </>
-                              ) : (
-                                <div className="flex h-full w-full items-center justify-center text-[10px] font-medium text-ink-muted">NO IMG</div>
-                              )}
-                              {item.thumbnailUrl && (
-                                <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 w-[180px] -translate-x-1/2 -translate-y-1/2 scale-90 rounded-lg border border-white/30 bg-black/70 p-2 opacity-0 shadow-2xl transition duration-200 group-hover:scale-100 group-hover:opacity-100">
-                                  <img src={item.thumbnailUrl} alt={item.title} className="h-[120px] w-full rounded object-cover" />
-                                  <div className="mt-1 text-[10px] text-white/90">{item.title}</div>
-                                </div>
-                              )}
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center justify-between gap-2">
-                                <span className="block truncate text-[12px] font-semibold text-ink" title={item.title}>{item.title}</span>
-                                <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${item.kind === "good" ? "bg-good/10 text-good" : "bg-bad/10 text-bad"}`}>
-                                  {item.kind === "good" ? "우수" : "저효율"}
-                                </span>
-                              </div>
-                              <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-ink-soft">
-                                <span className="rounded-full bg-white/80 px-1.5 py-0.5">CTR {item.ctr != null ? `${item.ctr.toFixed(2)}%` : "—"}</span>
-                                <span className="rounded-full bg-white/80 px-1.5 py-0.5">ROAS {item.roas != null ? `${Math.round(item.roas)}%` : "—"}</span>
-                              </div>
-                              <p className="mt-1 text-[11px] text-ink-soft">{item.detail}</p>
+                                );
+                              })}
                             </div>
                           </div>
-                        </div>
-                      ))}
-                    </div>
+                        );
+                      })
+                    )}
                   </div>
                 </div>
               </Card>

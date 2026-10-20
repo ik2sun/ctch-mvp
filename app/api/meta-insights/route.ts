@@ -43,7 +43,7 @@ const LEVEL_FIELDS: Record<Level, string[]> = {
   account: [],
   campaign: ["campaign_id", "campaign_name"],
   adset: ["campaign_id", "campaign_name", "adset_id", "adset_name"],
-  ad: ["campaign_id", "campaign_name", "adset_id", "adset_name", "ad_id", "ad_name", "creative"],
+  ad: ["campaign_id", "campaign_name", "adset_id", "adset_name", "ad_id", "ad_name"],
 };
 
 const COMMON = ["impressions", "clicks", "spend", "reach", "frequency", "actions", "action_values"];
@@ -124,13 +124,6 @@ function toRow(r: Record<string, unknown>, level: "campaign" | "adset" | "ad") {
       : level === "adset"
         ? (r.adset_id as string)
         : (r.ad_id as string);
-  const creative = (r.creative as Record<string, unknown> | undefined) ?? {};
-  const creativeUrl =
-    typeof creative.thumbnail_url === "string"
-      ? creative.thumbnail_url
-      : typeof creative.image_url === "string"
-        ? creative.image_url
-        : null;
   return {
     id: id ?? name ?? Math.random().toString(36).slice(2),
     level,
@@ -140,8 +133,6 @@ function toRow(r: Record<string, unknown>, level: "campaign" | "adset" | "ad") {
     adsetId: (r.adset_id as string) ?? null,
     adsetName: (r.adset_name as string) ?? null,
     ...baseMetrics(r),
-    thumbnailUrl: creativeUrl,
-    imageUrl: creativeUrl,
   };
 }
 

@@ -10,6 +10,7 @@ type Polarity = "up" | "down" | "neutral"; // up=오를수록 좋음, down=내�
 type Kpi = {
   key: string;
   icon: string;
+  tint: string; // 아이콘 타일 색 — 바탕 10% + 아이콘 진하게(사이드바 메뉴 타일과 같은 방식)
   label: string;
   value: number | null;
   prev: number | null;
@@ -75,11 +76,11 @@ export function KpiStrip({
   const cur = total ? ratios(total) : null;
   const prev = totalPrev ? ratios(totalPrev) : null;
   const kpis: Kpi[] = [
-    { key: "cost", icon: "ti-wallet", label: "광고비", value: total?.cost ?? null, prev: totalPrev?.cost ?? null, kind: "won", polarity: "neutral", spark: daily.map((d) => d.cost) },
-    { key: "revenue", icon: "ti-cash", label: "전환매출", value: total?.revenue ?? null, prev: totalPrev?.revenue ?? null, kind: "won", polarity: "up", spark: daily.map((d) => d.revenue) },
-    { key: "roas", icon: "ti-chart-line", label: "ROAS", value: cur?.roas ?? null, prev: prev?.roas ?? null, kind: "x", polarity: "up", spark: daily.map((d) => (d.cost ? d.revenue / d.cost : null)) },
-    { key: "conversions", icon: "ti-shopping-cart", label: "전환수", value: total?.conversions ?? null, prev: totalPrev?.conversions ?? null, kind: "int", polarity: "up", spark: daily.map((d) => d.conversions) },
-    { key: "cpa", icon: "ti-target-arrow", label: "CPA", value: cur?.cpa ?? null, prev: prev?.cpa ?? null, kind: "won", polarity: "down", spark: daily.map((d) => (d.conversions ? d.cost / d.conversions : null)) },
+    { key: "cost", tint: "#4F46E5", icon: "ti-wallet", label: "광고비", value: total?.cost ?? null, prev: totalPrev?.cost ?? null, kind: "won", polarity: "neutral", spark: daily.map((d) => d.cost) },
+    { key: "revenue", tint: "#0D9488", icon: "ti-cash", label: "전환매출", value: total?.revenue ?? null, prev: totalPrev?.revenue ?? null, kind: "won", polarity: "up", spark: daily.map((d) => d.revenue) },
+    { key: "roas", tint: "#7C3AED", icon: "ti-chart-line", label: "ROAS", value: cur?.roas ?? null, prev: prev?.roas ?? null, kind: "x", polarity: "up", spark: daily.map((d) => (d.cost ? d.revenue / d.cost : null)) },
+    { key: "conversions", tint: "#EA580C", icon: "ti-shopping-cart", label: "전환수", value: total?.conversions ?? null, prev: totalPrev?.conversions ?? null, kind: "int", polarity: "up", spark: daily.map((d) => d.conversions) },
+    { key: "cpa", tint: "#0284C7", icon: "ti-target-arrow", label: "CPA", value: cur?.cpa ?? null, prev: prev?.cpa ?? null, kind: "won", polarity: "down", spark: daily.map((d) => (d.conversions ? d.cost / d.conversions : null)) },
   ];
 
   return (
@@ -92,8 +93,8 @@ export function KpiStrip({
           {/* ① 지표명(회색, 뒤로) · ② 증감(우측 상단) */}
           <div className="flex items-center justify-between gap-2">
             <p className="flex items-center gap-2.5 text-[15px] text-ink-muted">
-              <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg border border-line bg-canvas" aria-hidden>
-                <i className={`ti ${k.icon} text-[18px] text-ink-soft`} />
+              <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg" style={{ background: `${k.tint}1A` }} aria-hidden>
+                <i className={`ti ${k.icon} text-[18px]`} style={{ color: `color-mix(in srgb, ${k.tint} 82%, black)` }} />
               </span>
               {k.label}
             </p>
