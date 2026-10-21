@@ -76,7 +76,7 @@ export function Sidebar({ email, role }: { email: string; role: Role }) {
       {/* 로고: NMG + CTCH — 클릭 시 광고주 홈으로 이동 */}
       <Link
         href="/home"
-        className="flex h-16 items-center gap-2.5 border-b border-line px-5 transition hover:bg-canvas"
+        className="flex h-16 flex-col justify-center gap-1.5 border-b border-line px-5 transition hover:bg-canvas"
         title="광고주 목록 보기"
       >
         {/* 상단 정렬 — nmg 이미지는 위 여백이 약 1px(8/258)이라 CTCH·구분선을 1px 내림 */}
@@ -85,6 +85,9 @@ export function Sidebar({ email, role }: { email: string; role: Role }) {
           <span className="mt-px h-5 w-px bg-line" aria-hidden />
           <Wordmark className="mt-px" />
         </div>
+        <p className="text-[12px] font-medium leading-none tracking-tight text-ink-muted">
+          AI 퍼포먼스 마케팅 솔루션
+        </p>
       </Link>
 
       {/* 현재 광고주 — 표시만 하고, 누르면 이 광고주의 상태 점검·정보 수정 팝업 (전환은 우측 상단) */}
